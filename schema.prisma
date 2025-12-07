@@ -16,5 +16,26 @@ model User {
   password  String
   balance   Float    @default(0)
   bonus     Float    @default(0)
+  cpf       String?  @unique
+  birthDate String?
+  email     String?
   createdAt DateTime @default(now())
+  pixCharges PixCharge[]
+}
+
+model PixCharge {
+  id            Int       @id @default(autoincrement())
+  user          User      @relation(fields: [userId], references: [id])
+  userId        Int
+  amount        Float
+  status        String    @default("created") // created, pending, paid, failed, expired
+  txid          String    @unique
+  locId         String?
+  copyAndPaste  String?
+  qrCodeImage   String?
+  expiresAt     DateTime?
+  paidAt        DateTime?
+  credited      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }

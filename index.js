@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./src/routes/authRoutes');
 const walletRoutes = require('./src/routes/walletRoutes');
+const pixRoutes = require('./src/routes/pixRoutes');
+const profileRoutes = require('./src/routes/profileRoutes');
 
 const app = express();
 
@@ -14,6 +16,8 @@ app.use(express.json()); // Permite ler JSON no corpo da requisição
 // Usa as rotas que criamos
 app.use('/api/auth', authRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/pix', pixRoutes);
+app.use('/api/profile', profileRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -1,7 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaBars, FaEye, FaEyeSlash, FaWhatsapp, FaDice, FaTicketAlt, FaGamepad, FaQrcode } from 'react-icons/fa'; // Ícones de exemplo
+import {
+  FaBars,
+  FaEye,
+  FaEyeSlash,
+  FaHome,
+  FaUser,
+  FaTicketAlt,
+  FaDice,
+  FaGamepad,
+  FaTrophy,
+  FaCheckCircle,
+  FaChartBar,
+  FaFileAlt,
+  FaQrcode,
+  FaMoneyCheckAlt,
+  FaCog,
+  FaLifeRing,
+  FaSignOutAlt,
+  FaWallet,
+} from 'react-icons/fa';
 import axios from 'axios';
+import casinoImg from '../assets/images/casino.jpeg';
+import bingoImg from '../assets/images/bingo.jpeg';
+import suporteImg from '../assets/images/suporte.jpeg';
+import pixImg from '../assets/images/pix.jpeg';
+import loteriasImg from '../assets/images/loterias.jpeg';
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -14,6 +38,8 @@ const HomePage = () => {
     bonus: 0,
   });
   const [error, setError] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const toggleBalance = () => setShowBalance(!showBalance);
 
@@ -55,7 +81,7 @@ const HomePage = () => {
     }
   };
 
-  const simulateDeposit = async () => {
+  const createPixCharge = async () => {
     const { token } = getAuthData();
     if (!token) {
       navigate('/');
@@ -64,19 +90,116 @@ const HomePage = () => {
     setError('');
     try {
       const res = await api.post(
-        '/wallet/deposit',
+        '/pix/charge',
         { amount: 20 },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      setUserData((prev) => ({
-        ...prev,
-        balance: res.data.balance,
-        bonus: res.data.bonus,
-      }));
-      alert('Depósito simulado de R$ 20,00 realizado.');
+      const copy = res.data?.copyAndPaste || 'Cobrança Pix criada.';
+      alert(`Copie e cole no seu app bancário:\n\n${copy}`);
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao simular depósito.');
+      setError(err.response?.data?.error || 'Erro ao gerar cobrança Pix.');
     }
+  };
+
+  const openSupport = () => {
+    const phone = '55799989357214'; // (79) 99893-57214
+    const message = `Olá Promotor, preciso de ajuda, meu código de unidade é: ${userData.id || 'ID'}`;
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  const closeMenu = () => setShowMenu(false);
+
+  const menuItems = [
+    { label: 'Início', icon: <FaHome />, action: () => navigate('/home') },
+    { label: 'Perfil', icon: <FaUser />, action: () => navigate('/perfil') },
+    { label: 'Loterias', icon: <FaTicketAlt />, action: () => navigate('/loterias') },
+    { label: 'Casino', icon: <FaDice />, action: () => window.open('https://pandaloterias.com.br', '_blank') },
+    { label: 'Bingo', icon: <FaGamepad />, action: () => alert('Bingo ainda está em implementação.') },
+    { label: 'Premiadas', icon: <FaTrophy />, action: () => {} },
+    { label: 'Validar Pule', icon: <FaCheckCircle />, action: () => {} },
+    { label: 'Resultados', icon: <FaChartBar />, action: () => {} },
+    { label: 'Relatórios', icon: <FaFileAlt />, action: () => {} },
+    { label: 'Recarga PIX', icon: <FaQrcode />, action: () => createPixCharge() },
+    { label: 'Solicitar saque', icon: <FaMoneyCheckAlt />, action: () => {} },
+    { label: 'Configurações', icon: <FaCog />, action: () => navigate('/configuracoes') },
+    { label: 'Suporte', icon: <FaLifeRing />, action: () => openSupport() },
+    { label: 'Pules', icon: <FaTicketAlt />, action: () => navigate('/pules') },
+    {
+      label: 'Sair',
+      icon: <FaSignOutAlt />,
+      action: () => {
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('user');
+        navigate('/');
+      },
+    },
+  ];
+
+  const renderMenu = () => {
+    if (!showMenu) return null;
+    return (
+      <>
+        <div style={styles.menuOverlay} onClick={closeMenu} />
+        <div style={styles.sideMenu}>
+          <div style={styles.menuHeader}>
+            <span>Menu</span>
+            <button
+              onClick={closeMenu}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}
+            >
+              ✕
+            </button>
+          </div>
+          {menuItems.map((item) => (
+            <div
+              key={item.label}
+              style={styles.menuItem}
+              onClick={() => {
+                closeMenu();
+                item.action();
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const shortcutItems = [
+    { label: 'Resultados', icon: <FaChartBar />, action: () => {} },
+    { label: 'Relatórios', icon: <FaFileAlt />, action: () => {} },
+    { label: 'Premiadas', icon: <FaTrophy />, action: () => {} },
+    { label: 'Saldo', icon: <FaWallet />, action: () => {} },
+  ];
+
+  const renderShortcuts = () => {
+    if (!showShortcuts) return null;
+    return (
+      <div style={styles.shortcutOverlay} onClick={() => setShowShortcuts(false)}>
+        <div style={styles.shortcutBox} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.shortcutTitle}>Atalho</div>
+          {shortcutItems.map((item) => (
+            <div
+              key={item.label}
+              style={styles.shortcutItem}
+              onClick={() => {
+                setShowShortcuts(false);
+                item.action();
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -92,27 +215,110 @@ const HomePage = () => {
       display: 'flex',
       flexDirection: 'column',
     },
+    menuOverlay: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.4)',
+      zIndex: 20,
+    },
+    sideMenu: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '260px',
+      height: '100%',
+      background: '#ffffff',
+      boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+      padding: '20px 15px',
+      zIndex: 30,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+    },
+    menuHeader: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: '10px',
+      fontWeight: 'bold',
+      color: '#166534',
+    },
+    menuItem: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '10px',
+      borderRadius: '10px',
+      cursor: 'pointer',
+      color: '#166534',
+      background: '#f0fdf4',
+    },
+    shortcutOverlay: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.3)',
+      zIndex: 25,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+    },
+    shortcutBox: {
+      background: '#fff',
+      borderRadius: '14px',
+      padding: '16px',
+      boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+      minWidth: '240px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+    },
+    shortcutTitle: {
+      fontWeight: 'bold',
+      color: '#166534',
+      marginBottom: '6px',
+    },
+    shortcutItem: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '10px',
+      borderRadius: '10px',
+      cursor: 'pointer',
+      background: '#f0fdf4',
+      color: '#166534',
+    },
     navbar: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '15px 20px',
-      backgroundColor: '#ffffff',
-      borderBottom: '1px solid #eee',
+      backgroundColor: '#bbf7d0',
+      borderBottom: '1px solid #9ed8b6',
+      gap: '12px',
+    },
+    brand: {
+      fontSize: '18px',
+      fontWeight: 'bold',
+      color: '#166534',
+      letterSpacing: '1px',
+      flex: 1,
+    },
+    menuRight: {
+      flex: 1,
+      display: 'flex',
+      justifyContent: 'flex-end',
     },
     menuIcon: {
       fontSize: '24px',
       cursor: 'pointer',
-      color: '#333',
+      color: '#166534',
     },
     userId: {
       fontSize: '18px',
       fontWeight: 'bold',
       color: '#166534', // Verde do tema
       letterSpacing: '1px',
-    },
-    headerSpace: {
-      width: '24px', // Espaço vazio para equilibrar o ícone da esquerda
     },
     balanceSection: {
       textAlign: 'center',
@@ -172,9 +378,11 @@ const HomePage = () => {
       color: '#166534',
       textAlign: 'center',
       padding: '10px',
+      position: 'relative',
+      overflow: 'hidden',
     },
     cardTitle: {
-      marginTop: '10px',
+      marginTop: '4px',
       fontWeight: 'bold',
       fontSize: '16px',
     },
@@ -199,20 +407,24 @@ const HomePage = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: '12px',
+      fontSize: '28px',
       color: '#166534',
       fontWeight: 'bold',
     },
   };
 
-  return (
-    <div style={styles.container}>
-      {/* 1. Navbar Burger + ID */}
-      <div style={styles.navbar}>
-        <FaBars style={styles.menuIcon} />
-        <span style={styles.userId}>ID: {userData.id || '---'}</span>
-        <div style={styles.headerSpace}></div>
-      </div>
+    return (
+      <div style={styles.container}>
+        {renderMenu()}
+        {renderShortcuts()}
+        {/* 1. Navbar Burger + ID */}
+        <div style={styles.navbar}>
+          <span style={styles.brand}>Panda Loterias</span>
+          <span style={{ ...styles.userId, flex: 1, textAlign: 'center' }}>ID: {userData.id || '---'}</span>
+          <div style={styles.menuRight}>
+            <FaBars style={styles.menuIcon} onClick={() => setShowMenu(true)} />
+          </div>
+        </div>
 
       {/* 2. Saldo e Bônus */}
       <div style={styles.balanceSection}>
@@ -239,49 +451,82 @@ const HomePage = () => {
       <div style={styles.gridContainer}>
         
         {/* Container 1: Loterias */}
-        <div style={styles.card} onClick={() => console.log('Ir para Loterias')}>
-          <FaTicketAlt style={styles.iconSize} />
-          <span style={styles.cardTitle}>Loterias</span>
-        </div>
+        <div
+          style={{
+            ...styles.card,
+            backgroundImage: `url(${loteriasImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+          onClick={() => navigate('/loterias')}
+        />
 
         {/* Container 2: Casino */}
-        <div style={styles.card} onClick={() => console.log('Ir para Casino')}>
-          <FaDice style={styles.iconSize} />
-          <span style={styles.cardTitle}>Casino</span>
-        </div>
+        <div
+          style={{
+            ...styles.card,
+            backgroundImage: `url(${casinoImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+          onClick={() => window.open('https://pandaloterias.com.br', '_blank')}
+        />
 
         {/* Container 3: Bingo */}
-        <div style={styles.card} onClick={() => console.log('Ir para Bingo')}>
-          <FaGamepad style={styles.iconSize} />
-          <span style={styles.cardTitle}>Bingo</span>
-        </div>
+        <div
+          style={{
+            ...styles.card,
+            backgroundImage: `url(${bingoImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+          onClick={() => alert('Bingo ainda está em implementação.')}
+        />
 
         {/* Container 4: Suporte */}
-        <div style={styles.card} onClick={() => window.open('https://wa.me/seunumero', '_blank')}>
-          <FaWhatsapp style={styles.iconSize} />
-          <span style={styles.cardTitle}>Suporte</span>
-        </div>
+        <div
+          style={{
+            ...styles.card,
+            backgroundImage: `url(${suporteImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+          onClick={openSupport}
+        />
 
         {/* Container 5: Recarga Pix */}
-        <div style={styles.card} onClick={simulateDeposit}>
-          <FaQrcode style={styles.iconSize} />
-          <span style={styles.cardTitle}>Recarga Pix</span>
-        </div>
+        <div
+          style={{
+            ...styles.card,
+            backgroundImage: `url(${pixImg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+          onClick={createPixCharge}
+        />
 
-        {/* Container 6: Composto (Visual Provisório) */}
-        <div style={styles.miniGridCard}>
-            <div style={styles.miniItem}>A</div>
-            <div style={styles.miniItem}>B</div>
-            <div style={styles.miniItem}>C</div>
-            <div style={styles.miniItem}>D</div>
+        {/* Container 6: Atalhos */}
+        <div style={styles.miniGridCard} onClick={() => setShowShortcuts(true)}>
+            <div style={styles.miniItem}>
+              <FaChartBar />
+            </div>
+            <div style={styles.miniItem}>
+              <FaFileAlt />
+            </div>
+            <div style={styles.miniItem}>
+              <FaTrophy />
+            </div>
+            <div style={styles.miniItem}>
+              <FaWallet />
+            </div>
         </div>
 
         {/* Container 7: Composto (Visual Provisório) */}
         <div style={styles.miniGridCard}>
-            <div style={styles.miniItem}>1</div>
-            <div style={styles.miniItem}>2</div>
-            <div style={styles.miniItem}>3</div>
-            <div style={styles.miniItem}>4</div>
+            <div style={styles.miniItem} onClick={() => { /* Prêmio */ }}>🎁</div>
+            <div style={styles.miniItem} onClick={() => { /* Horóscopo */ }}>♌</div>
+            <div style={styles.miniItem} onClick={() => { /* Sonhos */ }}>💤</div>
+            <div style={styles.miniItem} onClick={() => { /* Atrasados */ }}>⏰</div>
         </div>
 
       </div>

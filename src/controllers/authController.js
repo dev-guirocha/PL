@@ -84,3 +84,27 @@ exports.login = async (req, res) => {
     res.status(500).json({ error: 'Erro ao fazer login.' });
   }
 };
+
+exports.changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Informe a senha atual e a nova senha.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) return res.status(400).json({ error: 'Senha atual incorreta.' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { password: hashed },
+    });
+    return res.json({ message: 'Senha alterada com sucesso.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao alterar senha.' });
+  }
+};

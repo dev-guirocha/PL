@@ -43,3 +43,32 @@ exports.deposit = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao registrar depósito.' });
   }
 };
+
+exports.debit = async (req, res) => {
+  const { amount } = req.body;
+  if (amount === undefined || Number.isNaN(Number(amount))) {
+    return res.status(400).json({ error: 'Valor inválido.' });
+  }
+  const value = Number(amount);
+  if (value <= 0) {
+    return res.status(400).json({ error: 'O valor deve ser maior que zero.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (user.balance < value) {
+      return res.status(400).json({ error: 'Saldo insuficiente.' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.userId },
+      data: { balance: { decrement: value } },
+      select: { balance: true, bonus: true },
+    });
+
+    return res.json({ message: 'Débito realizado.', balance: updated.balance, bonus: updated.bonus });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao debitar.' });
+  }
+};
