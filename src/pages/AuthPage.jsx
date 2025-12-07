@@ -1,11 +1,14 @@
+import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
 import axios from 'axios';
 import InputMask from 'react-input-mask'; // Para formatar o telefone (11) 9...
 
-// Configuração básica do Axios (ajuste a URL se necessário)
-const api = axios.create({ baseURL: 'http://localhost:3000/api' });
+// Usa VITE_API_BASE_URL quando definido; senão cai para /api (proxy do Vite).
+const apiBaseURL = import.meta?.env?.VITE_API_BASE_URL || '/api';
+const api = axios.create({ baseURL: apiBaseURL });
 
 const AuthPage = () => {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true); // Alternar entre Login e Cadastro
   const [formData, setFormData] = useState({ name: '', phone: '', password: '' });
   const [error, setError] = useState('');
@@ -33,7 +36,7 @@ const AuthPage = () => {
       }
       
       alert(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
-      // Aqui redirecionaremos para a Home na próxima etapa
+      navigate('/home');
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao conectar.');
     }
