@@ -3,6 +3,7 @@ require('dotenv').config(); // Para ler o .env
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./src/routes/authRoutes');
+const walletRoutes = require('./src/routes/walletRoutes');
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(express.json()); // Permite ler JSON no corpo da requisição
 
 // Usa as rotas que criamos
 app.use('/api/auth', authRoutes);
+app.use('/api/wallet', walletRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

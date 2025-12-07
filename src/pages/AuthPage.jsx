@@ -28,12 +28,9 @@ const AuthPage = () => {
       const response = await api.post(endpoint, formData);
       const { token, user } = response.data;
 
-      // Salvar token
-      if (rememberMe || !isLogin) { // Se "Salvar Acesso" ou for cadastro
-        localStorage.setItem('token', token);
-      } else {
-        sessionStorage.setItem('token', token);
-      }
+      const storage = rememberMe || !isLogin ? localStorage : sessionStorage;
+      storage.setItem('token', token);
+      storage.setItem('user', JSON.stringify(user));
       
       alert(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
       navigate('/home');
