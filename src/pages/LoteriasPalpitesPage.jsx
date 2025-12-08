@@ -1,19 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
-import api from '../utils/api';
 import { toast } from 'react-toastify';
 import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
+import { useAuth } from '../context/AuthContext';
 
 const LoteriasPalpitesPage = () => {
   const navigate = useNavigate();
   const { jogo } = useParams();
+  const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [draft, setDraft] = useState({});
-  const [balance, setBalance] = useState(null);
   const [showBalance, setShowBalance] = useState(true);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
   const [palpite, setPalpite] = useState('');
   const [palpites, setPalpites] = useState([]);
   const [palpiteError, setPalpiteError] = useState('');
@@ -43,26 +41,8 @@ const LoteriasPalpitesPage = () => {
       }
       setPalpites([]);
     }
-    const fetchBalance = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-        if (!loggedIn) {
-          setError('Faça login para ver o saldo.');
-          setLoading(false);
-          return;
-        }
-        const res = await api.get('/wallet/me');
-        setBalance(res.data.balance ?? 0);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Erro ao carregar saldo.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBalance();
-  }, []);
+    refreshUser();
+  }, [refreshUser]);
 
   const styles = {
     container: {
@@ -207,12 +187,12 @@ const LoteriasPalpitesPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading ? (
+          {loadingUser ? (
             <Spinner size={18} />
           ) : (
             `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
           )}
-          {!loading && (
+          {!loadingUser && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
             </span>
@@ -225,7 +205,7 @@ const LoteriasPalpitesPage = () => {
         </div>
       </div>
 
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
       <div style={styles.card}>
         <div style={styles.title}>Palpites</div>

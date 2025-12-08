@@ -28,6 +28,7 @@ model User {
   transactions Transaction[]
   bets        Bet[]
   withdrawals WithdrawalRequest[]
+  supervisorCommissions SupervisorCommission[]
 }
 
 model PixCharge {
@@ -74,6 +75,7 @@ model Bet {
   result      Result?  @relation(fields: [resultId], references: [id])
   resultId    Int?
   createdAt   DateTime @default(now())
+  commissions SupervisorCommission[]
 }
 
 model Supervisor {
@@ -83,6 +85,7 @@ model Supervisor {
   code      String   @unique
   createdAt DateTime @default(now())
   users     User[]
+  commissions SupervisorCommission[]
 }
 
 model Result {
@@ -112,4 +115,18 @@ model Coupon {
   active     Boolean  @default(true)
   expiresAt  DateTime?
   createdAt  DateTime @default(now())
+}
+
+model SupervisorCommission {
+  id           Int        @id @default(autoincrement())
+  supervisor   Supervisor @relation(fields: [supervisorId], references: [id])
+  supervisorId Int
+  user         User       @relation(fields: [userId], references: [id])
+  userId       Int
+  bet          Bet?       @relation(fields: [betId], references: [id])
+  betId        Int?
+  amount       Float
+  basis        String?    // stake, loss etc.
+  status       String     @default("pending") // pending, paid, canceled
+  createdAt    DateTime   @default(now())
 }

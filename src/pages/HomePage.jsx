@@ -29,74 +29,34 @@ import bingoImg from '../assets/images/bingo.jpeg';
 import suporteImg from '../assets/images/suporte.jpeg';
 import pixImg from '../assets/images/pix.jpeg';
 import loteriasImg from '../assets/images/loterias.jpeg';
+import { useAuth } from '../context/AuthContext';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const { user, balance, bonus, loadingUser, refreshUser, logout, authError } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState({
-    id: '',
-    name: '',
-    balance: 0,
-    bonus: 0,
-  });
-  const [error, setError] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const toggleBalance = () => setShowBalance(!showBalance);
 
-  const getAuthData = () => {
-    const rawUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-    const user = rawUser ? JSON.parse(rawUser) : null;
-    const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-    return { loggedIn, user };
-  };
-
-  const fetchBalance = async () => {
-    setLoading(true);
-    setError('');
-    const { loggedIn, user } = getAuthData();
-    if (!loggedIn || !user) {
-      navigate('/');
-      return;
-    }
-
-    try {
-      const res = await api.get('/wallet/me');
-      setUserData({
-        id: res.data.id,
-        name: res.data.name,
-        balance: res.data.balance,
-        bonus: res.data.bonus,
-      });
-    } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao carregar saldo.');
-      navigate('/');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const createPixCharge = async () => {
-    const { loggedIn } = getAuthData();
-    if (!loggedIn) {
+    if (!user) {
       navigate('/');
       return;
     }
-    setError('');
     try {
       const res = await api.post('/pix/charge', { amount: 20 });
       const copy = res.data?.copyAndPaste || 'Cobrança Pix criada.';
       toast.info(`Copie e cole no seu app bancário:\n${copy}`, { autoClose: 5000 });
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao gerar cobrança Pix.');
+      toast.error(err.response?.data?.error || 'Erro ao gerar cobrança Pix.');
     }
   };
 
   const openSupport = () => {
     const phone = '55799989357214'; // (79) 99893-57214
-    const message = `Olá Promotor, preciso de ajuda, meu código de unidade é: ${userData.id || 'ID'}`;
+    const message = `Olá Promotor, preciso de ajuda, meu código de unidade é: ${user?.id || 'ID'}`;
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
@@ -122,12 +82,7 @@ const HomePage = () => {
       label: 'Sair',
       icon: <FaSignOutAlt />,
       action: () => {
-        localStorage.removeItem('token');
-        sessionStorage.removeItem('token');
-        localStorage.removeItem('loggedIn');
-        sessionStorage.removeItem('loggedIn');
-        localStorage.removeItem('user');
-        sessionStorage.removeItem('user');
+        logout();
         navigate('/');
       },
     },
@@ -195,8 +150,8 @@ const HomePage = () => {
   };
 
   useEffect(() => {
-    fetchBalance();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    refreshUser();
+  }, [refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
       <div className={styles.container}>
@@ -205,7 +160,7 @@ const HomePage = () => {
         {/* 1. Navbar Burger + ID */}
         <div className={styles.navbar}>
           <span className={styles.brand}>Panda Loterias</span>
-          <span className={`${styles.userId} ${styles.userIdCenter}`}>ID: {userData.id || '---'}</span>
+          <span className={`${styles.userId} ${styles.userIdCenter}`}>ID: {user?.id || '---'}</span>
           <div className={styles.menuRight}>
             <FaBars className={styles.menuIcon} onClick={() => setShowMenu(true)} />
           </div>
@@ -225,14 +180,14 @@ const HomePage = () => {
         }}
       >
         <div className={styles.balanceLabel}>Seu Saldo Disponível</div>
-        {loading ? (
+        {loadingUser ? (
           <div className={styles.balanceValue}>
             <Spinner size={32} />
           </div>
         ) : (
           <>
             <div className={styles.balanceValue}>
-              R$ {showBalance ? userData.balance.toFixed(2).replace('.', ',') : '••••'}
+              R$ {showBalance ? balance.toFixed(2).replace('.', ',') : '••••'}
               <button
                 className={styles.eyeButton}
                 onClick={(e) => {
@@ -244,11 +199,11 @@ const HomePage = () => {
               </button>
             </div>
             <div className={styles.bonusText}>
-              Bônus: R$ {showBalance ? userData.bonus.toFixed(2).replace('.', ',') : '••••'}
+              Bônus: R$ {showBalance ? bonus.toFixed(2).replace('.', ',') : '••••'}
             </div>
           </>
         )}
-        {error && <div className={styles.error}>{error}</div>}
+        {authError && <div className={styles.error}>{authError}</div>}
       </div>
 
       {/* 3. Grid Principal de botões */}

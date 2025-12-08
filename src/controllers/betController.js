@@ -1,6 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { z } = require('zod');
-const { betRequestSchema, placeBet, ERR_NO_BALANCE, ERR_NO_USER } = require('../services/betService');
+const { betRequestSchema, placeBet, ERR_NO_BALANCE, ERR_NO_USER, ERR_CUTOFF_PASSED } = require('../services/betService');
 
 const prisma = new PrismaClient();
 
@@ -43,6 +43,9 @@ exports.create = async (req, res) => {
     }
     if (err?.code === ERR_NO_USER || err?.message === ERR_NO_USER) {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+    if (err?.code === ERR_CUTOFF_PASSED) {
+      return res.status(400).json({ error: err.message || 'Horário encerrado para este sorteio.' });
     }
     return res.status(500).json({ error: 'Erro ao salvar aposta.' });
   }

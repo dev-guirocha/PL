@@ -510,9 +510,14 @@ exports.createResult = async (req, res) => {
       data: { resultId: created.id },
     });
 
-    await settleBetsForResult(created.id);
+    // Dispara a conferência em background para não bloquear a requisição admin
+    setImmediate(() => {
+      settleBetsForResult(created.id).catch((err) => {
+        console.error(`Erro ao liquidar apostas para resultado ${created.id}`, err);
+      });
+    });
 
-    return res.status(201).json({ result: created });
+    return res.status(201).json({ result: created, settling: true });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao registrar resultado.' });
   }

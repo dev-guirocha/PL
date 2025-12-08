@@ -3,44 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
-import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { toast } from 'react-toastify';
+import { useAuth } from '../context/AuthContext';
 
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
-  const [balance, setBalance] = useState(null);
+  const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [selected, setSelected] = useState({ loteria: null, horario: null });
   const [draft, setDraft] = useState({});
 
   useEffect(() => {
-    const fetchBalance = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-        if (!loggedIn) {
-          setError('Faça login para ver o saldo.');
-          setLoading(false);
-          return;
-        }
-        const res = await api.get('/wallet/me');
-        setBalance(res.data.balance ?? 0);
-      } catch (err) {
-        const message = err.response?.data?.error || 'Erro ao carregar saldo.';
-        setError(message);
-        toast.error(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBalance();
+    refreshUser();
     setDraft(getDraft());
-  }, []);
+  }, [refreshUser]);
 
   const timeValue = (txt) => {
     const matches = txt.match(/\d+/g);
@@ -186,12 +163,12 @@ const LoteriasSorteiosPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading ? (
+          {loadingUser ? (
             <Spinner size={18} />
           ) : (
             `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
           )}
-          {!loading && (
+          {!loadingUser && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
             </span>
@@ -204,7 +181,7 @@ const LoteriasSorteiosPage = () => {
         </div>
       </div>
 
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
       <div style={styles.list}>
         {LOTERIAS_SORTEIOS.map((lot) => (

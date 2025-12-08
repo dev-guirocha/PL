@@ -7,6 +7,5 @@ router.use(authMiddleware);
 
 router.get('/me', walletController.me);
 router.post('/deposit', walletController.deposit);
-router.post('/debit', walletController.debit);
 
 module.exports = router;

@@ -1,0 +1,92 @@
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import api from '../utils/api';
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [balance, setBalance] = useState(0);
+  const [bonus, setBonus] = useState(0);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [authError, setAuthError] = useState('');
+
+  const refreshUser = useCallback(async () => {
+    const loggedIn = typeof window !== 'undefined' ? localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn') : null;
+    if (!loggedIn) {
+      setUser(null);
+      setBalance(0);
+      setBonus(0);
+      setLoadingUser(false);
+      return;
+    }
+    setAuthError('');
+    setLoadingUser(true);
+    try {
+      const res = await api.get('/wallet/me');
+      setUser(res.data || null);
+      setBalance(res.data?.balance || 0);
+      setBonus(res.data?.bonus || 0);
+    } catch (err) {
+      setAuthError(err.response?.data?.error || 'Erro ao buscar usuário.');
+      setUser(null);
+      setBalance(0);
+      setBonus(0);
+    } finally {
+      setLoadingUser(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
+
+  const updateBalances = ({ balance: newBalance, bonus: newBonus }) => {
+    if (typeof newBalance === 'number') setBalance(newBalance);
+    if (typeof newBonus === 'number') setBonus(newBonus);
+  };
+
+  const setAuthUser = (data) => {
+    setUser(data || null);
+    if (data?.balance !== undefined) setBalance(data.balance);
+    if (data?.bonus !== undefined) setBonus(data.bonus);
+  };
+
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      localStorage.removeItem('loggedIn');
+      sessionStorage.removeItem('loggedIn');
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
+    }
+    setUser(null);
+    setBalance(0);
+    setBonus(0);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        balance,
+        bonus,
+        loadingUser,
+        authError,
+        refreshUser,
+        updateBalances,
+        setAuthUser,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+};

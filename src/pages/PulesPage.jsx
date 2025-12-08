@@ -4,14 +4,14 @@ import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import './PulesPage.css';
+import { useAuth } from '../context/AuthContext';
 
 const PulesPage = () => {
   const navigate = useNavigate();
+  const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [bets, setBets] = useState([]);
-  const [balance, setBalance] = useState(null);
   const [showBalance, setShowBalance] = useState(true);
   const [error, setError] = useState('');
-  const [loadingBalance, setLoadingBalance] = useState(true);
   const [loadingBets, setLoadingBets] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -32,29 +32,9 @@ const PulesPage = () => {
   };
 
   useEffect(() => {
-    const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-    if (!loggedIn) {
-      setError('Faça login para ver o saldo e suas pules.');
-      setLoadingBalance(false);
-      setLoadingBets(false);
-      return;
-    }
-
-    const fetchBalance = async () => {
-      setLoadingBalance(true);
-      try {
-        const res = await api.get('/wallet/me');
-        setBalance(res.data.balance ?? 0);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Erro ao carregar saldo.');
-      } finally {
-        setLoadingBalance(false);
-      }
-    };
-
-    fetchBalance();
+    refreshUser();
     fetchBets(1, true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
   const isInitialBetsLoading = loadingBets && bets.length === 0;
@@ -64,7 +44,7 @@ const PulesPage = () => {
       <div className="pules-hero">
         <div className="pules-title">Pandas PULES</div>
         <div className="pules-balance">
-          {loadingBalance ? (
+          {loadingUser ? (
             <Spinner size={18} />
           ) : (
             <>
@@ -85,7 +65,7 @@ const PulesPage = () => {
         </button>
       </div>
 
-      {error && <div className="pules-error">{error}</div>}
+      {(error || authError) && <div className="pules-error">{error || authError}</div>}
 
       <div className="pules-list">
         {isInitialBetsLoading && (

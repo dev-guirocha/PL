@@ -7,6 +7,8 @@ const EFI_BASE_URL = process.env.EFI_BASE_URL || 'https://pix-h.efipay.com.br';
 const EFI_CLIENT_ID = process.env.EFI_CLIENT_ID || '';
 const EFI_CLIENT_SECRET = process.env.EFI_CLIENT_SECRET || '';
 const EFI_PIX_KEY = process.env.EFI_PIX_KEY || '';
+const SUITPAY_WEBHOOK_TOKEN = (process.env.SUITPAY_WEBHOOK_TOKEN || '').trim();
+const MIN_WEBHOOK_TOKEN_LENGTH = 32;
 
 // Gera txid simples para teste (troque por geração conforme regras do BACEN se necessário)
 function generateTxid() {
@@ -107,6 +109,21 @@ exports.createCharge = async (req, res) => {
 };
 
 exports.handleWebhook = async (req, res) => {
+  // Validação do webhook SuitPay via header de assinatura ou token de URL
+  if (!SUITPAY_WEBHOOK_TOKEN || SUITPAY_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
+    console.error('Webhook SuitPay não configurado com token forte. Defina um SUITPAY_WEBHOOK_TOKEN longo/aleatório no .env.');
+    return res.status(500).json({ error: 'Webhook indisponível por configuração insegura.' });
+  }
+
+  const signatureHeader = req.get('x-suitpay-signature');
+  const tokenFromHeader = req.get('x-webhook-token');
+  const tokenFromQuery = req.query?.token;
+  const providedSecret = signatureHeader || tokenFromHeader || tokenFromQuery;
+
+  if (!providedSecret || providedSecret !== SUITPAY_WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: 'Assinatura do webhook inválida.' });
+  }
+
   // Esqueleto de webhook: espera receber txid e status pago
   // Ajuste conforme payload real da Efí (provavelmente em req.body.pix[0].txid)
   const { txid, status } = req.body || {};

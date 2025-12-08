@@ -2,6 +2,7 @@
 require('dotenv').config(); // Para ler o .env
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const authRoutes = require('./src/routes/authRoutes');
 const walletRoutes = require('./src/routes/walletRoutes');
 const pixRoutes = require('./src/routes/pixRoutes');
@@ -34,6 +35,21 @@ app.use(
 ); // Deixa o Front-end falar com o Back-end
 app.use(express.json()); // Permite ler JSON no corpo da requisição
 app.use(createCsrfProtection(allowedOrigins));
+
+// Limitadores de requisição para mitigar brute force e spam
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
 
 // Usa as rotas que criamos
 app.use('/api/auth', authRoutes);

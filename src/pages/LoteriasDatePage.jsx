@@ -1,20 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
-import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import { getDraft, updateDraft } from '../utils/receipt';
 import { GAME_NAMES } from '../constants/games';
+import { useAuth } from '../context/AuthContext';
 
 const LoteriasDatePage = () => {
   const navigate = useNavigate();
   const { jogo } = useParams();
   const gameTitle = GAME_NAMES[jogo] || 'Loteria';
 
-  const [balance, setBalance] = useState(null);
+  const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedDate, setSelectedDate] = useState(null);
   const [draft, setDraft] = useState({});
 
@@ -36,29 +34,10 @@ const LoteriasDatePage = () => {
     if (days.length) setSelectedDate(days[0].value);
   }, [days]);
 
-  const fetchBalance = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-      if (!loggedIn) {
-        setError('Faça login para ver o saldo.');
-        setLoading(false);
-        return;
-      }
-      const res = await api.get('/wallet/me');
-      setBalance(res.data.balance ?? 0);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao carregar saldo.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchBalance();
+    refreshUser();
     setDraft(getDraft());
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const styles = {
     container: {
@@ -149,12 +128,12 @@ const LoteriasDatePage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading ? (
+          {loadingUser ? (
             <Spinner size={18} />
           ) : (
             `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
           )}
-          {!loading && (
+          {!loadingUser && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
             </span>
@@ -167,7 +146,7 @@ const LoteriasDatePage = () => {
         </div>
       </div>
 
-      {error && <div style={{ color: 'red' }}>{error}</div>}
+      {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
       <div style={styles.card}>
         <div style={styles.title}>{gameTitle}</div>

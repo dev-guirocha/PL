@@ -1,34 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaShareAlt } from 'react-icons/fa';
-import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { toast } from 'react-toastify';
 import './BalanceReportPage.css';
+import { useAuth } from '../context/AuthContext';
 
 const BalanceReportPage = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [balance, setBalance] = useState(0);
-  const [error, setError] = useState('');
+  const { balance, loadingUser, authError, refreshUser } = useAuth();
 
   useEffect(() => {
-    const fetchBalance = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await api.get('/wallet/me');
-        setBalance(res.data.balance ?? 0);
-      } catch (err) {
-        const message = err.response?.data?.error || 'Erro ao carregar saldo.';
-        setError(message);
-        toast.error(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBalance();
-  }, []);
+    refreshUser();
+  }, [refreshUser]);
 
   const formatCurrency = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
@@ -56,7 +39,7 @@ const BalanceReportPage = () => {
           <span className="balance-date">{formattedDate}</span>
         </div>
 
-        {loading ? (
+        {loadingUser ? (
           <div className="balance-loading">
             <Spinner size={32} />
           </div>
@@ -86,7 +69,7 @@ const BalanceReportPage = () => {
               <span>HAVER:</span>
               <span>{formatCurrency(balance)} (+)</span>
             </div>
-            {error && <div className="balance-error">{error}</div>}
+            {authError && <div className="balance-error">{authError}</div>}
           </>
         )}
 

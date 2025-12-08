@@ -21,6 +21,13 @@ import QuotesPage from './pages/QuotesPage';
 import QuoteDetailPage from './pages/QuoteDetailPage';
 import { ToastContainer } from 'react-toastify';
 import AdminDashboard from './pages/AdminDashboard';
+import { AuthProvider } from './context/AuthContext';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminBetsPage from './pages/admin/AdminBetsPage';
+import AdminSupervisorsPage from './pages/admin/AdminSupervisorsPage';
+import AdminResultsPage from './pages/admin/AdminResultsPage';
+import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
+import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
@@ -51,7 +58,7 @@ const RequireAdmin = ({ children }) => {
 
 function App() {
   return (
-    <>
+    <AuthProvider>
       <Routes>
         <Route path="/" element={<AuthPage />} />
         <Route
@@ -198,10 +205,58 @@ function App() {
           </RequireAdmin>
         }
       />
+      <Route
+        path="/admin/users"
+        element={
+          <RequireAdmin>
+            <AdminUsersPage />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/bets"
+        element={
+          <RequireAdmin>
+            <AdminBetsPage />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/supervisors"
+        element={
+          <RequireAdmin>
+            <AdminSupervisorsPage />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/results"
+        element={
+          <RequireAdmin>
+            <AdminResultsPage />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/withdrawals"
+        element={
+          <RequireAdmin>
+            <AdminWithdrawalsPage />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/coupons"
+        element={
+          <RequireAdmin>
+            <AdminCouponsPage />
+          </RequireAdmin>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-  </>
+  </AuthProvider>
   );
 }
 

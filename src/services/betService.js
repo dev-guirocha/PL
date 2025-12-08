@@ -3,6 +3,9 @@ const { recordTransaction } = require('./financeService');
 
 const ERR_NO_BALANCE = 'ERR_NO_BALANCE';
 const ERR_NO_USER = 'ERR_NO_USER';
+const ERR_CUTOFF_PASSED = 'ERR_CUTOFF_PASSED';
+const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
+const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 
 const amountSchema = z.preprocess(
   (val) => Number(val),
@@ -34,6 +37,22 @@ const betRequestSchema = z.object({
   codigoHorario: z.string().optional(),
 });
 
+// Extrai a hora de um texto como "LT PT RIO 14HS" e monta um Date no dia informado
+const resolveHorarioCutoff = ({ codigoHorario, data }) => {
+  if (!codigoHorario) return null;
+  const match = codigoHorario.match(/(\d{1,2})\s*hs/i);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) return null;
+
+  // Usa a data da aposta (YYYY-MM-DD) ou hoje
+  const baseDateStr = data || new Date().toISOString().slice(0, 10);
+  const base = new Date(baseDateStr);
+  if (Number.isNaN(base.getTime())) return null;
+  base.setHours(hour, 0, 0, 0);
+  return base;
+};
+
 function calculateBetTotal(aposta) {
   const valor = Number(aposta?.valorAposta ?? aposta?.valorPorNumero ?? aposta?.total);
   if (Number.isNaN(valor) || valor <= 0) {
@@ -55,6 +74,14 @@ async function placeBet({ prismaClient, userId, apostas, loteria, codigoHorario 
     const invalid = new Error(err.message || 'Dados de aposta inválidos.');
     invalid.code = 'ERR_INVALID_BET';
     throw invalid;
+  }
+
+  const firstData = apostas?.[0]?.data || null;
+  const cutoff = resolveHorarioCutoff({ codigoHorario, data: firstData });
+  if (cutoff && new Date() >= cutoff) {
+    const err = new Error('Horário encerrado para este sorteio.');
+    err.code = ERR_CUTOFF_PASSED;
+    throw err;
   }
 
   const result = await prismaClient.$transaction(async (tx) => {
@@ -90,7 +117,7 @@ async function placeBet({ prismaClient, userId, apostas, loteria, codigoHorario 
         loteria,
         codigoHorario,
         total: debited,
-        dataJogo: apostas?.[0]?.data || null,
+        dataJogo: firstData,
         modalidade: apostas?.length === 1 ? apostas?.[0]?.modalidade || null : 'MULTIPLAS',
         colocacao: apostas?.length === 1 ? apostas?.[0]?.colocacao || null : null,
         palpites: JSON.stringify(apostas),
@@ -100,10 +127,28 @@ async function placeBet({ prismaClient, userId, apostas, loteria, codigoHorario 
 
     const user = await tx.user.findUnique({
       where: { id: userId },
-      select: { balance: true, bonus: true },
+      select: { balance: true, bonus: true, supervisorId: true },
     });
 
-    return { user, bet };
+    let supervisorCommission = null;
+    if (user?.supervisorId && SUPERVISOR_COMMISSION_PCT > 0) {
+      const commissionAmount = Number(((debited * SUPERVISOR_COMMISSION_PCT) / 100).toFixed(2));
+      if (commissionAmount > 0) {
+        await tx.supervisorCommission.create({
+          data: {
+            supervisorId: user.supervisorId,
+            userId,
+            betId: bet.id,
+            amount: commissionAmount,
+            basis: SUPERVISOR_COMMISSION_BASIS,
+            status: 'pending',
+          },
+        });
+        supervisorCommission = commissionAmount;
+      }
+    }
+
+    return { user, bet, supervisorCommission };
   });
 
   const betRef = `${userId}-${result.bet.id}`;
@@ -116,4 +161,5 @@ module.exports = {
   placeBet,
   ERR_NO_BALANCE,
   ERR_NO_USER,
+  ERR_CUTOFF_PASSED,
 };
