@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -140,7 +141,7 @@ const SettingsPage = () => {
           <div style={{ fontSize: '13px' }}>
             Baixe o aplicativo/atalho e acesse o Panda Loterias mais rápido.
           </div>
-          <button style={styles.bannerButton} onClick={() => alert('Adicionar atalho: implementar')}>
+          <button style={styles.bannerButton} onClick={() => toast.info('Adicionar atalho: implementar')}>
             Adicionar atalho
           </button>
         </div>

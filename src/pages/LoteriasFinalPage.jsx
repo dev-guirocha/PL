@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, appendToHistory } from '../utils/receipt';
+import { PAYOUTS } from '../constants/payouts';
 
 const LoteriasFinalPage = () => {
   const navigate = useNavigate();
@@ -14,25 +16,19 @@ const LoteriasFinalPage = () => {
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
-
   useEffect(() => {
     setDraft(getDraft());
     const fetchBalance = async () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
       } catch (err) {
         setError(err.response?.data?.error || 'Erro ao carregar saldo.');
@@ -54,6 +50,20 @@ const LoteriasFinalPage = () => {
     // mostra do último item como referência
     const last = apostas[apostas.length - 1];
     return last?.valorPorNumero || 0;
+  }, [draft]);
+
+  const ganhos = useMemo(() => {
+    const apostas = draft?.apostas || [];
+    return apostas
+      .map((ap) => {
+        const key = (ap.modalidade || '').toUpperCase().trim();
+        const payout = PAYOUTS[key];
+        if (!payout) return null;
+        const valorAposta = Number(ap.total || 0);
+        const ganho = valorAposta * payout;
+        return { modalidade: ap.modalidade, valor: valorAposta, ganho };
+      })
+      .filter(Boolean);
   }, [draft]);
 
   const styles = {
@@ -167,11 +177,11 @@ const LoteriasFinalPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
@@ -224,6 +234,17 @@ const LoteriasFinalPage = () => {
             <span>Valor total a pagar:</span>
             <span>R$ {total.toFixed(2).replace('.', ',')}</span>
           </div>
+          {ganhos.length > 0 && (
+            <div style={{ marginTop: '8px', color: '#166534' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Possíveis ganhos (1ª linha)</div>
+              {ganhos.map((g, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span>{g.modalidade}</span>
+                  <span>R$ {g.ganho.toFixed(2).replace('.', ',')}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {valorPorNumero ? (
             <div style={{ color: '#166534', fontSize: '13px' }}>
               Valor por número (última aposta): R$ {valorPorNumero.toFixed(2).replace('.', ',')}
@@ -244,23 +265,26 @@ const LoteriasFinalPage = () => {
           <button
             style={{ ...styles.actionBtn, ...styles.primary }}
             onClick={async () => {
-              const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-              if (!token) {
+              const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+              if (!loggedIn) {
                 setMessage('Faça login para finalizar.');
                 return;
               }
               try {
-                const res = await api.post(
-                  '/wallet/debit',
-                  { amount: total },
-                  { headers: { Authorization: `Bearer ${token}` } },
-                );
+                const res = await api.post('/wallet/debit', {
+                  loteria: draft?.loteria,
+                  codigoHorario: draft?.codigoHorario,
+                  apostas: draft?.apostas || [],
+                });
+                const debited = res.data?.debited ?? total;
+                const betId = res.data?.bet?.id;
                 appendToHistory({
                   criadoEm: new Date().toISOString(),
                   loteria: draft?.loteria,
                   horario: draft?.codigoHorario,
                   apostas: draft?.apostas || [],
-                  total,
+                  total: debited,
+                  betId,
                 });
                 setBalance(res.data?.balance ?? balance);
                 setSuccess('Aposta realizada com sucesso! PULE salvo no histórico.');

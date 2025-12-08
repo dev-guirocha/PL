@@ -1,23 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
 import { getDraft, updateDraft } from '../utils/receipt';
-
-const gameNames = {
-  tradicional: 'Tradicional',
-  'tradicional-1-10': 'Tradicional 1/10',
-  uruguaia: 'Lot. Uruguaia',
-  quininha: 'Quininha',
-  seninha: 'Seninha',
-  super15: 'Super15',
-  'repetir-pule': 'Repetir Pule',
-};
+import { GAME_NAMES } from '../constants/games';
 
 const LoteriasDatePage = () => {
   const navigate = useNavigate();
   const { jogo } = useParams();
-  const gameTitle = gameNames[jogo] || 'Loteria';
+  const gameTitle = GAME_NAMES[jogo] || 'Loteria';
 
   const [balance, setBalance] = useState(null);
   const [showBalance, setShowBalance] = useState(true);
@@ -25,10 +17,6 @@ const LoteriasDatePage = () => {
   const [error, setError] = useState('');
   const [selectedDate, setSelectedDate] = useState(null);
   const [draft, setDraft] = useState({});
-
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
 
   const days = useMemo(() => {
     const arr = [];
@@ -52,15 +40,13 @@ const LoteriasDatePage = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
+      const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+      if (!loggedIn) {
         setError('Faça login para ver o saldo.');
         setLoading(false);
         return;
       }
-      const res = await api.get('/wallet/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get('/wallet/me');
       setBalance(res.data.balance ?? 0);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao carregar saldo.');
@@ -163,11 +149,11 @@ const LoteriasDatePage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}

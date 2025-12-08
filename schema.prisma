@@ -21,6 +21,8 @@ model User {
   email     String?
   createdAt DateTime @default(now())
   pixCharges PixCharge[]
+  transactions Transaction[]
+  bets        Bet[]
 }
 
 model PixCharge {
@@ -38,4 +40,28 @@ model PixCharge {
   credited      Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  type        String   // deposit, debit, prize, adjustment
+  amount      Float    // valores positivos ou negativos
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+model Bet {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  loteria     String?
+  codigoHorario String?
+  total       Float
+  dataJogo    String?
+  modalidade  String?
+  colocacao   String?
+  palpites    String   // JSON string de palpites/apostas
+  createdAt   DateTime @default(now())
 }

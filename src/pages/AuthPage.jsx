@@ -1,11 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
-import axios from 'axios';
 import InputMask from 'react-input-mask'; // Para formatar o telefone (11) 9...
-
-// Usa VITE_API_BASE_URL quando definido; senão cai para /api (proxy do Vite).
-const apiBaseURL = import.meta?.env?.VITE_API_BASE_URL || '/api';
-const api = axios.create({ baseURL: apiBaseURL });
+import { toast } from 'react-toastify';
+import api from '../utils/api';
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -26,16 +23,21 @@ const AuthPage = () => {
     
     try {
       const response = await api.post(endpoint, formData);
-      const { token, user } = response.data;
+      const { user } = response.data;
 
+      // Persist only a non-sensível flag; o token fica em cookie HttpOnly
       const storage = rememberMe || !isLogin ? localStorage : sessionStorage;
-      storage.setItem('token', token);
+      storage.setItem('loggedIn', 'true');
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       storage.setItem('user', JSON.stringify(user));
       
-      alert(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
+      toast.success(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
       navigate('/home');
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao conectar.');
+      const message = err.response?.data?.error || 'Erro ao conectar.';
+      setError(message);
+      toast.error(message);
     }
   };
 

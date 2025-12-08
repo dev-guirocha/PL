@@ -1,24 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { updateDraft } from '../utils/receipt';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
+import { toast } from 'react-toastify';
+import { LOTERIAS } from '../constants/games';
 import tradicionalImg from '../assets/images/tradicional.jpeg';
 import uruguaiaImg from '../assets/images/uruguaia.jpeg';
 import quininhaImg from '../assets/images/quininha.jpeg';
 import seninhaImg from '../assets/images/seninha.jpeg';
 import super15Img from '../assets/images/super15.jpeg';
 import repetirImg from '../assets/images/repetir.jpeg';
-
-const loteriasList = [
-  { title: 'Tradicional', image: tradicionalImg, route: '/loterias/tradicional' },
-  { title: 'Tradicional 1/10', image: tradicionalImg, route: '/loterias/tradicional-1-10' },
-  { title: 'Lot. Uruguaia', image: uruguaiaImg, route: '/loterias/uruguaia' },
-  { title: 'Quininha', image: quininhaImg, route: '/loterias/quininha' },
-  { title: 'Seninha', image: seninhaImg, route: '/loterias/seninha' },
-  { title: 'Super15', image: super15Img, route: '/loterias/super15' },
-  { title: 'Repetir Pule', image: repetirImg, route: '/loterias/repetir-pule' },
-];
 
 const LoteriasPage = () => {
   const navigate = useNavigate();
@@ -27,23 +20,17 @@ const LoteriasPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
-
   const fetchBalance = async () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
+      const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+      if (!loggedIn) {
         setError('Faça login para ver o saldo.');
         setLoading(false);
         return;
       }
-      const res = await api.get('/wallet/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get('/wallet/me');
       setBalance(res.data.balance ?? 0);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao carregar saldo.');
@@ -55,6 +42,16 @@ const LoteriasPage = () => {
   useEffect(() => {
     fetchBalance();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loteriaImageMap = {
+    tradicional: tradicionalImg,
+    'tradicional-1-10': tradicionalImg,
+    uruguaia: uruguaiaImg,
+    quininha: quininhaImg,
+    seninha: seninhaImg,
+    super15: super15Img,
+    'repetir-pule': repetirImg,
+  };
 
   const styles = {
     container: {
@@ -127,11 +124,11 @@ const LoteriasPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
@@ -148,24 +145,21 @@ const LoteriasPage = () => {
       {error && <div style={{ color: 'red' }}>{error}</div>}
 
       <div style={styles.list}>
-        {loteriasList.map((item) => (
+        {LOTERIAS.map((item) => (
           <div
             key={item.title}
             style={styles.card}
             onClick={() => {
-              if (item.route) {
-                updateDraft({
-                  jogo: item.title,
-                  slug: item.route,
-                  selecionadoEm: new Date().toISOString(),
-                });
-                navigate(item.route);
-              } else {
-                alert(`${item.title} em implementação.`);
-              }
+              const route = `/loterias/${item.slug}`;
+              updateDraft({
+                jogo: item.title,
+                slug: route,
+                selecionadoEm: new Date().toISOString(),
+              });
+              navigate(route);
             }}
           >
-            <img src={item.image} alt={item.title} style={styles.cardImage} />
+            <img src={loteriaImageMap[item.slug]} alt={item.title} style={styles.cardImage} />
             <div style={styles.cardBody}>{item.title}</div>
           </div>
         ))}

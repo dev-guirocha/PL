@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
+import { toast } from 'react-toastify';
 import { getDraft, updateDraft } from '../utils/receipt';
 
 const quickAdds = [5, 20, 50, 100];
@@ -17,10 +19,6 @@ const LoteriasValorPage = () => {
   const [valor, setValor] = useState('');
   const [modoValor, setModoValor] = useState('todos'); // 'todos' ou 'cada'
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
-
   useEffect(() => {
     const d = getDraft();
     setDraft(d);
@@ -30,18 +28,18 @@ const LoteriasValorPage = () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
       } catch (err) {
-        setError(err.response?.data?.error || 'Erro ao carregar saldo.');
+        const message = err.response?.data?.error || 'Erro ao carregar saldo.';
+        setError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -192,11 +190,11 @@ const LoteriasValorPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}

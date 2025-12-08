@@ -1,38 +1,56 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { z } = require('zod');
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
-// Função auxiliar para validar formato de telefone brasileiro (Celular)
-// Aceita: (11) 99999-9999, 11 999999999, 11999999999
-function isValidPhone(phone) {
-  // Remove tudo que não é número
-  const cleanPhone = phone.replace(/\D/g, '');
-  // Verifica se tem 11 dígitos (DDD + 9 + 8 números)
-  const regex = /^[1-9]{2}9[0-9]{8}$/;
-  return regex.test(cleanPhone);
+const phoneSchema = z
+  .string()
+  .trim()
+  .transform((val) => val.replace(/\D/g, ''))
+  .refine((val) => /^[1-9]{2}9[0-9]{8}$/.test(val), {
+    message: 'Telefone inválido. Use o formato com DDD e 9 dígitos.',
+  });
+
+const passwordSchema = z
+  .string()
+  .min(8, { message: 'A senha deve ter ao menos 8 caracteres.' })
+  .max(64, { message: 'A senha é muito longa.' })
+  .refine((val) => /[A-Za-z]/.test(val) && /\d/.test(val), {
+    message: 'A senha deve conter letras e números.',
+  });
+
+const registerSchema = z.object({
+  name: z.string().trim().min(2, { message: 'Nome obrigatório.' }),
+  phone: phoneSchema,
+  password: passwordSchema,
+});
+
+const loginSchema = z.object({
+  phone: phoneSchema,
+  password: z.string().min(1, { message: 'Informe a senha.' }),
+});
+
+// Remove campos sensíveis antes de enviar para o cliente
+function toSafeUser(user) {
+  if (!user) return null;
+  const { password, ...safeUser } = user;
+  return safeUser;
 }
 
 exports.register = async (req, res) => {
-  const { name, phone, password } = req.body;
-
-  // 1. Validação de Campos
-  if (!name || !phone || !password) {
-    return res.status(400).json({ error: 'Preencha todos os campos.' });
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const message = parsed.error.errors?.[0]?.message || 'Dados inválidos.';
+    return res.status(400).json({ error: message });
   }
-
-  // 2. Validação RIGOROSA de Telefone
-  if (!isValidPhone(phone)) {
-    return res.status(400).json({ error: 'Telefone inválido. Use o formato com DDD e 9 dígitos.' });
-  }
-
-  // Limpa o telefone para salvar apenas números
-  const cleanPhone = phone.replace(/\D/g, '');
+  const { name, phone, password } = parsed.data;
 
   try {
-    const existingUser = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+    const existingUser = await prisma.user.findUnique({ where: { phone } });
     if (existingUser) {
       return res.status(400).json({ error: 'Este telefone já está cadastrado.' });
     }
@@ -42,13 +60,30 @@ exports.register = async (req, res) => {
     const user = await prisma.user.create({
       data: {
         name,
-        phone: cleanPhone,
+        phone,
         password: hashedPassword,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        balance: true,
+        bonus: true,
+        cpf: true,
+        birthDate: true,
+        email: true,
+        createdAt: true,
       },
     });
 
     // Gera token para login automático
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: COOKIE_MAX_AGE,
+    });
 
     res.status(201).json({ user, token });
   } catch (error) {
@@ -57,16 +92,15 @@ exports.register = async (req, res) => {
 };
 
 exports.login = async (req, res) => {
-  const { phone, password } = req.body;
-
-  if (!phone || !password) {
-    return res.status(400).json({ error: 'Preencha telefone e senha.' });
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const message = parsed.error.errors?.[0]?.message || 'Dados inválidos.';
+    return res.status(400).json({ error: message });
   }
-
-  const cleanPhone = phone.replace(/\D/g, '');
+  const { phone, password } = parsed.data;
 
   try {
-    const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+    const user = await prisma.user.findUnique({ where: { phone } });
 
     if (!user) {
       return res.status(400).json({ error: 'Telefone não encontrado ou senha incorreta.' });
@@ -78,8 +112,14 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: COOKIE_MAX_AGE,
+    });
 
-    res.json({ user, token });
+    res.json({ user: toSafeUser(user), token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login.' });
   }

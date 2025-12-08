@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import api from '../utils/api';
+import { toast } from 'react-toastify';
 import { getDraft, updateDraft } from '../utils/receipt';
+import Spinner from '../components/Spinner';
 
 const LoteriasPalpitesPage = () => {
   const navigate = useNavigate();
@@ -14,29 +16,44 @@ const LoteriasPalpitesPage = () => {
   const [loading, setLoading] = useState(true);
   const [palpite, setPalpite] = useState('');
   const [palpites, setPalpites] = useState([]);
-  const isCentena = (draft?.modalidade || '').toUpperCase().includes('CENTENA');
+  const [palpiteError, setPalpiteError] = useState('');
+  const prevLength = useRef(0);
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
+  const modalidade = (draft?.modalidade || '').toUpperCase();
+  const expectedDigits = modalidade.includes('MILHAR')
+    ? 4
+    : modalidade.includes('CENTENA')
+      ? 3
+      : modalidade.includes('DEZENA')
+        ? 2
+        : modalidade.includes('UNIDADE')
+          ? 1
+          : null;
+  const isSupportedModalidade = Boolean(expectedDigits);
 
   useEffect(() => {
     const d = getDraft();
     setDraft(d);
-    if (Array.isArray(d?.palpites)) setPalpites(d.palpites);
+    const shouldKeepPalpites = d?.currentSaved === true;
+    if (Array.isArray(d?.palpites) && shouldKeepPalpites) {
+      setPalpites(d.palpites);
+    } else {
+      if (Array.isArray(d?.palpites) && d.palpites.length) {
+        updateDraft({ palpites: [] });
+      }
+      setPalpites([]);
+    }
     const fetchBalance = async () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
       } catch (err) {
         setError(err.response?.data?.error || 'Erro ao carregar saldo.');
@@ -156,20 +173,33 @@ const LoteriasPalpitesPage = () => {
     },
   };
 
-  const addPalpite = () => {
-    const clean = palpite.replace(/\D/g, '');
-    if (!isCentena) {
-      alert('Modalidade atual não está configurada para palpites.');
+  const addPalpite = (value) => {
+    const clean = (value ?? palpite).replace(/\D/g, '');
+    if (!isSupportedModalidade) {
       return;
     }
-    if (clean.length !== 3) {
-      alert('Para centena, digite exatamente 3 números.');
-      return;
-    }
+    if (clean.length !== expectedDigits) return;
+    setPalpiteError('');
     const updated = [...palpites, clean];
     setPalpites(updated);
-    updateDraft({ palpites: updated });
     setPalpite('');
+    prevLength.current = 0;
+  };
+
+  const handleChangePalpite = (value) => {
+    const clean = value.replace(/\D/g, '');
+    const limited = expectedDigits ? clean.slice(0, expectedDigits) : clean;
+    setPalpite(limited);
+    if (!isSupportedModalidade) return;
+    if (limited.length && limited.length < expectedDigits) {
+      setPalpiteError(`Digite ${expectedDigits} números.`);
+    } else {
+      setPalpiteError('');
+    }
+    if (isSupportedModalidade && limited.length === expectedDigits && prevLength.current < expectedDigits) {
+      addPalpite(limited);
+    }
+    prevLength.current = limited.length;
   };
 
   return (
@@ -177,11 +207,11 @@ const LoteriasPalpitesPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
@@ -207,21 +237,30 @@ const LoteriasPalpitesPage = () => {
         {draft?.colocacao && (
           <div style={styles.subtitle}>Colocação: {draft.colocacao}</div>
         )}
-        {isCentena ? (
+        {isSupportedModalidade ? (
           <>
-            <div style={styles.subtitle}>Digite sua centena (3 números).</div>
+            <div style={styles.subtitle}>
+              Digite sua {modalidade.toLowerCase()} ({expectedDigits} número{expectedDigits === 1 ? '' : 's'}).
+            </div>
             <div style={styles.inputRow}>
               <input
                 style={styles.input}
-                maxLength={3}
+                maxLength={expectedDigits || 3}
                 value={palpite}
-                onChange={(e) => setPalpite(e.target.value)}
+                onChange={(e) => handleChangePalpite(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addPalpite(palpite);
+                  }
+                }}
                 placeholder="000"
               />
               <button style={styles.addButton} onClick={addPalpite}>
                 Adicionar
               </button>
             </div>
+            {palpiteError && <div style={{ color: 'red', fontSize: '12px' }}>{palpiteError}</div>}
             <div style={styles.subtitle}>Palpites adicionados:</div>
             <div style={styles.chips}>
               {palpites.length === 0 && <span style={styles.subtitle}>Nenhum palpite ainda.</span>}

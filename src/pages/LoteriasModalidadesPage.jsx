@@ -1,53 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
+import { toast } from 'react-toastify';
 import { getDraft, updateDraft } from '../utils/receipt';
-
-const modalidades = [
-  'CENTENA',
-  'CENTENA INV',
-  'CENTENA 3X',
-  'CENTENA ESQUERDA',
-  'CENTENA INV ESQ',
-  'MILHAR',
-  'MILHAR INV',
-  'MILHAR E CT',
-  'UNIDADE',
-  'DEZENA',
-  'DEZENA ESQ',
-  'DEZENA MEIO',
-  'DUQUE DEZ',
-  'DUQUE DEZ ESQ',
-  'DUQUE DEZ MEIO',
-  'TERNO DEZ SECO',
-  'TERNO DEZ SECO ESQ',
-  'TERNO DEZ SECO MEIO',
-  'TERNO DEZ',
-  'TERNO DEZ ESQ',
-  'TERNO DEZ MEIO',
-  'GRUPO',
-  'GRUPO ESQ',
-  'GRUPO MEIO',
-  'DUQUE GP',
-  'DUQUE GP ESQ',
-  'DUQUE GP MEIO',
-  'TERNO GP',
-  'TERNO GP ESQ',
-  'TERNO GP MEIO',
-  'QUADRA GP',
-  'QUADRA GP ESQ',
-  'QUADRA GP MEIO',
-  'QUINA GP 8/5',
-  'QUINA GP 8/5 ESQ',
-  'QUINA GP 8/5 MEIO',
-  'SENA GP 10/6',
-  'PALPITAO',
-  'SENA GP 10/6 ESQ',
-  'SENA GP 10/6 MEIO',
-  'PASSE VAI',
-  'PASSE VAI VEM',
-];
+import { MODALIDADES, CAN_CHOOSE_COLOCACAO, DIRECT_TO_PALPITES } from '../constants/games';
 
 const LoteriasModalidadesPage = () => {
   const navigate = useNavigate();
@@ -58,59 +16,19 @@ const LoteriasModalidadesPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
-
-  const canChooseColocacao = [
-    'CENTENA',
-    'CENTENA INV',
-    'CENTENA ESQUERDA',
-    'CENTENA INV ESQ',
-    'MILHAR INV',
-    'MILHAR E CT',
-    'UNIDADE',
-    'DEZENA',
-    'DEZENA ESQ',
-    'DEZENA MEIO',
-    'GRUPO',
-    'GRUPO ESQ',
-    'GRUPO MEIO',
-  ];
-
-  const directToPalpites = [
-    'CENTENA 3X',
-    'DUQUE DEZ',
-    'DUQUE DEZ ESQ',
-    'DUQUE DEZ MEIO',
-    'TERNO DEZ SECO',
-    'TERNO DEZ SECO ESQ',
-    'TERNO DEZ SECO MEIO',
-    'TERNO DEZ',
-    'TERNO DEZ ESQ',
-    'TERNO DEZ MEIO',
-    'DUQUE GP ESQ',
-    'DUQUE GP MEIO',
-    'QUADRA GP',
-    'QUADRA GP ESQ',
-    'QUADRA GP MEIO',
-  ];
-
   useEffect(() => {
     setDraft(getDraft());
     const fetchBalance = async () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
       } catch (err) {
         setError(err.response?.data?.error || 'Erro ao carregar saldo.');
@@ -196,11 +114,11 @@ const LoteriasModalidadesPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
@@ -225,18 +143,18 @@ const LoteriasModalidadesPage = () => {
         )}
         <div style={styles.subtitle}>Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).</div>
         <div style={styles.list}>
-          {modalidades.map((m) => (
+          {MODALIDADES.map((m) => (
             <button
               key={m}
               style={styles.item}
               onClick={() => {
                 updateDraft({ modalidade: m });
-                if (canChooseColocacao.includes(m.toUpperCase())) {
+                if (CAN_CHOOSE_COLOCACAO.includes(m.toUpperCase())) {
                   navigate(`/loterias/${jogo}/colocacao`);
-                } else if (directToPalpites.includes(m.toUpperCase())) {
+                } else if (DIRECT_TO_PALPITES.includes(m.toUpperCase())) {
                   navigate(`/loterias/${jogo}/palpites`);
                 } else {
-                  alert(`Modalidade selecionada: ${m} (recibo atualizado).`);
+                  toast.success(`Modalidade selecionada: ${m} (recibo atualizado).`);
                 }
               }}
             >

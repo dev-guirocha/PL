@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../utils/api';
+import { toast } from 'react-toastify';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -139,65 +141,42 @@ const ProfilePage = () => {
   const logout = () => {
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
+    localStorage.removeItem('loggedIn');
+    sessionStorage.removeItem('loggedIn');
     localStorage.removeItem('user');
     sessionStorage.removeItem('user');
     navigate('/');
   };
 
-  const apiBaseURL = import.meta?.env?.VITE_API_BASE_URL || '/api';
-
   const handleSaveProfile = async () => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${apiBaseURL}/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Erro ao salvar perfil.');
-        return;
-      }
+      const res = await api.put('/profile', form);
       const updatedUser = { ...(user || {}), ...form };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       sessionStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       setEditing(false);
-      alert('Perfil atualizado.');
+      toast.success('Perfil atualizado.');
     } catch (err) {
-      alert('Erro ao salvar perfil.');
+      toast.error('Erro ao salvar perfil.');
     }
   };
 
   const handleChangePassword = async () => {
     if (!passwords.next || passwords.next !== passwords.confirm) {
-      alert('As senhas não conferem.');
+      toast.error('As senhas não conferem.');
       return;
     }
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${apiBaseURL}/auth/password`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword: passwords.current, newPassword: passwords.next }),
+      await api.put('/auth/password', {
+        currentPassword: passwords.current,
+        newPassword: passwords.next,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Erro ao alterar senha.');
-        return;
-      }
-      alert('Senha alterada com sucesso.');
+      toast.success('Senha alterada com sucesso.');
       setPasswords({ current: '', next: '', confirm: '' });
       setEditing(false);
     } catch (err) {
-      alert('Erro ao alterar senha.');
+      toast.error('Erro ao alterar senha.');
     }
   };
 

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { FaEye, FaEyeSlash, FaClock } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
-import { updateDraft } from '../utils/receipt';
+import { getDraft, updateDraft } from '../utils/receipt';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
+import { toast } from 'react-toastify';
 
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
@@ -13,33 +15,31 @@ const LoteriasSorteiosPage = () => {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [selected, setSelected] = useState({ loteria: null, horario: null });
-
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
+  const [draft, setDraft] = useState({});
 
   useEffect(() => {
     const fetchBalance = async () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
       } catch (err) {
-        setError(err.response?.data?.error || 'Erro ao carregar saldo.');
+        const message = err.response?.data?.error || 'Erro ao carregar saldo.';
+        setError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
     };
     fetchBalance();
+    setDraft(getDraft());
   }, []);
 
   const timeValue = (txt) => {
@@ -152,6 +152,33 @@ const LoteriasSorteiosPage = () => {
       justifyContent: 'space-between',
       width: '100%',
     },
+    tagDisabled: {
+      padding: '8px 10px',
+      background: '#f3f4f6',
+      borderRadius: '10px',
+      border: '1px solid #e5e7eb',
+      color: '#9ca3af',
+      fontWeight: 'bold',
+      fontSize: '13px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      justifyContent: 'space-between',
+      width: '100%',
+      cursor: 'not-allowed',
+    },
+  };
+
+  const selectedDate = draft?.data;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isToday = selectedDate === todayIso;
+  const currentHour = new Date().getHours();
+
+  const isPastHorario = (h) => {
+    if (!isToday) return false;
+    const hour = timeValue(h);
+    if (Number.isNaN(hour)) return false;
+    return hour <= currentHour;
   };
 
   return (
@@ -159,11 +186,11 @@ const LoteriasSorteiosPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Panda Loterias</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
@@ -196,11 +223,14 @@ const LoteriasSorteiosPage = () => {
                     <span
                       key={idx}
                       style={
-                        selected.horario === h && selected.loteria === lot.slug
-                          ? styles.tagSelected
-                          : styles.tag
+                        isPastHorario(h)
+                          ? styles.tagDisabled
+                          : selected.horario === h && selected.loteria === lot.slug
+                            ? styles.tagSelected
+                            : styles.tag
                       }
                       onClick={() => {
+                        if (isPastHorario(h)) return;
                         setSelected({ loteria: lot.slug, horario: h });
                         updateDraft({ loteria: lot.nome, codigoHorario: h, horarioSelecionado: h });
                         navigate('/loterias-final');
@@ -213,9 +243,9 @@ const LoteriasSorteiosPage = () => {
                       </span>
                     </span>
                   ))}
-              </div>
-            )}
-          </div>
+             </div>
+           )}
+         </div>
         ))}
       </div>
     </div>

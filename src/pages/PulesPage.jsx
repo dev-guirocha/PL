@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
-import axios from 'axios';
 import { getHistory } from '../utils/receipt';
+import api from '../utils/api';
+import Spinner from '../components/Spinner';
 
 const PulesPage = () => {
   const navigate = useNavigate();
@@ -12,26 +13,21 @@ const PulesPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const api = axios.create({
-    baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
-  });
-
   useEffect(() => {
     setHistory(getHistory());
     const fetchBalance = async () => {
       setLoading(true);
       setError('');
       try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        if (!token) {
+        const loggedIn = localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
+        if (!loggedIn) {
           setError('Faça login para ver o saldo.');
           setLoading(false);
           return;
         }
-        const res = await api.get('/wallet/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get('/wallet/me');
         setBalance(res.data.balance ?? 0);
+        // TODO: trocar para histórico do backend quando a API de bets/list estiver pronta
       } catch (err) {
         setError(err.response?.data?.error || 'Erro ao carregar saldo.');
       } finally {
@@ -136,11 +132,11 @@ const PulesPage = () => {
       <div style={styles.navbar}>
         <span style={styles.brand}>Pandas PULES</span>
         <span style={styles.saldo}>
-          {loading
-            ? 'Carregando...'
-            : `Saldo: ${
-                showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-              }`}
+          {loading ? (
+            <Spinner size={18} />
+          ) : (
+            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
+          )}
           {!loading && (
             <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
               {showBalance ? <FaEyeSlash /> : <FaEye />}
