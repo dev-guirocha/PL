@@ -27,6 +27,7 @@ const registerSchema = z.object({
   name: z.string().trim().min(2, { message: 'Nome obrigatório.' }),
   phone: phoneSchema,
   password: passwordSchema,
+  supervisorCode: z.string().trim().optional(),
 });
 
 const loginSchema = z.object({
@@ -47,9 +48,15 @@ exports.register = async (req, res) => {
     const message = parsed.error.errors?.[0]?.message || 'Dados inválidos.';
     return res.status(400).json({ error: message });
   }
-  const { name, phone, password } = parsed.data;
+  const { name, phone, password, supervisorCode } = parsed.data;
 
   try {
+    let pendingSupCode = null;
+    if (supervisorCode) {
+      const sup = await prisma.supervisor.findUnique({ where: { code: supervisorCode.toUpperCase() } });
+      if (sup) pendingSupCode = sup.code; // guardamos o código; vínculo acontece após primeiro depósito
+    }
+
     const existingUser = await prisma.user.findUnique({ where: { phone } });
     if (existingUser) {
       return res.status(400).json({ error: 'Este telefone já está cadastrado.' });
@@ -62,22 +69,26 @@ exports.register = async (req, res) => {
         name,
         phone,
         password: hashedPassword,
+        pendingSupCode,
       },
       select: {
         id: true,
         name: true,
         phone: true,
+        isAdmin: true,
         balance: true,
         bonus: true,
         cpf: true,
         birthDate: true,
         email: true,
+        supervisorId: true,
+        pendingSupCode: true,
         createdAt: true,
       },
     });
 
     // Gera token para login automático
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('token', token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -111,7 +122,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'Telefone não encontrado ou senha incorreta.' });
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('token', token, {
       httpOnly: true,
       sameSite: 'lax',

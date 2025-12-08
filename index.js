@@ -7,6 +7,8 @@ const walletRoutes = require('./src/routes/walletRoutes');
 const pixRoutes = require('./src/routes/pixRoutes');
 const profileRoutes = require('./src/routes/profileRoutes');
 const betRoutes = require('./src/routes/betRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
+const createCsrfProtection = require('./src/middleware/csrf');
 
 const app = express();
 
@@ -31,6 +33,7 @@ app.use(
   }),
 ); // Deixa o Front-end falar com o Back-end
 app.use(express.json()); // Permite ler JSON no corpo da requisição
+app.use(createCsrfProtection(allowedOrigins));
 
 // Usa as rotas que criamos
 app.use('/api/auth', authRoutes);
@@ -38,6 +41,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/pix', pixRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/bets', betRoutes);
+app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
-import InputMask from 'react-input-mask'; // Para formatar o telefone (11) 9...
 import { toast } from 'react-toastify';
 import api from '../utils/api';
+import './AuthPage.css';
+import { useEffect } from 'react';
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -10,9 +11,33 @@ const AuthPage = () => {
   const [formData, setFormData] = useState({ name: '', phone: '', password: '' });
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [supervisorCode, setSupervisorCode] = useState('');
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sup = params.get('sup');
+    const stored = localStorage.getItem('pendingSupCode') || sessionStorage.getItem('pendingSupCode');
+    if (sup) {
+      const normalized = sup.toUpperCase();
+      setSupervisorCode(normalized);
+      localStorage.setItem('pendingSupCode', normalized);
+    } else if (stored) {
+      setSupervisorCode(stored.toUpperCase());
+    }
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const formatPhone = (value) => {
+    const digits = (value || '').replace(/\D/g, '').slice(0, 11);
+    const part1 = digits.slice(0, 2);
+    const part2 = digits.slice(2, 7);
+    const part3 = digits.slice(7, 11);
+    if (part3) return `(${part1}) ${part2}-${part3}`;
+    if (part2) return `(${part1}) ${part2}`;
+    if (part1) return `(${part1}`;
+    return '';
   };
 
   const handleSubmit = async (e) => {
@@ -20,9 +45,10 @@ const AuthPage = () => {
     setError('');
 
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
-    
+
     try {
-      const response = await api.post(endpoint, formData);
+      const payload = isLogin ? formData : { ...formData, supervisorCode };
+      const response = await api.post(endpoint, payload);
       const { user } = response.data;
 
       // Persist only a non-sensível flag; o token fica em cookie HttpOnly
@@ -33,6 +59,8 @@ const AuthPage = () => {
       storage.setItem('user', JSON.stringify(user));
       
       toast.success(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
+      localStorage.removeItem('pendingSupCode');
+      sessionStorage.removeItem('pendingSupCode');
       navigate('/home');
     } catch (err) {
       const message = err.response?.data?.error || 'Erro ao conectar.';
@@ -41,159 +69,129 @@ const AuthPage = () => {
     }
   };
 
-  // Estilos "Inline" para garantir o visual exato pedido
-  const styles = {
-    container: {
-      minHeight: '100vh',
-      backgroundColor: '#dcfce7', // Fundo Verde Claro (Tailwind green-100 similar)
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'Arial, sans-serif',
-    },
-    card: {
-      backgroundColor: 'white',
-      padding: '2rem',
-      borderRadius: '12px',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-      width: '100%',
-      maxWidth: '400px',
-    },
-    title: {
-      color: '#166534', // Verde escuro
-      textAlign: 'center',
-      marginBottom: '1.5rem',
-    },
-    inputGroup: {
-      marginBottom: '1rem',
-    },
-    input: {
-      width: '100%',
-      padding: '12px',
-      borderRadius: '8px',
-      border: '1px solid #ccc',
-      fontSize: '16px',
-      boxSizing: 'border-box', // Importante para não quebrar layout
-    },
-    button: {
-      width: '100%',
-      padding: '12px',
-      backgroundColor: '#22c55e', // Verde vibrante (botão de ação)
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '16px',
-      cursor: 'pointer',
-      marginTop: '10px',
-      fontWeight: 'bold',
-    },
-    toggleText: {
-      textAlign: 'center',
-      marginTop: '15px',
-      color: '#666',
-      fontSize: '14px',
-    },
-    link: {
-      color: '#166534',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      textDecoration: 'underline',
-    },
-    checkboxContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        marginTop: '10px',
-        fontSize: '14px',
-        color: '#555'
-    }
-  };
-
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>
-            {isLogin ? 'Acessar Conta' : 'Criar Nova Conta'}
-        </h2>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-header">
+          <div>
+            <p className="auth-subtitle">Panda Loterias</p>
+            <h2 className="auth-title">{isLogin ? 'Acessar Conta' : 'Criar Nova Conta'}</h2>
+          </div>
+          <div className="auth-badge">
+            Seguro
+            <span className="auth-badge-dot" />
+          </div>
+        </div>
 
-        {error && <p style={{color: 'red', textAlign: 'center', marginBottom: '10px'}}>{error}</p>}
+        <div className="auth-toggle">
+          <button
+            type="button"
+            onClick={() => {
+              setIsLogin(true);
+              setError('');
+            }}
+            className={`auth-tab ${isLogin ? 'active' : ''}`}
+          >
+            Entrar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsLogin(false);
+              setError('');
+              setFormData({ name: '', phone: '', password: '' });
+            }}
+            className={`auth-tab ${!isLogin ? 'active' : ''}`}
+          >
+            Cadastrar
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          
-          {/* Campo Nome (Só aparece no cadastro) */}
+        {error && <p className="auth-error">{error}</p>}
+
+        <form onSubmit={handleSubmit} className="auth-form">
           {!isLogin && (
-            <div style={styles.inputGroup}>
+            <div className="auth-field">
+              <label htmlFor="name">Nome Completo</label>
               <input
+                id="name"
                 type="text"
                 name="name"
                 placeholder="Seu Nome Completo"
                 value={formData.name}
                 onChange={handleChange}
-                style={styles.input}
                 required={!isLogin}
               />
             </div>
           )}
 
-          {/* Campo Telefone (Com máscara) */}
-          <div style={styles.inputGroup}>
-            <InputMask
-              mask="(99) 99999-9999"
+          <div className="auth-field">
+            <label htmlFor="phone">Celular (WhatsApp)</label>
+            <input
+              id="phone"
+              type="tel"
+              name="phone"
+              placeholder="(99) 99999-9999"
               value={formData.phone}
-              onChange={handleChange}
-            >
-              {(inputProps) => (
-                <input
-                  {...inputProps}
-                  type="tel"
-                  name="phone"
-                  placeholder="Seu Celular (WhatsApp)"
-                  style={styles.input}
-                  required
-                />
-              )}
-            </InputMask>
+              onChange={(e) => setFormData({ ...formData, phone: formatPhone(e.target.value) })}
+              required
+              inputMode="tel"
+              maxLength={16}
+            />
           </div>
 
-          {/* Campo Senha */}
-          <div style={styles.inputGroup}>
+          {!isLogin && (
+            <div className="auth-field">
+              <label htmlFor="supcode">Código do Supervisor (opcional)</label>
+              <input
+                id="supcode"
+                type="text"
+                name="supervisorCode"
+                placeholder="EX: ABC123"
+                value={supervisorCode}
+                onChange={(e) => setSupervisorCode(e.target.value.trim().toUpperCase())}
+              />
+            </div>
+          )}
+
+          <div className="auth-field">
+            <label htmlFor="password">Senha</label>
             <input
+              id="password"
               type="password"
               name="password"
               placeholder="Sua Senha"
               value={formData.password}
               onChange={handleChange}
-              style={styles.input}
               required
             />
           </div>
 
-          {/* Checkbox Salvar Acesso (Só no Login) */}
           {isLogin && (
-              <div style={styles.checkboxContainer}>
-                  <input 
-                    type="checkbox" 
-                    id="saveAccess" 
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    style={{marginRight: '8px'}}
-                  />
-                  <label htmlFor="saveAccess">Salvar acesso</label>
-              </div>
+            <label className="auth-remember">
+              <input
+                type="checkbox"
+                id="saveAccess"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              <span>Salvar acesso neste dispositivo</span>
+            </label>
           )}
 
-          <button type="submit" style={styles.button}>
+          <button type="submit" className="auth-submit">
             {isLogin ? 'Entrar' : 'Cadastrar'}
           </button>
         </form>
 
-        <p style={styles.toggleText}>
+        <p className="auth-switch">
           {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
-          <span 
-            style={styles.link} 
+          <span
+            className="auth-link"
             onClick={() => {
-                setIsLogin(!isLogin); 
-                setError('');
-                setFormData({name: '', phone: '', password: ''});
+              setIsLogin(!isLogin);
+              setError('');
+              setFormData({ name: '', phone: '', password: '' });
             }}
           >
             {isLogin ? 'Cadastre-se' : 'Fazer Login'}

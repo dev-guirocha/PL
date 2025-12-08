@@ -20,15 +20,33 @@ import BalanceReportPage from './pages/BalanceReportPage';
 import QuotesPage from './pages/QuotesPage';
 import QuoteDetailPage from './pages/QuoteDetailPage';
 import { ToastContainer } from 'react-toastify';
+import AdminDashboard from './pages/AdminDashboard';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
 };
 
+const getStoredUser = () => {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 const RequireAuth = ({ children }) => {
   const token = getStoredToken();
   return token ? children : <Navigate to="/" replace />;
+};
+
+const RequireAdmin = ({ children }) => {
+  const token = getStoredToken();
+  // Permitimos se há token; o back (adminOnly) valida isAdmin. Evita redirecionar por cache antigo.
+  if (!token) return <Navigate to="/" replace />;
+  return children;
 };
 
 function App() {
@@ -170,6 +188,14 @@ function App() {
           <RequireAuth>
             <QuoteDetailPage />
           </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <RequireAdmin>
+            <AdminDashboard />
+          </RequireAdmin>
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
