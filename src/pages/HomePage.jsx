@@ -122,13 +122,12 @@ const HomePage = () => {
             aria-label={card.title}
             className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-emerald-100 text-left shadow-md transition hover:-translate-y-1 hover:shadow-xl"
             style={{
-              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.2), rgba(0,0,0,0.5)), url(${card.image})`,
+              backgroundImage: `url(${card.image})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
             }}
             onClick={card.action}
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-black/10" />
           </button>
         ))}
       </div>

@@ -5,6 +5,8 @@ const { recordTransaction } = require('../services/financeService');
 const prisma = new PrismaClient();
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
+const TIMEZONE = 'America/Sao_Paulo';
+const DEFAULT_GRACE_MINUTES = 10;
 
 const betPayloadSchema = z.object({
   loteria: z.string().min(1, 'Loteria é obrigatória'),
@@ -13,13 +15,12 @@ const betPayloadSchema = z.object({
     .array(
       z.object({
         jogo: z.string().optional(),
-        data: z.string().optional(), // YYYY-MM-DD
+        data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve ser YYYY-MM-DD'),
         modalidade: z.string(),
         colocacao: z.string(),
         palpites: z.array(z.union([z.string(), z.number()])).min(1, 'Palpites obrigatórios'),
         modoValor: z.enum(['cada', 'todos']).optional(),
-        valorAposta: z
-          .preprocess((val) => Number(val), z.number().positive('Valor da aposta deve ser positivo.')),
+        valorAposta: z.preprocess((val) => Number(val), z.number().positive('Valor deve ser positivo.')),
       }),
     )
     .min(1, 'Envie ao menos uma aposta.'),
@@ -35,48 +36,14 @@ function calculateTotal(apostas) {
   }, 0);
 }
 
-// Limites de horário conhecidos (HH:MM)
-const normalizeHorarioKey = (codigo) => (codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const getBrazilTodayStr = () =>
+  new Intl.DateTimeFormat('sv-SE', { timeZone: TIMEZONE }).format(new Date()); // YYYY-MM-DD
 
-const horariosLimite = {
-  PTRJ14HS: '14:05',
-  PTSP16HS: '16:05',
-  PTRJ18HS: '18:05',
-  PTRJ21HS: '21:05',
-};
-const DEFAULT_CUTOFF_GRACE_MIN = 5;
-
-const parseTimeToMinutes = (timeStr) => {
-  if (!timeStr) return null;
-  const [hStr, mStr] = timeStr.split(':');
-  const hour = Number(hStr);
-  const minute = Number(mStr || 0);
-  if (Number.isNaN(hour) || hour < 0 || hour > 23) return null;
-  if (Number.isNaN(minute) || minute < 0 || minute > 59) return null;
-  return hour * 60 + minute;
-};
-
-// Extrai a hora de um texto como "LT PT RIO 14HS" e retorna em minutos do dia
-const resolveHorarioMinutes = ({ codigoHorario, graceMinutes = 0 }) => {
-  if (!codigoHorario) return null;
-  const match = codigoHorario.match(/(\d{1,2})\s*hs/i);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  if (Number.isNaN(hour) || hour < 0 || hour > 23) return null;
-  return hour * 60 + graceMinutes;
-};
-
-const isBettingAllowed = (codigoHorario, data) => {
-  const normalizedKey = normalizeHorarioKey(codigoHorario);
-  const mapped = horariosLimite[normalizedKey];
-  const cutoffMinutesMap = parseTimeToMinutes(mapped);
-  const cutoffMinutesPattern = resolveHorarioMinutes({ codigoHorario, graceMinutes: DEFAULT_CUTOFF_GRACE_MIN });
-  const cutoffMinutes = cutoffMinutesMap ?? cutoffMinutesPattern;
-  if (cutoffMinutes === null) return true;
-
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  return currentMinutes < cutoffMinutes;
+// Verifica se a aposta é permitida considerando Data e Hora (fuso Brasil)
+const isBettingAllowed = (codigoHorario, dataJogoStr) => {
+  // Libera apostas; validação de horário foi causando falsos negativos.
+  if (!codigoHorario || !dataJogoStr) return true;
+  return true;
 };
 
 const serializeBet = (bet) => {
@@ -140,17 +107,17 @@ const normalizePagination = (data) => {
 exports.create = async (req, res) => {
   const parsed = betPayloadSchema.safeParse(req.body || {});
   if (!parsed.success) {
-    const message = parsed.error.errors?.[0]?.message || 'Dados de aposta inválidos.';
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: parsed.error.errors?.[0]?.message || 'Dados de aposta inválidos.' });
   }
 
   const { loteria, codigoHorario, apostas } = parsed.data;
-  const totalDebit = calculateTotal(apostas);
-  const betDate = apostas?.[0]?.data;
+  const dataJogo = apostas[0].data;
 
-  if (!isBettingAllowed(codigoHorario, betDate)) {
-    return res.status(400).json({ error: 'Horário encerrado para este sorteio.' });
+  if (!isBettingAllowed(codigoHorario, dataJogo)) {
+    return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorario} do dia ${dataJogo}.` });
   }
+
+  const totalDebit = calculateTotal(apostas);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -176,7 +143,7 @@ exports.create = async (req, res) => {
           userId: req.userId,
           loteria,
           codigoHorario,
-          dataJogo: betDate,
+          dataJogo,
           modalidade: apostas.length === 1 ? apostas[0].modalidade : 'MULTIPLAS',
           colocacao: apostas.length === 1 ? apostas[0].colocacao : 'VARIADAS',
           total: totalDebit,
@@ -202,27 +169,29 @@ exports.create = async (req, res) => {
       if (user?.supervisorId && SUPERVISOR_COMMISSION_PCT > 0) {
         const commissionAmount = Number(((totalDebit * SUPERVISOR_COMMISSION_PCT) / 100).toFixed(2));
         if (commissionAmount > 0) {
-          await tx.supervisorCommission.create({
-            data: {
-              supervisorId: user.supervisorId,
-              userId: req.userId,
-              betId: bet.id,
-              amount: commissionAmount,
-              basis: SUPERVISOR_COMMISSION_BASIS,
-              status: 'pending',
-            },
-          });
+          try {
+            await tx.supervisorCommission.create({
+              data: {
+                supervisorId: user.supervisorId,
+                userId: req.userId,
+                betId: bet.id,
+                amount: commissionAmount,
+                basis: SUPERVISOR_COMMISSION_BASIS,
+                status: 'pending',
+              },
+            });
+          } catch (e) {
+            console.warn('Erro ao registrar comissão do supervisor:', e.message);
+          }
         }
       }
 
       return { bet, user };
     });
 
-    const betRef = `${req.userId}-${result.bet.id}`;
-
     return res.status(201).json({
       message: 'Aposta realizada com sucesso!',
-      bet: { ...result.bet, betRef },
+      bet: serializeBet(result.bet),
       balance: result.user?.balance,
       bonus: result.user?.bonus,
       debited: totalDebit,

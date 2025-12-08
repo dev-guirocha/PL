@@ -3,6 +3,7 @@ import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSi
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
+import logo from '../assets/images/logo.png';
 
 const navLinks = [
   { label: 'Início', icon: <FaHome />, path: '/home' },
@@ -39,12 +40,23 @@ const UserLayout = ({ children }) => {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="fixed inset-x-0 top-0 z-40 bg-emerald-700 text-white shadow-lg">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold tracking-wide">Panda Loterias</span>
-            {user?.id ? <span className="rounded-full bg-emerald-800/60 px-3 py-1 text-xs font-semibold">ID: {user.id}</span> : null}
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+          <div className="flex flex-none items-center gap-3">
+            <img
+              src={logo}
+              alt="Logo"
+              className="h-12 w-auto object-contain"
+              style={{ transform: 'scale(2.5)', transformOrigin: 'left center' }}
+            />
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex flex-1 items-center justify-center">
+            {user?.id ? (
+              <span className="rounded-full bg-emerald-800/60 px-3 py-1 text-xs font-semibold">ID: {user.id}</span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-none items-center gap-3">
             <div className="flex items-center gap-2 rounded-full bg-emerald-800/60 px-3 py-1 text-sm font-semibold">
               <span>Saldo:</span>
               {loadingUser ? (

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { getDraft, updateDraft } from '../utils/receipt';
+import { formatDateBR } from '../utils/date';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
@@ -57,7 +58,7 @@ const LoteriasValorPage = () => {
 
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-800 text-sm flex flex-col gap-1">
           {draft?.jogo && <span className="font-semibold">Jogo: {draft.jogo}</span>}
-          {draft?.data && <span>Data: {draft.data}</span>}
+          {draft?.data && <span>Data: {formatDateBR(draft.data)}</span>}
           {draft?.modalidade && <span>Modalidade: {draft.modalidade}</span>}
           {draft?.colocacao && <span>Colocação: {draft.colocacao}</span>}
           <span>Palpites: {draft?.palpites?.length || 0}</span>

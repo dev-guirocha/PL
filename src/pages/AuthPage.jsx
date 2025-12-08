@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { useEffect } from 'react';
+import icon from '../assets/images/icon.png';
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -72,9 +73,12 @@ const AuthPage = () => {
     <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(34,197,94,0.12),transparent_25%),radial-gradient(circle_at_80%_0%,rgba(16,185,129,0.15),transparent_20%),linear-gradient(135deg,#f0fdf4,#ffffff_40%,#e8f9f0)] px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/90 p-7 shadow-2xl backdrop-blur">
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Panda Loterias</p>
-            <h2 className="text-2xl font-extrabold text-emerald-800">{isLogin ? 'Acessar Conta' : 'Criar Nova Conta'}</h2>
+          <div className="flex items-center gap-3">
+            <img src={icon} alt="Logo" className="h-10 w-10 rounded-xl shadow-md" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Panda Loterias</p>
+              <h2 className="text-2xl font-extrabold text-emerald-800">{isLogin ? 'Acessar Conta' : 'Criar Nova Conta'}</h2>
+            </div>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
             Seguro

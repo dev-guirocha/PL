@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { getDraft, updateDraft } from '../utils/receipt';
+import { formatDateBR } from '../utils/date';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 
@@ -175,7 +176,7 @@ const LoteriasPalpitesPage = () => {
         <div style={styles.title}>Palpites</div>
         {draft?.jogo && draft?.data && draft?.modalidade && (
           <div style={styles.subtitle}>
-            Jogo: {draft.jogo} • Data: {draft.data} • Modalidade: {draft.modalidade}
+            Jogo: {draft.jogo} • Data: {formatDateBR(draft.data)} • Modalidade: {draft.modalidade}
           </div>
         )}
         {draft?.colocacao && (

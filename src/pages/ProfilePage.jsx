@@ -114,28 +114,6 @@ const ProfilePage = () => {
     },
     infoLabel: { fontWeight: 'bold', color: '#374151' },
     infoValue: { color: '#111827' },
-    navbar: {
-      width: '100%',
-      maxWidth: '100%',
-      background: '#bbf7d0',
-      border: '1px solid #9ed8b6',
-      borderRadius: '12px',
-      padding: '10px 14px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
-      marginBottom: '16px',
-    },
-    backButton: {
-      background: '#166534',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '10px',
-      padding: '8px 12px',
-      cursor: 'pointer',
-      fontWeight: 'bold',
-    },
   };
 
   const logout = () => {
@@ -182,12 +160,6 @@ const ProfilePage = () => {
 
   return (
     <div style={styles.container}>
-      <div style={styles.navbar}>
-        <span style={{ fontWeight: 'bold', color: '#166534' }}>Panda Loterias</span>
-        <button style={styles.backButton} onClick={() => navigate('/home')}>
-          Voltar
-        </button>
-      </div>
       <div style={styles.card}>
         <h2 style={styles.title}>Perfil</h2>
 

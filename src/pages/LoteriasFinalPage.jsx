@@ -6,6 +6,7 @@ import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, appendToHistory } from '../utils/receipt';
 import { PAYOUTS } from '../constants/payouts';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR } from '../utils/date';
 
 const LoteriasFinalPage = () => {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ const LoteriasFinalPage = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState('');
+  const [betSaved, setBetSaved] = useState(false);
 
   useEffect(() => {
     setDraft(getDraft());
@@ -172,7 +174,7 @@ const LoteriasFinalPage = () => {
             <div key={idx} style={{ borderTop: '1px dashed #9ed8b6', paddingTop: '8px' }}>
               <div style={styles.totalRow}>
                 <span>{ap.jogo}</span>
-                <span>{ap.data}</span>
+                <span>{formatDateBR(ap.data)}</span>
               </div>
               {ap.modalidade && <span>Modalidade: {ap.modalidade}</span>}
               {ap.colocacao && <span>Prêmio: {ap.colocacao}</span>}
@@ -260,9 +262,11 @@ const LoteriasFinalPage = () => {
                 setMessage('');
                 clearDraft();
                 setTimeout(() => navigate('/home'), 800);
+                setBetSaved(true);
               } catch (err) {
                 const msg = err.response?.data?.error || 'Erro ao debitar.';
                 setMessage(msg);
+                setBetSaved(false);
               }
             }}
           >
@@ -271,8 +275,15 @@ const LoteriasFinalPage = () => {
         </div>
 
         <button
-          style={{ ...styles.actionBtn, ...styles.secondary, width: '100%' }}
-          onClick={() => window.print()}
+          style={{
+            ...styles.actionBtn,
+            ...styles.secondary,
+            width: '100%',
+            opacity: betSaved ? 1 : 0.5,
+            cursor: betSaved ? 'pointer' : 'not-allowed',
+          }}
+          onClick={() => betSaved && window.print()}
+          disabled={!betSaved}
         >
           Baixar PULE (PDF)
         </button>

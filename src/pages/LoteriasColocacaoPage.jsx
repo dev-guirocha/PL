@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import Spinner from '../components/Spinner';
 import { getDraft, updateDraft } from '../utils/receipt';
+import { formatDateBR } from '../utils/date';
 import { COLOCACOES } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
 
@@ -80,9 +81,9 @@ const LoteriasColocacaoPage = () => {
       <div style={styles.card}>
         <div style={styles.title}>Colocação</div>
         {draft?.jogo && draft?.data && draft?.modalidade && (
-          <div style={styles.subtitle}>
-            Jogo: {draft.jogo} • Data: {draft.data} • Modalidade: {draft.modalidade}
-          </div>
+        <div style={styles.subtitle}>
+          Jogo: {draft.jogo} • Data: {formatDateBR(draft.data)} • Modalidade: {draft.modalidade}
+        </div>
         )}
         <div style={styles.subtitle}>
           Escolha a colocação válida para Centena, Centena Inv, Unidade, Dezena, Grupo.

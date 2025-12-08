@@ -6,6 +6,7 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { MODALIDADES, CAN_CHOOSE_COLOCACAO, DIRECT_TO_PALPITES } from '../constants/games';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR } from '../utils/date';
 
 const LoteriasModalidadesPage = () => {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ const LoteriasModalidadesPage = () => {
         <div style={styles.title}>Modalidades</div>
         {draft?.jogo && draft?.data && (
           <div style={styles.subtitle}>
-            Jogo: {draft.jogo} • Data: {draft.data}
+            Jogo: {draft.jogo} • Data: {formatDateBR(draft.data)}
           </div>
         )}
         <div style={styles.subtitle}>Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).</div>

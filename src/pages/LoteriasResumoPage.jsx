@@ -5,6 +5,7 @@ import { FiTrash2 } from 'react-icons/fi';
 import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR } from '../utils/date';
 
 const LoteriasResumoPage = () => {
   const navigate = useNavigate();
@@ -240,7 +241,7 @@ const LoteriasResumoPage = () => {
               <div style={{ ...styles.totalRow, alignItems: 'center', gap: '8px' }}>
                 <span>{ap.jogo || 'Jogo'}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{ap.data || ''}</span>
+                  <span>{formatDateBR(ap.data) || ''}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveAposta(idx)}

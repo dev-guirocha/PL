@@ -4,6 +4,7 @@ import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR, formatDateTimeBR } from '../utils/date';
 
 const PulesPage = () => {
   const navigate = useNavigate();
@@ -38,28 +39,18 @@ const PulesPage = () => {
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
   const isInitialBetsLoading = loadingBets && bets.length === 0;
+  const deriveTotals = (ap) => {
+    const valorBase = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? 0) || 0;
+    const qtd = ap?.palpites?.length || 0;
+    const isCada = ap?.modoValor === 'cada';
+    const total = isCada ? valorBase * Math.max(qtd, 1) : valorBase;
+    const valorPorNumero = isCada ? valorBase : qtd ? valorBase / qtd : valorBase;
+    return { total, valorPorNumero };
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 px-4 py-6">
-      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 rounded-2xl bg-white/90 px-5 py-4 text-emerald-800 shadow-xl backdrop-blur sm:grid-cols-[1fr_auto_auto]">
-        <div className="text-xl font-extrabold">Pandas PULES</div>
-        <div className="flex items-center justify-center gap-2 text-sm font-bold">
-          {loadingUser ? (
-            <Spinner size={18} color="#166534" />
-          ) : (
-            <>
-              Saldo: {showBalance ? formatCurrency(balance ?? 0) : '••••'}
-              <button
-                type="button"
-                className="text-emerald-700 transition hover:text-emerald-900"
-                onClick={() => setShowBalance((prev) => !prev)}
-                aria-label="Alternar visibilidade do saldo"
-              >
-                {showBalance ? <FaEyeSlash /> : <FaEye />}
-              </button>
-            </>
-          )}
-        </div>
+      <div className="mx-auto flex max-w-5xl items-center justify-end">
         <button
           className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2 text-sm font-extrabold text-white shadow-lg transition hover:from-emerald-800 hover:to-emerald-700"
           onClick={() => navigate('/home')}
@@ -95,37 +86,44 @@ const PulesPage = () => {
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
               <span className="text-base">{pule.loteria || 'Loteria'}</span>
               <span className="text-xs text-gray-600">{pule.betRef || `${pule.userId || ''}-${pule.id}`}</span>
-              <span className="text-sm font-semibold">{new Date(pule.createdAt).toLocaleString('pt-BR')}</span>
+              <span className="text-sm font-semibold">{formatDateTimeBR(pule.createdAt)}</span>
             </div>
             {pule.codigoHorario && <span className="text-xs text-slate-500">Horário: {pule.codigoHorario}</span>}
             {(pule.apostas || []).map((ap, i) => (
               <div key={`${pule.id}-ap-${i}`} className="mt-2 border-t border-dashed border-emerald-100 pt-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">{ap.modalidade || ap.jogo || 'Aposta'}</span>
-                  <span className="text-xs text-slate-500">{ap.data || ''}</span>
+                {(() => {
+                  const { total: apTotal, valorPorNumero } = deriveTotals(ap);
+                  return (
+                    <>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{ap.modalidade || ap.jogo || 'Aposta'}</span>
+                <span className="text-xs text-slate-500">{formatDateBR(ap.data) || ''}</span>
+              </div>
+              {ap.colocacao && <span className="text-xs text-slate-500">Prêmio: {ap.colocacao}</span>}
+              <span className="text-xs text-slate-500">Qtd palpites: {ap.palpites?.length || 0}</span>
+              {ap.palpites?.length ? (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {ap.palpites.map((n, j) => (
+                    <span
+                      key={`${n}-${j}`}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
+                    >
+                      {n}
+                    </span>
+                  ))}
                 </div>
-                {ap.colocacao && <span className="text-xs text-slate-500">Prêmio: {ap.colocacao}</span>}
-                <span className="text-xs text-slate-500">Qtd palpites: {ap.palpites?.length || 0}</span>
-                {ap.palpites?.length ? (
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {ap.palpites.map((n, j) => (
-                      <span
-                        key={`${n}-${j}`}
-                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
-                      >
-                        {n}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-1 flex items-center justify-between font-semibold">
-                  <span>Valor por número:</span>
-                  <span>{formatCurrency(ap.valorPorNumero || ap.valorAposta)}</span>
-                </div>
-                <div className="flex items-center justify-between font-semibold">
-                  <span>Valor da aposta:</span>
-                  <span>{formatCurrency(ap.total)}</span>
-                </div>
+              ) : null}
+              <div className="mt-1 flex items-center justify-between font-semibold">
+                <span>Valor por número:</span>
+                <span>{formatCurrency(valorPorNumero)}</span>
+              </div>
+              <div className="flex items-center justify-between font-semibold">
+                <span>Valor da aposta:</span>
+                <span>{formatCurrency(apTotal)}</span>
+              </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
             <div className="flex items-center justify-between text-sm font-bold">
