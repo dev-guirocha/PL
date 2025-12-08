@@ -47,40 +47,8 @@ const LoteriasDatePage = () => {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      padding: '20px',
+      padding: '12px 20px 40px',
       gap: '16px',
-    },
-    navbar: {
-      width: '100%',
-      background: '#bbf7d0',
-      border: '1px solid #9ed8b6',
-      borderRadius: '12px',
-      padding: '12px 16px',
-      display: 'flex',
-      alignItems: 'center',
-      boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
-      gap: '10px',
-    },
-    brand: { fontWeight: 'bold', color: '#166534', flex: 1 },
-    saldo: {
-      fontWeight: 'bold',
-      color: '#166534',
-      textAlign: 'center',
-      flex: 1,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '8px',
-    },
-    backWrapper: { flex: 1, display: 'flex', justifyContent: 'flex-end' },
-    backButton: {
-      background: '#166534',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '10px',
-      padding: '8px 12px',
-      cursor: 'pointer',
-      fontWeight: 'bold',
     },
     card: {
       width: '100%',
@@ -125,25 +93,21 @@ const LoteriasDatePage = () => {
 
   return (
     <div style={styles.container}>
-      <div style={styles.navbar}>
-        <span style={styles.brand}>Panda Loterias</span>
-        <span style={styles.saldo}>
-          {loadingUser ? (
-            <Spinner size={18} />
-          ) : (
-            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
-          )}
-          {!loadingUser && (
-            <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
-              {showBalance ? <FaEyeSlash /> : <FaEye />}
-            </span>
-          )}
-        </span>
-        <div style={styles.backWrapper}>
-          <button style={styles.backButton} onClick={() => navigate('/loterias')}>
-            Voltar
-          </button>
-        </div>
+      <div style={{ alignSelf: 'flex-start' }}>
+        <button
+          style={{
+            background: '#166534',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+          onClick={() => navigate('/loterias')}
+        >
+          Voltar
+        </button>
       </div>
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}

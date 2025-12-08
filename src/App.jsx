@@ -29,20 +29,11 @@ import AdminResultsPage from './pages/admin/AdminResultsPage';
 import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import SupervisorDashboard from './pages/SupervisorDashboard';
+import UserLayout from './components/UserLayout';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
-};
-
-const getStoredUser = () => {
-  if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
 };
 
 const RequireAuth = ({ children }) => {
@@ -62,203 +53,95 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<AuthPage />} />
+
         <Route
-          path="/home"
           element={
             <RequireAuth>
-              <HomePage />
+              <UserLayout />
             </RequireAuth>
+          }
+        >
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
+          <Route path="/configuracoes" element={<SettingsPage />} />
+          <Route path="/loterias" element={<LoteriasPage />} />
+          <Route path="/loterias/:jogo" element={<LoteriasDatePage />} />
+          <Route path="/loterias/:jogo/modalidades" element={<LoteriasModalidadesPage />} />
+          <Route path="/loterias/:jogo/colocacao" element={<LoteriasColocacaoPage />} />
+          <Route path="/loterias/:jogo/palpites" element={<LoteriasPalpitesPage />} />
+          <Route path="/loterias/:jogo/valor" element={<LoteriasValorPage />} />
+          <Route path="/loterias/:jogo/resumo" element={<LoteriasResumoPage />} />
+          <Route path="/loterias-sorteios" element={<LoteriasSorteiosPage />} />
+          <Route path="/loterias-final" element={<LoteriasFinalPage />} />
+          <Route path="/pules" element={<PulesPage />} />
+          <Route path="/relatorios" element={<ReportsPage />} />
+          <Route path="/relatorios/consulta-saldo" element={<BalanceReportPage />} />
+          <Route path="/relatorios/cotacoes" element={<QuotesPage />} />
+          <Route path="/relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
+        </Route>
+
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminDashboard />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/perfil"
+          path="/admin/users"
           element={
-            <RequireAuth>
-              <ProfilePage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminUsersPage />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/configuracoes"
+          path="/admin/bets"
           element={
-            <RequireAuth>
-              <SettingsPage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminBetsPage />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/loterias"
+          path="/admin/supervisors"
           element={
-            <RequireAuth>
-              <LoteriasPage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminSupervisorsPage />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/loterias/:jogo"
+          path="/admin/results"
           element={
-            <RequireAuth>
-              <LoteriasDatePage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminResultsPage />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/loterias/:jogo/modalidades"
+          path="/admin/withdrawals"
           element={
-            <RequireAuth>
-              <LoteriasModalidadesPage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminWithdrawalsPage />
+            </RequireAdmin>
           }
         />
         <Route
-          path="/loterias/:jogo/colocacao"
+          path="/admin/coupons"
           element={
-            <RequireAuth>
-              <LoteriasColocacaoPage />
-            </RequireAuth>
+            <RequireAdmin>
+              <AdminCouponsPage />
+            </RequireAdmin>
           }
         />
-        <Route
-          path="/loterias/:jogo/palpites"
-          element={
-            <RequireAuth>
-              <LoteriasPalpitesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/loterias/:jogo/valor"
-          element={
-            <RequireAuth>
-              <LoteriasValorPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/loterias/:jogo/resumo"
-          element={
-            <RequireAuth>
-              <LoteriasResumoPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/loterias-sorteios"
-          element={
-            <RequireAuth>
-              <LoteriasSorteiosPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/loterias-final"
-          element={
-            <RequireAuth>
-              <LoteriasFinalPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-        path="/pules"
-        element={
-          <RequireAuth>
-            <PulesPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/relatorios"
-        element={
-          <RequireAuth>
-            <ReportsPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/relatorios/consulta-saldo"
-        element={
-          <RequireAuth>
-            <BalanceReportPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/relatorios/cotacoes"
-        element={
-          <RequireAuth>
-            <QuotesPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/relatorios/cotacoes/:slug"
-        element={
-          <RequireAuth>
-            <QuoteDetailPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/admin"
-        element={
-          <RequireAdmin>
-            <AdminDashboard />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <RequireAdmin>
-            <AdminUsersPage />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/bets"
-        element={
-          <RequireAdmin>
-            <AdminBetsPage />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/supervisors"
-        element={
-          <RequireAdmin>
-            <AdminSupervisorsPage />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/results"
-        element={
-          <RequireAdmin>
-            <AdminResultsPage />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/withdrawals"
-        element={
-          <RequireAdmin>
-            <AdminWithdrawalsPage />
-          </RequireAdmin>
-        }
-      />
-      <Route
-        path="/admin/coupons"
-        element={
-          <RequireAdmin>
-            <AdminCouponsPage />
-          </RequireAdmin>
-        }
-      />
-      <Route path="/supervisor" element={<SupervisorDashboard />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-    <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-  </AuthProvider>
+
+        <Route path="/supervisor" element={<SupervisorDashboard />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
+    </AuthProvider>
   );
 }
 

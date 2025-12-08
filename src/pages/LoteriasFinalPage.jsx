@@ -155,27 +155,10 @@ const LoteriasFinalPage = () => {
 
   return (
     <div style={styles.container}>
-      <div style={styles.navbar}>
-        <span style={styles.brand}>Panda Loterias</span>
-        <span style={styles.saldo}>
-          {loadingUser ? (
-            <Spinner size={18} />
-          ) : (
-            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'} • Bônus: ${
-              showBalance ? `R$ ${(bonus ?? 0).toFixed(2).replace('.', ',')}` : '••••'
-            }`
-          )}
-          {!loadingUser && (
-            <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
-              {showBalance ? <FaEyeSlash /> : <FaEye />}
-            </span>
-          )}
-        </span>
-        <div style={styles.backWrapper}>
-          <button style={styles.backButton} onClick={() => navigate('/loterias-sorteios')}>
-            Voltar
-          </button>
-        </div>
+      <div style={{ alignSelf: 'flex-start' }}>
+        <button style={styles.backButton} onClick={() => navigate('/loterias-sorteios')}>
+          Voltar
+        </button>
       </div>
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
@@ -253,11 +236,15 @@ const LoteriasFinalPage = () => {
                 return;
               }
               try {
-                const res = await api.post('/bets', {
-                  loteria: draft?.loteria,
-                  codigoHorario: draft?.codigoHorario,
-                  apostas: draft?.apostas || [],
-                });
+                const res = await api.post(
+                  '/api/bets',
+                  {
+                    loteria: draft?.loteria,
+                    codigoHorario: draft?.codigoHorario,
+                    apostas: draft?.apostas || [],
+                  },
+                  { baseURL: '' }, // força usar rota absoluta /api/bets
+                );
                 const debited = res.data?.debited ?? total;
                 const betId = res.data?.bet?.id;
                 updateBalances({ balance: res.data?.balance, bonus: res.data?.bonus });

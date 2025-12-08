@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import './PulesPage.css';
 import { useAuth } from '../context/AuthContext';
 
 const PulesPage = () => {
@@ -13,17 +12,18 @@ const PulesPage = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [error, setError] = useState('');
   const [loadingBets, setLoadingBets] = useState(true);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const take = 10;
 
-  const fetchBets = async (nextPage = 1, replace = false) => {
+  const fetchBets = async ({ replace = false } = {}) => {
     setLoadingBets(true);
     try {
-      const res = await api.get('/bets', { params: { page: nextPage, pageSize: 10 } });
+      const skip = replace ? 0 : bets.length;
+      const res = await api.get('/bets/my-bets', { params: { take, skip } });
       const newBets = res.data?.bets || [];
       setBets((prev) => (replace ? newBets : [...prev, ...newBets]));
-      setHasMore(Boolean(res.data?.hasMore));
-      setPage(nextPage);
+      const total = res.data?.total ?? 0;
+      setHasMore(skip + newBets.length < total);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao carregar pules.');
     } finally {
@@ -33,25 +33,25 @@ const PulesPage = () => {
 
   useEffect(() => {
     refreshUser();
-    fetchBets(1, true);
+    fetchBets({ replace: true });
   }, [refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
   const isInitialBetsLoading = loadingBets && bets.length === 0;
 
   return (
-    <div className="pules-page">
-      <div className="pules-hero">
-        <div className="pules-title">Pandas PULES</div>
-        <div className="pules-balance">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 px-4 py-6">
+      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 rounded-2xl bg-white/90 px-5 py-4 text-emerald-800 shadow-xl backdrop-blur sm:grid-cols-[1fr_auto_auto]">
+        <div className="text-xl font-extrabold">Pandas PULES</div>
+        <div className="flex items-center justify-center gap-2 text-sm font-bold">
           {loadingUser ? (
-            <Spinner size={18} />
+            <Spinner size={18} color="#166534" />
           ) : (
             <>
               Saldo: {showBalance ? formatCurrency(balance ?? 0) : '••••'}
               <button
                 type="button"
-                className="pules-eye"
+                className="text-emerald-700 transition hover:text-emerald-900"
                 onClick={() => setShowBalance((prev) => !prev)}
                 aria-label="Alternar visibilidade do saldo"
               >
@@ -60,73 +60,92 @@ const PulesPage = () => {
             </>
           )}
         </div>
-        <button className="pules-back" onClick={() => navigate('/home')}>
+        <button
+          className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2 text-sm font-extrabold text-white shadow-lg transition hover:from-emerald-800 hover:to-emerald-700"
+          onClick={() => navigate('/home')}
+        >
           Voltar
         </button>
       </div>
 
-      {(error || authError) && <div className="pules-error">{error || authError}</div>}
+      {(error || authError) && (
+        <div className="mx-auto mt-3 max-w-4xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow">
+          {error || authError}
+        </div>
+      )}
 
-      <div className="pules-list">
+      <div className="mx-auto mt-4 flex max-w-5xl flex-col gap-3">
         {isInitialBetsLoading && (
-          <div className="pules-loading">
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-slate-600 shadow">
             <Spinner size={32} />
           </div>
         )}
 
         {!isInitialBetsLoading && bets.length === 0 && (
-          <div className="pules-empty">Nenhuma PULE encontrada.</div>
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-slate-600 shadow">
+            Nenhuma PULE encontrada.
+          </div>
         )}
 
         {bets.map((pule) => (
-          <div key={pule.id} className="pules-card">
-            <div className="pules-card-header">
-              <span>{pule.loteria || 'Loteria'}</span>
+          <div
+            key={pule.id}
+            className="flex flex-col gap-2 rounded-2xl border border-emerald-50 bg-white px-4 py-4 text-emerald-800 shadow-lg"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
+              <span className="text-base">{pule.loteria || 'Loteria'}</span>
               <span className="text-xs text-gray-600">{pule.betRef || `${pule.userId || ''}-${pule.id}`}</span>
-              <span>{new Date(pule.createdAt).toLocaleString('pt-BR')}</span>
+              <span className="text-sm font-semibold">{new Date(pule.createdAt).toLocaleString('pt-BR')}</span>
             </div>
-            {pule.codigoHorario && <span className="pules-subtext">Horário: {pule.codigoHorario}</span>}
+            {pule.codigoHorario && <span className="text-xs text-slate-500">Horário: {pule.codigoHorario}</span>}
             {(pule.apostas || []).map((ap, i) => (
-              <div key={`${pule.id}-ap-${i}`} className="pules-aposta">
-                <div className="pules-aposta-header">
-                  <span>{ap.modalidade || ap.jogo || 'Aposta'}</span>
-                  <span className="pules-subtext">{ap.data || ''}</span>
+              <div key={`${pule.id}-ap-${i}`} className="mt-2 border-t border-dashed border-emerald-100 pt-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{ap.modalidade || ap.jogo || 'Aposta'}</span>
+                  <span className="text-xs text-slate-500">{ap.data || ''}</span>
                 </div>
-                {ap.colocacao && <span className="pules-subtext">Prêmio: {ap.colocacao}</span>}
-                <span className="pules-subtext">Qtd palpites: {ap.palpites?.length || 0}</span>
+                {ap.colocacao && <span className="text-xs text-slate-500">Prêmio: {ap.colocacao}</span>}
+                <span className="text-xs text-slate-500">Qtd palpites: {ap.palpites?.length || 0}</span>
                 {ap.palpites?.length ? (
-                  <div className="pules-chips">
+                  <div className="mt-1 flex flex-wrap gap-2">
                     {ap.palpites.map((n, j) => (
-                      <span key={`${n}-${j}`} className="pules-chip">
+                      <span
+                        key={`${n}-${j}`}
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
+                      >
                         {n}
                       </span>
                     ))}
                   </div>
                 ) : null}
-                <div className="pules-row">
+                <div className="mt-1 flex items-center justify-between font-semibold">
                   <span>Valor por número:</span>
                   <span>{formatCurrency(ap.valorPorNumero || ap.valorAposta)}</span>
                 </div>
-                <div className="pules-row">
+                <div className="flex items-center justify-between font-semibold">
                   <span>Valor da aposta:</span>
                   <span>{formatCurrency(ap.total)}</span>
                 </div>
               </div>
             ))}
-            <div className="pules-total">
+            <div className="flex items-center justify-between text-sm font-bold">
               <span>Total:</span>
               <span>{formatCurrency(pule.total)}</span>
             </div>
           </div>
         ))}
 
-        {hasMore && (
-          <div className="pules-loadmore">
-            <button disabled={loadingBets} onClick={() => !loadingBets && fetchBets(page + 1, false)}>
+        {hasMore ? (
+          <div className="flex justify-center">
+            <button
+              disabled={loadingBets}
+              onClick={() => !loadingBets && fetchBets()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold text-emerald-800 shadow-md transition hover:-translate-y-0.5 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               {loadingBets ? <Spinner size={18} /> : 'Carregar mais'}
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

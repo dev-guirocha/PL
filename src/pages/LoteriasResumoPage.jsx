@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FiTrash2 } from 'react-icons/fi';
 import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +35,15 @@ const LoteriasResumoPage = () => {
     if (draft?.modoValor === 'cada') return valor;
     return qtd ? valor / qtd : valor;
   }, [draft]);
+
+  const handleRemoveAposta = (idx) => {
+    const current = getDraft();
+    const existing = current?.apostas || [];
+    const next = existing.filter((_, i) => i !== idx);
+    const updated = { ...current, apostas: next };
+    updateDraft(updated);
+    setDraft(updated);
+  };
 
   useEffect(() => {
     const d = getDraft();
@@ -203,25 +213,21 @@ const LoteriasResumoPage = () => {
 
   return (
     <div style={styles.container}>
-      <div style={styles.navbar}>
-        <span style={styles.brand}>Panda Loterias</span>
-        <span style={styles.saldo}>
-          {loadingUser ? (
-            <Spinner size={18} />
-          ) : (
-            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
-          )}
-          {!loadingUser && (
-            <span onClick={() => setShowBalance((prev) => !prev)} style={{ cursor: 'pointer' }}>
-              {showBalance ? <FaEyeSlash /> : <FaEye />}
-            </span>
-          )}
-        </span>
-        <div style={styles.backWrapper}>
-          <button style={styles.backButton} onClick={() => navigate(`/loterias/${jogo}/valor`)}>
-            Voltar
-          </button>
-        </div>
+      <div style={{ alignSelf: 'flex-start' }}>
+        <button
+          style={{
+            background: '#166534',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+          onClick={() => navigate(`/loterias/${jogo}/valor`)}
+        >
+          Voltar
+        </button>
       </div>
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
@@ -231,9 +237,28 @@ const LoteriasResumoPage = () => {
         <div style={styles.betList}>
           {(draft?.apostas || []).map((ap, idx) => (
             <div key={idx} style={styles.betCard}>
-              <div style={styles.totalRow}>
+              <div style={{ ...styles.totalRow, alignItems: 'center', gap: '8px' }}>
                 <span>{ap.jogo || 'Jogo'}</span>
-                <span>{ap.data || ''}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>{ap.data || ''}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAposta(idx)}
+                    style={{
+                      border: '1px solid #fecaca',
+                      background: '#fff',
+                      color: '#b91c1c',
+                      borderRadius: '8px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <FiTrash2 size={14} />
+                  </button>
+                </div>
               </div>
               {ap.modalidade && <span>Modalidade: {ap.modalidade}</span>}
               {ap.colocacao && <span>Colocação: {ap.colocacao}</span>}

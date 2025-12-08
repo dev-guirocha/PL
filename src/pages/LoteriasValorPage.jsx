@@ -41,28 +41,13 @@ const LoteriasValorPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 pb-20 font-sans">
-      <div className="w-full bg-emerald-100 border border-emerald-200 rounded-xl p-4 flex items-center shadow-sm gap-3 max-w-4xl">
-        <span className="font-bold text-emerald-800 flex-1">Panda Loterias</span>
-        <span className="font-bold text-emerald-800 flex-1 flex items-center justify-center gap-2">
-          {loadingUser ? (
-            <Spinner size={18} />
-          ) : (
-            `Saldo: ${showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}`
-          )}
-          {!loadingUser && (
-            <button type="button" onClick={() => setShowBalance((prev) => !prev)} className="text-emerald-800">
-              {showBalance ? <FaEyeSlash /> : <FaEye />}
-            </button>
-          )}
-        </span>
-        <div className="flex-1 flex justify-end">
-          <button
-            className="bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg shadow hover:bg-emerald-800 transition"
-            onClick={() => navigate(`/loterias/${jogo}/palpites`)}
-          >
-            Voltar
-          </button>
-        </div>
+      <div className="w-full max-w-4xl flex justify-start">
+        <button
+          className="bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg shadow hover:bg-emerald-800 transition"
+          onClick={() => navigate(`/loterias/${jogo}/palpites`)}
+        >
+          Voltar
+        </button>
       </div>
 
       {authError && <div className="text-red-600 mt-3">{authError}</div>}
