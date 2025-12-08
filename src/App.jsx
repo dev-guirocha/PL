@@ -28,6 +28,7 @@ import AdminSupervisorsPage from './pages/admin/AdminSupervisorsPage';
 import AdminResultsPage from './pages/admin/AdminResultsPage';
 import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+import SupervisorDashboard from './pages/SupervisorDashboard';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
@@ -253,6 +254,7 @@ function App() {
           </RequireAdmin>
         }
       />
+      <Route path="/supervisor" element={<SupervisorDashboard />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     <ToastContainer position="top-center" autoClose={3000} hideProgressBar />

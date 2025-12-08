@@ -94,6 +94,7 @@ model Result {
   codigoHorario String?
   dataJogo      String?
   numeros       String   // JSON com resultados
+  grupos        String?
   createdAt     DateTime @default(now())
   bets          Bet[]
 }

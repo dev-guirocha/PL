@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { PAYOUTS } = require('../constants/payouts');
 
 const prisma = new PrismaClient();
 
@@ -50,322 +51,178 @@ const normalizeMilhar = (val) => {
   return digits.slice(-4).padStart(4, '0');
 };
 
-const countCombos = (numStr) => {
-  const counts = numStr.split('').reduce((acc, d) => {
-    acc[d] = (acc[d] || 0) + 1;
-    return acc;
-  }, {});
-  const factorial = (n) => (n <= 1 ? 1 : n * factorial(n - 1));
-  const denom = Object.values(counts).reduce((acc, c) => acc * factorial(c), 1);
-  return factorial(numStr.length) / denom;
+const getSlice = (milhar, type) => {
+  const m = normalizeMilhar(milhar);
+  switch (type) {
+    case 'MILHAR':
+      return m;
+    case 'CENTENA':
+      return m.slice(-3);
+    case 'DEZENA':
+      return m.slice(-2);
+    case 'UNIDADE':
+      return m.slice(-1);
+    default:
+      return m;
+  }
 };
 
-const centenaFrom = (milhar, pos = 'right') => {
-  if (pos === 'left') return milhar.slice(0, 3);
-  if (pos === 'mid') return milhar.slice(1, 4);
-  return milhar.slice(-3);
+const getGrupo = (milhar) => {
+  const dezena = parseInt(normalizeMilhar(milhar).slice(-2), 10);
+  if (Number.isNaN(dezena)) return null;
+  if (dezena === 0) return 25;
+  return Math.ceil(dezena / 4);
 };
 
-const dezenaFrom = (milhar, pos = 'right') => {
-  if (pos === 'left') return milhar.slice(0, 2);
-  if (pos === 'mid') return milhar.slice(1, 3);
-  return milhar.slice(-2);
-};
+const parseColocacao = (colocacaoStr) => {
+  const c = (colocacaoStr || '').toUpperCase().trim();
 
-const unidadeFrom = (milhar) => milhar.slice(-1);
-
-const groupFromDezena = (dezStr) => {
-  const num = parseInt(dezStr, 10);
-  if (Number.isNaN(num)) return null;
-  const val = num === 0 ? 100 : num;
-  const group = Math.ceil(val / 4);
-  return Math.min(Math.max(group, 1), 25);
-};
-
-const parseRanges = (colocacao) => {
-  const txt = String(colocacao || '').toLowerCase().replace(/\s+/g, '');
-  if (txt.includes('1e1/5') || txt.includes('1e1-5') || txt.includes('1e1a5')) {
+  if (c.includes('1 E 1/5') || c.includes('1E1/5')) {
     return [
-      { positions: [1], divisor: 1, stakeFactor: 0.5 },
-      { positions: [1, 2, 3, 4, 5], divisor: 5, stakeFactor: 0.5 },
+      { indices: [0], divisor: 1, stakeFactor: 0.5 },
+      { indices: [0, 1, 2, 3, 4], divisor: 5, stakeFactor: 0.5 },
     ];
   }
 
-  const match = txt.match(/(\d+)\/(\d+)/);
-  if (match) {
-    const start = parseInt(match[1], 10);
-    const end = parseInt(match[2], 10);
-    if (start > 0 && end >= start) {
-      const positions = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-      return [{ positions, divisor: positions.length, stakeFactor: 1 }];
-    }
+  if (c.includes('1/5') || c.includes('1 AO 5') || c.includes('1A5') || c.includes('1 AO5')) {
+    return [{ indices: [0, 1, 2, 3, 4], divisor: 5, stakeFactor: 1 }];
   }
 
-  // Padrão cabeça
-  return [{ positions: [1], divisor: 1, stakeFactor: 1 }];
+  return [{ indices: [0], divisor: 1, stakeFactor: 1 }];
 };
 
 const settleBetsForResult = async (resultId) => {
   const result = await prisma.result.findUnique({ where: { id: resultId } });
-  if (!result) return;
+  if (!result) return { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
   let numeros = [];
+  let grupos = [];
   try {
     numeros = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros || '[]');
   } catch {
     numeros = [];
   }
-  const premios = numeros.map(normalizeMilhar); // array de 4 dígitos
-  const dezDireita = premios.map((p) => dezenaFrom(p, 'right'));
-  const dezEsq = premios.map((p) => dezenaFrom(p, 'left'));
-  const dezMeio = premios.map((p) => dezenaFrom(p, 'mid'));
-  const centDireita = premios.map((p) => centenaFrom(p, 'right'));
-  const centEsq = premios.map((p) => centenaFrom(p, 'left'));
-
-  const gruposDir = dezDireita.map(groupFromDezena);
-  const gruposEsq = dezEsq.map(groupFromDezena);
-  const gruposMeio = dezMeio.map(groupFromDezena);
+  try {
+    grupos = result.grupos ? (Array.isArray(result.grupos) ? result.grupos : JSON.parse(result.grupos || '[]')) : [];
+  } catch {
+    grupos = [];
+  }
+  const premios = numeros.map(normalizeMilhar); // posições 0..n, 0 = 1º prêmio
 
   const bets = await prisma.bet.findMany({
-    where: { resultId, status: 'open' },
-    select: { id: true, userId: true, palpites: true, modalidade: true, colocacao: true, total: true, createdAt: true },
+    where: {
+      status: 'open',
+      OR: [
+        { loteria: result.loteria, codigoHorario: result.codigoHorario },
+        { codigoHorario: result.codigoHorario },
+        { loteria: result.loteria },
+      ],
+    },
+    select: { id: true, userId: true, palpites: true, modalidade: true, colocacao: true, total: true, resultId: true, dataJogo: true },
   });
 
-  const calcStake = (ap) => {
-    const total = Number(ap.total || 0);
-    if (Number(ap.valorPorNumero) > 0) return Number(ap.valorPorNumero);
-    if (ap.modoValor === 'cada' && Number(ap.valorAposta) > 0) return Number(ap.valorAposta);
-    if (Number(ap.valorAposta) > 0) return Number(ap.valorAposta);
-    if (Array.isArray(ap.palpites) && ap.palpites.length > 0 && total > 0) {
-      return total / ap.palpites.length;
-    }
-    return total;
-  };
+  const summary = { totalBets: bets.length, processed: 0, wins: 0, errors: [], matchedBetIds: bets.map((b) => b.id) };
 
   for (const bet of bets) {
-    let apostas = [];
     try {
-      apostas = typeof bet.palpites === 'string' ? JSON.parse(bet.palpites) : bet.palpites || [];
-    } catch {
-      apostas = [];
-    }
+      let palpites = [];
+      try {
+        palpites = typeof bet.palpites === 'string' ? JSON.parse(bet.palpites) : bet.palpites || [];
+      } catch {
+        palpites = [];
+      }
 
-    let prize = 0;
+      if (!Array.isArray(palpites) && palpites.apostas) {
+        palpites = palpites.apostas;
+      }
 
-    const addPrize = (amount) => {
-      if (!amount || Number.isNaN(amount)) return;
-      prize += amount;
-    };
+      const modal = (bet.modalidade || '').toUpperCase().trim();
+      const payout = PAYOUTS[modal] || 0;
+      if (!payout) {
+        await prisma.bet.update({ where: { id: bet.id }, data: { status: 'lost', settledAt: new Date(), resultId } });
+        summary.processed += 1;
+        continue;
+      }
 
-    apostas.forEach((ap) => {
-      const modalidadeRaw = String(ap.modalidade || bet.modalidade || '').toUpperCase().trim();
-      const palps = Array.isArray(ap.palpites) ? ap.palpites : [];
-      const baseStake = calcStake(ap);
-      if (!baseStake || palps.length === 0) return;
+      const colocacoes = parseColocacao(bet.colocacao);
+      const unitStake =
+        bet.total && palpites.length
+          ? Number(bet.total) / palpites.length
+          : Number(bet.total || 0) / (palpites.length || 1);
+      let prize = 0;
 
-      // Definições de cercado / faixas
-      let ranges = parseRanges(ap.colocacao || bet.colocacao);
+      palpites.forEach((palpite) => {
+        const palpStr = String(palpite).trim();
+        const palNorm = normalizeMilhar(palpStr);
+        const palGrupo = getGrupo(palpStr);
 
-      // Helpers para conferência
-      const paySimple = (targetChecker, basePayout) => {
-        ranges.forEach(({ positions, divisor, stakeFactor }) => {
-          const stake = baseStake * (stakeFactor || 1);
-          positions.forEach((pos) => {
-            const idx = pos - 1;
-            if (premios[idx] && targetChecker(idx)) {
-              addPrize((stake * basePayout) / divisor);
+        colocacoes.forEach(({ indices, divisor, stakeFactor }) => {
+          indices.forEach((idx) => {
+            const sorteado = premios[idx];
+            if (!sorteado) return;
+            const sorteioGrupo = getGrupo(sorteado);
+
+            let isWin = false;
+
+            // Modalidade CENTENA: compara últimas 3 casas
+            if (modal.includes('CENTENA')) {
+              isWin = getSlice(sorteado, 'CENTENA') === getSlice(palNorm, 'CENTENA');
+            } else if (modal.includes('DEZENA')) {
+              isWin = getSlice(sorteado, 'DEZENA') === getSlice(palNorm, 'DEZENA');
+            } else if (modal.includes('UNIDADE')) {
+              isWin = getSlice(sorteado, 'UNIDADE') === getSlice(palNorm, 'UNIDADE');
+            } else if (modal.includes('MILHAR')) {
+              isWin = getSlice(sorteado, 'MILHAR') === getSlice(palNorm, 'MILHAR');
+            } else if (modal.includes('GRUPO') && palGrupo) {
+              isWin = sorteioGrupo === Number(palpite);
+            }
+
+            if (isWin) {
+              const stake = unitStake * (stakeFactor || 1);
+              prize += (stake * payout) / divisor;
             }
           });
         });
-      };
-
-      const payPermut = (getTarget, basePayout) => {
-        ranges.forEach(({ positions, divisor, stakeFactor }) => {
-          const stake = baseStake * (stakeFactor || 1);
-          palps.forEach((p) => {
-            const combos = countCombos(getTarget(String(p)));
-            const stakePerCombo = stake / combos;
-            positions.forEach((pos) => {
-              const idx = pos - 1;
-              if (!premios[idx]) return;
-              const sigPalp = getTarget(String(p)).split('').sort().join('');
-              const sigPrize = getTarget(premios[idx]).split('').sort().join('');
-              if (sigPalp === sigPrize) {
-                addPrize((stakePerCombo * basePayout) / divisor);
-              }
-            });
-          });
-        });
-      };
-
-      const modality = modalidadeRaw;
-
-      // Milhar / Centena / Dezena / Unidade / Grupo
-      if (modality === 'MILHAR') {
-        const base = 4000;
-        paySimple(
-          (idx) => palps.some((p) => normalizeMilhar(p) === premios[idx]),
-          base,
-        );
-      } else if (modality === 'MILHAR INV' || modality === 'MILHAR INVERTIDA') {
-        const base = 4000;
-        const target = (num) => normalizeMilhar(num);
-        payPermut(target, base);
-      } else if (['MILHAR E CT', 'MILHAR E CENTENA', 'MC'].includes(modality)) {
-        ranges.forEach(({ positions, divisor, stakeFactor }) => {
-          const stake = baseStake * (stakeFactor || 1);
-          palps.forEach((p) => {
-            const norm = normalizeMilhar(p);
-            positions.forEach((pos) => {
-              const idx = pos - 1;
-              if (!premios[idx]) return;
-              if (norm === premios[idx]) {
-                addPrize((stake * 4000) / divisor);
-              } else if (centenaFrom(norm) === centDireita[idx]) {
-                addPrize((stake * 600) / divisor);
-              }
-            });
-          });
-        });
-      } else if (modality === 'CENTENA') {
-        const base = 600;
-        paySimple(
-          (idx) => palps.some((p) => centenaFrom(normalizeMilhar(p)) === centDireita[idx]),
-          base,
-        );
-      } else if (modality.includes('CENTENA 3X')) {
-        const base = 600;
-        ranges = [{ positions: [1, 2, 3], divisor: 3, stakeFactor: 1 }];
-        paySimple(
-          (idx) => palps.some((p) => centenaFrom(normalizeMilhar(p)) === centDireita[idx]),
-          base,
-        );
-      } else if (modality === 'CENTENA INV' || modality === 'CENTENA INVERTIDA') {
-        const base = 600;
-        payPermut(
-          (num) => centenaFrom(normalizeMilhar(num)),
-          base,
-        );
-      } else if (modality === 'CENTENA ESQUERDA' || modality === 'CENTENA ESQ') {
-        const base = 600;
-        paySimple(
-          (idx) => palps.some((p) => centenaFrom(normalizeMilhar(p), 'left') === centEsq[idx]),
-          base,
-        );
-      } else if (modality === 'CENTENA INV ESQ' || modality === 'CENTENA INVERTIDA ESQ') {
-        const base = 600;
-        payPermut(
-          (num) => centenaFrom(normalizeMilhar(num), 'left'),
-          base,
-        );
-      } else if (modality === 'DEZENA') {
-        const base = 60;
-        paySimple(
-          (idx) => palps.some((p) => dezenaFrom(normalizeMilhar(p)) === dezDireita[idx]),
-          base,
-        );
-      } else if (modality === 'DEZENA ESQ' || modality === 'DEZENA ESQUERDA') {
-        const base = 60;
-        paySimple(
-          (idx) => palps.some((p) => dezenaFrom(normalizeMilhar(p), 'left') === dezEsq[idx]),
-          base,
-        );
-      } else if (modality === 'DEZENA MEIO') {
-        const base = 60;
-        paySimple(
-          (idx) => palps.some((p) => dezenaFrom(normalizeMilhar(p), 'mid') === dezMeio[idx]),
-          base,
-        );
-      } else if (modality === 'UNIDADE') {
-        const base = 4;
-        paySimple(
-          (idx) => palps.some((p) => unidadeFrom(normalizeMilhar(p)) === unidadeFrom(premios[idx])),
-          base,
-        );
-      } else if (modality.startsWith('GRUPO')) {
-        const base = 18;
-        const posType = modality.includes('ESQ') ? 'left' : modality.includes('MEIO') ? 'mid' : 'right';
-        const targetGrupos = posType === 'left' ? gruposEsq : posType === 'mid' ? gruposMeio : gruposDir;
-        paySimple(
-          (idx) => palps.some((p) => {
-            const grp = groupFromDezena(String(p).padStart(2, '0'));
-            return grp && grp === targetGrupos[idx];
-          }),
-          base,
-        );
-      } else if (modality.includes('DUQUE DE DEZ')) {
-        const base = 300;
-        const targetList = dezDireita.slice(0, 5);
-        const pal = palps.map((p) => String(p).padStart(2, '0')).slice(0, 2);
-        const ok = pal.length === 2 && pal.every((d) => targetList.includes(d));
-        if (ok) addPrize(baseStake * base);
-      } else if (modality.includes('TERNO DE DEZ')) {
-        const base = 3000;
-        const targetList = dezDireita.slice(0, 5);
-        const pal = palps.map((p) => String(p).padStart(2, '0')).slice(0, 3);
-        const ok = pal.length === 3 && pal.every((d) => targetList.includes(d));
-        if (ok) addPrize(baseStake * base);
-      } else if (modality.includes('DUQUE GP')) {
-        const base = 18.5;
-        const posType = modality.includes('ESQ') ? 'left' : modality.includes('MEIO') ? 'mid' : 'right';
-        const targetList = (posType === 'left' ? gruposEsq : posType === 'mid' ? gruposMeio : gruposDir).slice(0, 5);
-        const pal = palps.map((p) => parseInt(p, 10)).slice(0, 2);
-        const ok = pal.length === 2 && pal.every((g) => targetList.includes(g));
-        if (ok) addPrize(baseStake * base);
-      } else if (modality.includes('TERNO GP')) {
-        const base = 130;
-        const posType = modality.includes('ESQ') ? 'left' : modality.includes('MEIO') ? 'mid' : 'right';
-        const targetList = (posType === 'left' ? gruposEsq : posType === 'mid' ? gruposMeio : gruposDir).slice(0, 5);
-        const pal = palps.map((p) => parseInt(p, 10)).slice(0, 3);
-        const ok = pal.length === 3 && pal.every((g) => targetList.includes(g));
-        if (ok) addPrize(baseStake * base);
-      } else if (modality === 'PASSE VAI') {
-        const base = 80;
-        const pal = palps.map((p) => parseInt(p, 10));
-        if (pal.length >= 2) {
-          const a = pal[0];
-          const b = pal[1];
-          const headGrp = gruposDir[0];
-          const rest = gruposDir.slice(1, 5);
-          if (headGrp === a && rest.includes(b)) addPrize(baseStake * base);
-        }
-      } else if (modality === 'PASSE VAI VEM' || modality === 'PASSE VAI-VEM') {
-        const base = 40;
-        const pal = palps.map((p) => parseInt(p, 10));
-        if (pal.length >= 2) {
-          const a = pal[0];
-          const b = pal[1];
-          const headGrp = gruposDir[0];
-          const rest = gruposDir.slice(1, 5);
-          if ((headGrp === a && rest.includes(b)) || (headGrp === b && rest.includes(a))) {
-            addPrize(baseStake * base);
-          }
-        }
-      }
-    });
-
-    const status = prize > 0 ? 'won' : 'lost';
-    await prisma.$transaction(async (tx) => {
-      await tx.bet.update({
-        where: { id: bet.id },
-        data: { status, prize, settledAt: new Date() },
       });
-      if (prize > 0) {
-        await tx.user.update({
-          where: { id: bet.userId },
-          data: { balance: { increment: prize } },
-        });
-        await tx.transaction.create({
+
+      const status = prize > 0 ? 'won' : 'nao premiado';
+      await prisma.$transaction(async (tx) => {
+        await tx.bet.update({
+          where: { id: bet.id },
           data: {
-            userId: bet.userId,
-            type: 'prize',
-            amount: prize,
-            description: `Prêmio aposta ${bet.id}`,
+            status,
+            prize,
+            settledAt: new Date(),
+            resultId: resultId,
           },
         });
-      }
-    });
+
+        if (prize > 0) {
+          await tx.user.update({
+            where: { id: bet.userId },
+            data: { balance: { increment: prize } },
+          });
+
+          await tx.transaction.create({
+            data: {
+              userId: bet.userId,
+              type: 'prize',
+              amount: prize,
+              description: `Prêmio ${modal} - ${result.loteria || ''} (${bet.id})`,
+            },
+          });
+        }
+      });
+
+      summary.processed += 1;
+      if (prize > 0) summary.wins += 1;
+    } catch (err) {
+      console.error('Erro ao liquidar aposta', bet.id, err);
+      summary.errors.push({ betId: bet.id, message: err?.message || 'Erro desconhecido' });
+    }
   }
+
+  return summary;
 };
 
 exports.listBets = async (req, res) => {
@@ -445,20 +302,60 @@ exports.listUsers = async (req, res) => {
   }
 };
 
+exports.deleteUser = async (req, res) => {
+  const rawId = req.params.id || req.query.id;
+  const userId = parseInt(rawId, 10);
+
+  if (!userId || Number.isNaN(userId)) {
+    return res.status(400).json({ error: 'ID do usuário inválido.' });
+  }
+
+  try {
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    await prisma.$transaction([
+      prisma.supervisorCommission.deleteMany({ where: { userId } }),
+      prisma.withdrawalRequest.deleteMany({ where: { userId } }),
+      prisma.transaction.deleteMany({ where: { userId } }),
+      prisma.pixCharge.deleteMany({ where: { userId } }),
+      prisma.bet.deleteMany({ where: { userId } }),
+      prisma.user.delete({ where: { id: userId } }),
+    ]);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao apagar usuário', err);
+    return res.status(500).json({ error: 'Erro ao apagar usuário.' });
+  }
+};
+
 exports.createSupervisor = async (req, res) => {
   const { name, phone, code } = req.body || {};
-  if (!name || !code) {
-    return res.status(400).json({ error: 'Informe nome e código do supervisor.' });
+  if (!name) {
+    return res.status(400).json({ error: 'Informe o nome do supervisor.' });
   }
   try {
+    const base = code ? String(code).trim().toUpperCase() : '';
+    const namePart = String(name)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 6);
+    const suffix = Math.floor(100 + Math.random() * 900); // 3 dígitos
+    const sanitized = base.replace(/^99/, '') || namePart || 'SUP';
+    const finalCode = `99${sanitized}${suffix}`;
+
     const supervisor = await prisma.supervisor.create({
-      data: { name, phone: phone || null, code: String(code).trim().toUpperCase() },
+      data: { name, phone: phone || null, code: finalCode },
     });
     return res.status(201).json({ supervisor });
   } catch (err) {
     if (err.code === 'P2002') {
       return res.status(400).json({ error: 'Código de supervisor já existe.' });
     }
+    console.error('Erro ao criar supervisor', err);
     return res.status(500).json({ error: 'Erro ao criar supervisor.' });
   }
 };
@@ -486,18 +383,36 @@ exports.listSupervisors = async (req, res) => {
 };
 
 exports.createResult = async (req, res) => {
-  const { loteria, codigoHorario, dataJogo, numeros } = req.body || {};
+  const { loteria, codigoHorario, dataJogo, numeros, grupos } = req.body || {};
   if (!loteria || !numeros || !Array.isArray(numeros) || numeros.length === 0) {
     return res.status(400).json({ error: 'Informe loteria e lista de números/resultados.' });
   }
 
   try {
+    const numerosNorm = numeros.map((n) => normalizeMilhar(n));
+    let gruposFinal = [];
+    try {
+      gruposFinal = Array.isArray(grupos) ? grupos : JSON.parse(grupos || '[]');
+    } catch {
+      gruposFinal = [];
+    }
+    // Se grupos não vieram ou estão incompletos, calcula a partir da dezena.
+    if (!gruposFinal.length || gruposFinal.length < numerosNorm.length) {
+      gruposFinal = numerosNorm.map((n, idx) => {
+        const provided = gruposFinal[idx];
+        if (provided) return provided;
+        const g = getGrupo(n);
+        return g ? String(g).padStart(2, '0') : null;
+      });
+    }
+
     const created = await prisma.result.create({
       data: {
         loteria,
         codigoHorario: codigoHorario || null,
         dataJogo: dataJogo || null,
-        numeros: JSON.stringify(numeros),
+        numeros: JSON.stringify(numerosNorm),
+        grupos: gruposFinal.length ? JSON.stringify(gruposFinal) : null,
       },
     });
 
@@ -510,7 +425,6 @@ exports.createResult = async (req, res) => {
       data: { resultId: created.id },
     });
 
-    // Dispara a conferência em background para não bloquear a requisição admin
     setImmediate(() => {
       settleBetsForResult(created.id).catch((err) => {
         console.error(`Erro ao liquidar apostas para resultado ${created.id}`, err);
@@ -520,6 +434,22 @@ exports.createResult = async (req, res) => {
     return res.status(201).json({ result: created, settling: true });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao registrar resultado.' });
+  }
+};
+
+exports.settleResult = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
+  try {
+    const exists = await prisma.result.findUnique({ where: { id } });
+    if (!exists) return res.status(404).json({ error: 'Resultado não encontrado.' });
+
+    const summary = await settleBetsForResult(id);
+    return res.json({ message: 'Liquidação concluída.', summary });
+  } catch (err) {
+    console.error('Erro ao liquidar resultado', err);
+    return res.status(500).json({ error: 'Erro ao liquidar apostas para este resultado.' });
   }
 };
 
@@ -544,7 +474,14 @@ exports.listResults = async (req, res) => {
       ...r,
       numeros: (() => {
         try {
-          return JSON.parse(r.numeros);
+          return Array.isArray(r.numeros) ? r.numeros : JSON.parse(r.numeros || '[]');
+        } catch {
+          return [];
+        }
+      })(),
+      grupos: (() => {
+        try {
+          return Array.isArray(r.grupos) ? r.grupos : JSON.parse(r.grupos || '[]');
         } catch {
           return [];
         }
@@ -677,5 +614,28 @@ exports.deleteSupervisor = async (req, res) => {
     return res.json({ message: 'Supervisor excluído e usuários desvinculados.' });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao excluir supervisor.' });
+  }
+};
+
+exports.updateSupervisor = async (req, res) => {
+  const { id } = req.params;
+  const { name, phone } = req.body || {};
+  const supId = Number(id);
+  if (!supId || Number.isNaN(supId)) return res.status(400).json({ error: 'ID inválido.' });
+  if (!name) return res.status(400).json({ error: 'Nome é obrigatório.' });
+
+  try {
+    const supervisor = await prisma.supervisor.findUnique({ where: { id: supId } });
+    if (!supervisor) return res.status(404).json({ error: 'Supervisor não encontrado.' });
+
+    const updated = await prisma.supervisor.update({
+      where: { id: supId },
+      data: { name, phone: phone || null },
+    });
+
+    return res.json({ supervisor: updated });
+  } catch (err) {
+    console.error('Erro ao atualizar supervisor', err);
+    return res.status(500).json({ error: 'Erro ao atualizar supervisor.' });
   }
 };
