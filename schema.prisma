@@ -97,6 +97,19 @@ model Result {
   grupos        String?
   createdAt     DateTime @default(now())
   bets          Bet[]
+  pules         ResultPule[]
+}
+
+model ResultPule {
+  id            Int      @id @default(autoincrement())
+  result        Result?  @relation(fields: [resultId], references: [id])
+  resultId      Int?
+  loteria       String
+  codigoHorario String?
+  dataJogo      String?
+  numeros       String   // JSON
+  grupos        String?
+  createdAt     DateTime @default(now())
 }
 
 model WithdrawalRequest {

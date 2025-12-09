@@ -9,6 +9,33 @@ const parseIntParam = (value, fallback) => {
   return Math.floor(n);
 };
 
+const parseJsonArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const serializeResultPule = (pule) => {
+  const numeros = parseJsonArray(pule.numeros);
+  const grupos = parseJsonArray(pule.grupos);
+  return {
+    id: pule.id,
+    resultId: pule.resultId,
+    loteria: pule.loteria,
+    codigoHorario: pule.codigoHorario,
+    dataJogo: pule.dataJogo,
+    numeros,
+    grupos,
+    createdAt: pule.createdAt,
+    source: 'resultado',
+  };
+};
+
 exports.stats = async (req, res) => {
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -243,6 +270,7 @@ exports.listBets = async (req, res) => {
           loteria: true,
           codigoHorario: true,
           total: true,
+          status: true,
           createdAt: true,
           dataJogo: true,
           modalidade: true,
@@ -260,7 +288,13 @@ exports.listBets = async (req, res) => {
       } catch {
         apostas = [];
       }
-      return { ...bet, apostas, betRef: `${bet.userId}-${bet.id}` };
+      const statusAliases = {
+        perdeu: 'nao premiado',
+        lost: 'nao premiado',
+        'não premiado': 'nao premiado',
+      };
+      const normalizedStatus = statusAliases[String(bet.status || '').toLowerCase()] || bet.status;
+      return { ...bet, status: normalizedStatus, apostas, betRef: `${bet.userId}-${bet.id}` };
     });
 
     const hasMore = skip + bets.length < total;
@@ -453,11 +487,51 @@ exports.settleResult = async (req, res) => {
   }
 };
 
+exports.generateResultPule = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
+  try {
+    const result = await prisma.result.findUnique({ where: { id } });
+    if (!result) return res.status(404).json({ error: 'Resultado não encontrado.' });
+
+    const existing = await prisma.resultPule.findFirst({ where: { resultId: id } });
+    if (existing) {
+      return res.json({ pule: serializeResultPule(existing), alreadyExists: true });
+    }
+
+    const numeros = parseJsonArray(result.numeros);
+    const grupos = parseJsonArray(result.grupos);
+
+    const created = await prisma.resultPule.create({
+      data: {
+        resultId: result.id,
+        loteria: result.loteria,
+        codigoHorario: result.codigoHorario,
+        dataJogo: result.dataJogo,
+        numeros: JSON.stringify(numeros),
+        grupos: grupos.length ? JSON.stringify(grupos) : null,
+      },
+    });
+
+    return res.status(201).json({ pule: serializeResultPule(created) });
+  } catch (err) {
+    console.error('Erro ao gerar pule de resultado', err);
+    return res.status(500).json({ error: 'Erro ao gerar PULE.' });
+  }
+};
+
 exports.listResults = async (req, res) => {
   const page = parseIntParam(req.query.page, 1);
   const rawSize = parseIntParam(req.query.pageSize, 20);
   const pageSize = Math.min(rawSize, 50);
   const skip = (page - 1) * pageSize;
+  const filterDate = req.query.date ? String(req.query.date) : null;
+  const filterLottery = req.query.loteria ? String(req.query.loteria) : null;
+  const where = {
+    ...(filterLottery ? { loteria: filterLottery } : {}),
+    ...(filterDate ? { dataJogo: filterDate } : {}),
+  };
 
   try {
     const [items, total] = await prisma.$transaction([
@@ -465,9 +539,10 @@ exports.listResults = async (req, res) => {
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
+        where,
         include: { bets: { select: { id: true, userId: true, total: true } } },
       }),
-      prisma.result.count(),
+      prisma.result.count({ where }),
     ]);
 
     const formatted = items.map((r) => ({

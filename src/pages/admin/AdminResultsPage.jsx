@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FaPlus, FaSyncAlt } from 'react-icons/fa';
+import { FaPlus, FaReceipt, FaSyncAlt } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
@@ -50,18 +50,23 @@ const AdminResultsPage = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [settlingId, setSettlingId] = useState(null);
+  const [generatingId, setGeneratingId] = useState(null);
   const [success, setSuccess] = useState('');
   const milharRefs = useRef([]);
   const grupoRefs = useRef([]);
   const selectedLottery = LOTERIAS.find((l) => l.code === form.loteria);
   const horariosDisponiveis = selectedLottery?.horarios || [];
   const codigoPreview = form.loteria && form.horario ? `${form.loteria} ${form.horario}` : '';
+  const [filterDate, setFilterDate] = useState('');
+  const [filterLottery, setFilterLottery] = useState('');
 
-  const fetchResults = async () => {
+  const fetchResults = async ({ loteria = filterLottery, date = filterDate } = {}) => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/admin/results', { params: { page: 1, pageSize: 50 } });
+      const res = await api.get('/admin/results', {
+        params: { page: 1, pageSize: 50, loteria, date },
+      });
       setResults(res.data?.results || res.data || []);
     } catch (err) {
       setError('Erro ao carregar resultados.');
@@ -92,6 +97,24 @@ const AdminResultsPage = () => {
       setError(msg);
     } finally {
       setSettlingId(null);
+    }
+  };
+
+  const generatePule = async (id) => {
+    if (!id) return;
+    setGeneratingId(id);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.post(`/admin/results/${id}/pule`);
+      const already = res.data?.alreadyExists;
+      setSuccess(already ? 'PULE já existia para este resultado.' : 'PULE gerado com sucesso.');
+      fetchResults();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Erro ao gerar PULE.';
+      setError(msg);
+    } finally {
+      setGeneratingId(null);
     }
   };
 
@@ -187,6 +210,58 @@ const AdminResultsPage = () => {
           <p>{success}</p>
         </div>
       )}
+
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-sm font-bold text-emerald-700">Filtrar resultados</p>
+            <p className="text-xs text-slate-500">Escolha a data e a loteria para listar apenas os resultados daquele dia.</p>
+          </div>
+          <button
+            onClick={() => fetchResults({ loteria: filterLottery, date: filterDate })}
+            className="px-3 py-2 text-sm font-semibold rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition"
+            disabled={loading}
+          >
+            Buscar
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => {
+                const date = e.target.value;
+                setFilterDate(date);
+              }}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo de loteria</label>
+            <select
+              value={filterLottery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFilterLottery(val);
+                // Se já tem data selecionada, busca imediatamente ao escolher loteria
+                if (filterDate || val) {
+                  fetchResults({ loteria: val, date: filterDate });
+                }
+              }}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+            >
+              <option value="">Todas</option>
+              {LOTERIAS.map((lot) => (
+                <option key={lot.code} value={lot.code}>
+                  {lot.code}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center gap-2 mb-3 text-slate-800 font-semibold">
@@ -359,14 +434,25 @@ const AdminResultsPage = () => {
                     {groupsWithFallback.slice(0, 7).join(' • ') || '—'}
                   </AdminTableCell>
                   <AdminTableCell>
-                    <button
-                      type="button"
-                      onClick={() => settleResult(r.id || r._id)}
-                      disabled={settlingId === (r.id || r._id)}
-                      className="px-3 py-1 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-60"
-                    >
-                      {settlingId === (r.id || r._id) ? 'Liquidando...' : 'Liquidar'}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => settleResult(r.id || r._id)}
+                        disabled={settlingId === (r.id || r._id)}
+                        className="px-3 py-1 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-60"
+                      >
+                        {settlingId === (r.id || r._id) ? 'Liquidando...' : 'Liquidar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => generatePule(r.id || r._id)}
+                        disabled={generatingId === (r.id || r._id)}
+                        className="px-3 py-1 rounded-md border border-emerald-200 text-emerald-700 text-sm font-semibold hover:bg-emerald-50 transition disabled:opacity-60 flex items-center gap-2"
+                      >
+                        <FaReceipt />
+                        {generatingId === (r.id || r._id) ? 'Gerando...' : 'Gerar PULE'}
+                      </button>
+                    </div>
                   </AdminTableCell>
                 </AdminTableRow>
               );

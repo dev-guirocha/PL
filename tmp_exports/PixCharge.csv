@@ -1,0 +1,4 @@
+id,userId,amount,status,txid,locId,copyAndPaste,qrCodeImage,expiresAt,paidAt,credited,createdAt,updatedAt
+1,2,20.0,created,TX1765158511829260,,,,,,0,1765158511836,1765158511836
+2,2,20.0,created,TX1765158514293336,,,,,,0,1765158514294,1765158514294
+3,2,20.0,created,TX1765225281305241,,,,,,0,1765225281307,1765225281307

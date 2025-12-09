@@ -1,0 +1,4 @@
+id,name,phone,password,isAdmin,supervisorId,balance,bonus,cpf,birthDate,email,createdAt,pendingSupCode
+1,Teste,11999999999,$2b$10$hMTBHyvKW4rGxrV3XqwF.Oarwb1SCylpsf77oNcDbxIIAptBKOTS.,0,,0.0,0.0,,,,1765118774757,
+2,Guilherme,79998357214,$2b$10$JuvHa5.auOvlkQiFlzeVJeMV6/rwmKXChpqqGn5gg6w0f1R5GswoC,1,,30.0,0.0,04237375544,1996-05-23,guilherme.personal4@gmail.com,1765118932152,
+3,"teste 2",79998888888,$2b$10$VNdvK2hr2kM5arb1M.aeQu9bZnNrtIVw3NYCFVQ5l5lMEltuJJOQy,0,,0.0,0.0,,,,1765215845288,VALMOR

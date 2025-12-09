@@ -1,0 +1,7 @@
+id,userId,type,amount,description,createdAt
+1,2,debit,-10.0,"Débito de aposta",1765150042019
+2,2,debit,-2.0,"Débito de aposta",1765158434673
+3,2,bet,-1.0,"Aposta em RIO/FEDERAL",1765161079560
+4,2,bet,-5.0,"Aposta em RIO/FEDERAL",1765203060539
+5,2,bet,-1.0,"Aposta 5 - RIO/FEDERAL",1765230982771
+6,2,bet,-1.0,"Aposta 6 - RIO/FEDERAL",1765232534822

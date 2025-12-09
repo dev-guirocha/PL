@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 
 const reports = [
   { label: 'Consultar saldo', icon: <FaWallet />, description: 'Extrato e saldo atual da carteira.', route: '/relatorios/consulta-saldo' },
-  { label: 'Consultar Pule', icon: <FaClipboardCheck />, description: 'Busque e visualize pules emitidas.' },
+  { label: 'Consultar Pule', icon: <FaClipboardCheck />, description: 'PULEs geradas a partir de resultados.', route: '/relatorios/pules-resultado' },
   { label: 'Movimento loterias', icon: <FaChartBar />, description: 'Resumo das movimentações das loterias.' },
   { label: 'Cotações', icon: <FaFileAlt />, description: 'Confira cotações vigentes.', route: '/relatorios/cotacoes' },
   { label: 'Cotadas', icon: <FaListAlt />, description: 'Listagem de cotadas recentes.' },

@@ -50,7 +50,7 @@ const HomePage = () => {
   };
 
   const shortcutItems = [
-    { label: 'Resultados', icon: <FaChartBar />, action: () => {} },
+    { label: 'Resultados', icon: <FaChartBar />, action: () => navigate('/relatorios/pules-resultado') },
     { label: 'Relatórios', icon: <FaFileAlt />, action: () => navigate('/relatorios') },
     { label: 'Premiadas', icon: <FaTrophy />, action: () => {} },
     { label: 'Saldo', icon: <FaWallet />, action: () => navigate('/relatorios/consulta-saldo') },

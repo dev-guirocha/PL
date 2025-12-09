@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaSyncAlt } from 'react-icons/fa';
+import { FaArchive, FaFolderOpen, FaSyncAlt } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
@@ -69,13 +69,19 @@ const parseScheduledDate = (bet) => {
 
 const computeStatus = (bet) => {
   const raw = (bet.status || '').toLowerCase();
+  const aliases = {
+    perdeu: 'nao premiado',
+    lost: 'nao premiado',
+    'não premiado': 'nao premiado',
+  };
+  const normalized = aliases[raw] || raw;
   const finalStates = ['won', 'lost', 'paid', 'approved', 'rejected', 'settled', 'nao premiado'];
-  if (finalStates.includes(raw)) return raw;
+  if (finalStates.includes(normalized)) return normalized;
 
   const scheduled = parseScheduledDate(bet);
   if (scheduled && Date.now() > scheduled.getTime()) return 'pending';
 
-  return raw || 'open';
+  return normalized || 'open';
 };
 
 const extractNumbers = (bet) => {
@@ -95,6 +101,8 @@ const AdminBetsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalityFilter, setModalityFilter] = useState('ALL');
+  const [viewMode, setViewMode] = useState('active');
+  const [selectedFolder, setSelectedFolder] = useState('ALL');
 
   const fetchBets = async () => {
     setLoading(true);
@@ -134,7 +142,101 @@ const AdminBetsPage = () => {
     return bets.filter((bet) => matchesFilter(extractModalities(bet), modalityFilter));
   }, [bets, modalityFilter]);
 
-  const totalValue = filteredBets.reduce((acc, b) => acc + (Number(b.total) || Number(b.valor) || 0), 0);
+  const { activeBets, archivedBets } = useMemo(() => {
+    const active = [];
+    const archived = [];
+    filteredBets.forEach((bet) => {
+      const status = computeStatus(bet);
+      const extended = { ...bet, displayStatus: status };
+      if (status === 'nao premiado') {
+        archived.push(extended);
+      } else {
+        active.push(extended);
+      }
+    });
+    return { activeBets: active, archivedBets: archived };
+  }, [filteredBets]);
+
+  const archiveFolders = useMemo(() => {
+    const groups = {};
+    archivedBets.forEach((bet) => {
+      const code = extractCode(bet);
+      const key = code && code !== '—' ? code : 'SEM CÓDIGO';
+      if (!groups[key]) groups[key] = { code: key, count: 0, total: 0 };
+      groups[key].count += 1;
+      groups[key].total += Number(bet.total) || Number(bet.valor) || 0;
+    });
+    return Object.values(groups).sort((a, b) => a.code.localeCompare(b.code));
+  }, [archivedBets]);
+
+  useEffect(() => {
+    if (selectedFolder !== 'ALL' && !archiveFolders.some((f) => f.code === selectedFolder)) {
+      setSelectedFolder('ALL');
+    }
+  }, [archiveFolders, selectedFolder]);
+
+  const visibleArchivedBets = useMemo(() => {
+    if (selectedFolder === 'ALL') return archivedBets;
+    return archivedBets.filter((bet) => {
+      const code = extractCode(bet);
+      const key = code && code !== '—' ? code : 'SEM CÓDIGO';
+      return key === selectedFolder;
+    });
+  }, [archivedBets, selectedFolder]);
+
+  const visibleBets = viewMode === 'archive' ? visibleArchivedBets : activeBets;
+
+  const totalValue = visibleBets.reduce((acc, b) => acc + (Number(b.total) || Number(b.valor) || 0), 0);
+
+  const renderBetsTable = (items) => (
+    <AdminTable headers={['Ref', 'Modalidade', 'Código/Horário', 'Data da Aposta', 'Prêmio', 'Números', 'Valor', 'Data/Horário', 'Status']}>
+      {items.length === 0 ? (
+        <AdminTableRow>
+          <AdminTableCell className="text-center text-slate-500" colSpan={9}>
+            Nenhuma aposta encontrada.
+          </AdminTableCell>
+        </AdminTableRow>
+      ) : (
+        items.map((bet) => {
+          const betId = bet.betRef || `${bet.userId || bet.user?.id || ''}-${bet.id || bet._id || bet.betId || ''}`;
+          const modalities = extractModalities(bet);
+          const modality = modalities[0] || '—';
+          const code = extractCode(bet);
+          const value = bet.total || bet.valor || bet.amount;
+          const prize = extractPrize(bet);
+          const numeros = extractNumbers(bet);
+          const displayStatus = bet.displayStatus || computeStatus(bet);
+          const preview = numeros.slice(0, 6);
+          const extra = numeros.length - preview.length;
+          return (
+            <AdminTableRow key={betId}>
+              <AdminTableCell className="font-semibold text-slate-800">{betId}</AdminTableCell>
+              <AdminTableCell className="uppercase font-semibold">{modality}</AdminTableCell>
+              <AdminTableCell className="text-sm font-semibold text-slate-700">{code}</AdminTableCell>
+              <AdminTableCell>{bet.dataJogo || bet.data || '—'}</AdminTableCell>
+              <AdminTableCell className="text-sm font-semibold text-slate-700">{prize}</AdminTableCell>
+              <AdminTableCell>
+                <div className="flex flex-wrap gap-2">
+                  {preview.map((n, idx) => (
+                    <span key={`${betId}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                      {n}
+                    </span>
+                  ))}
+                  {extra > 0 && <span className="text-xs text-slate-500">+{extra}</span>}
+                  {preview.length === 0 && <span className="text-slate-500 text-xs">—</span>}
+                </div>
+              </AdminTableCell>
+              <AdminTableCell className="font-semibold text-emerald-700">{formatCurrency(value)}</AdminTableCell>
+              <AdminTableCell>{formatDateTime(bet.createdAt || bet.data)}</AdminTableCell>
+              <AdminTableCell>
+                <StatusBadge status={displayStatus} />
+              </AdminTableCell>
+            </AdminTableRow>
+          );
+        })
+      )}
+    </AdminTable>
+  );
 
   return (
     <AdminLayout
@@ -172,9 +274,37 @@ const AdminBetsPage = () => {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button
+          onClick={() => setViewMode('active')}
+          className={`px-3 py-1 rounded-full border text-sm font-semibold transition ${
+            viewMode === 'active'
+              ? 'bg-emerald-600 text-white border-emerald-600'
+              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+          }`}
+        >
+          Apostas ativas
+        </button>
+        <button
+          onClick={() => setViewMode('archive')}
+          className={`px-3 py-1 rounded-full border text-sm font-semibold transition flex items-center gap-2 ${
+            viewMode === 'archive'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+          }`}
+        >
+          <FaArchive /> Arquivadas (status Não premiada)
+        </button>
+        <span className="text-xs text-slate-500">Apostas com status &quot;Não premiada&quot; saem da lista ativa automaticamente.</span>
+      </div>
+
       <div className="mb-3 text-sm text-slate-600">
-        Total exibido: <span className="font-semibold text-emerald-700">{formatCurrency(totalValue)}</span> | Apostas:{' '}
-        <span className="font-semibold text-slate-800">{filteredBets.length}</span>
+        {viewMode === 'archive' ? 'Total arquivado exibido:' : 'Total exibido:'}{' '}
+        <span className="font-semibold text-emerald-700">{formatCurrency(totalValue)}</span> | Apostas:{' '}
+        <span className="font-semibold text-slate-800">{visibleBets.length}</span>
+        {viewMode === 'archive' && selectedFolder !== 'ALL' && (
+          <span className="text-slate-500 text-xs ml-2">Pasta: {selectedFolder}</span>
+        )}
       </div>
 
       {loading ? (
@@ -182,53 +312,62 @@ const AdminBetsPage = () => {
           <Spinner size={40} />
         </div>
       ) : (
-        <AdminTable headers={['Ref', 'Modalidade', 'Código/Horário', 'Data da Aposta', 'Prêmio', 'Números', 'Valor', 'Data/Horário', 'Status']}>
-          {filteredBets.length === 0 ? (
-            <AdminTableRow>
-              <AdminTableCell className="text-center text-slate-500" colSpan={9}>
-                Nenhuma aposta encontrada.
-              </AdminTableCell>
-            </AdminTableRow>
+        <>
+          {viewMode === 'archive' ? (
+            <div className="grid md:grid-cols-[260px_1fr] gap-4">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-3 h-fit">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
+                    <FaArchive />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">Pastas de arquivados</p>
+                    <p className="text-xs text-slate-500">Agrupados pelo código/horário da aposta.</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setSelectedFolder('ALL')}
+                    className={`w-full text-left px-3 py-2 rounded-lg border text-sm font-semibold transition ${
+                      selectedFolder === 'ALL'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-200'
+                    }`}
+                  >
+                    Todas as pastas ({archivedBets.length})
+                  </button>
+                  {archiveFolders.length === 0 ? (
+                    <p className="text-xs text-slate-500 px-1">Nenhuma aposta arquivada ainda.</p>
+                  ) : (
+                    archiveFolders.map((folder) => (
+                      <button
+                        key={folder.code}
+                        onClick={() => setSelectedFolder(folder.code)}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition ${
+                          selectedFolder === folder.code
+                            ? 'bg-emerald-50 border-emerald-200'
+                            : 'bg-white border-slate-200 hover:border-emerald-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FaFolderOpen className="text-emerald-600" />
+                            <span className="font-semibold text-slate-800">{folder.code}</span>
+                          </div>
+                          <span className="text-xs text-slate-500 font-semibold">{folder.count}</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Valor: {formatCurrency(folder.total)}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>{renderBetsTable(visibleArchivedBets)}</div>
+            </div>
           ) : (
-            filteredBets.map((bet) => {
-              const betId = bet.betRef || `${bet.userId || bet.user?.id || ''}-${bet.id || bet._id || bet.betId || ''}`;
-              const modalities = extractModalities(bet);
-              const modality = modalities[0] || '—';
-              const code = extractCode(bet);
-              const value = bet.total || bet.valor || bet.amount;
-              const prize = extractPrize(bet);
-              const numeros = extractNumbers(bet);
-              const displayStatus = computeStatus(bet);
-              const preview = numeros.slice(0, 6);
-              const extra = numeros.length - preview.length;
-              return (
-                <AdminTableRow key={betId}>
-                  <AdminTableCell className="font-semibold text-slate-800">{betId}</AdminTableCell>
-                  <AdminTableCell className="uppercase font-semibold">{modality}</AdminTableCell>
-                  <AdminTableCell className="text-sm font-semibold text-slate-700">{code}</AdminTableCell>
-                  <AdminTableCell>{bet.dataJogo || bet.data || '—'}</AdminTableCell>
-                  <AdminTableCell className="text-sm font-semibold text-slate-700">{prize}</AdminTableCell>
-                  <AdminTableCell>
-                    <div className="flex flex-wrap gap-2">
-                      {preview.map((n, idx) => (
-                        <span key={`${betId}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-                          {n}
-                        </span>
-                      ))}
-                      {extra > 0 && <span className="text-xs text-slate-500">+{extra}</span>}
-                      {preview.length === 0 && <span className="text-slate-500 text-xs">—</span>}
-                    </div>
-                  </AdminTableCell>
-                  <AdminTableCell className="font-semibold text-emerald-700">{formatCurrency(value)}</AdminTableCell>
-                  <AdminTableCell>{formatDateTime(bet.createdAt || bet.data)}</AdminTableCell>
-                  <AdminTableCell>
-                    <StatusBadge status={displayStatus} />
-                  </AdminTableCell>
-                </AdminTableRow>
-              );
-            })
+            renderBetsTable(activeBets)
           )}
-        </AdminTable>
+        </>
       )}
     </AdminLayout>
   );

@@ -19,6 +19,7 @@ import ReportsPage from './pages/ReportsPage';
 import BalanceReportPage from './pages/BalanceReportPage';
 import QuotesPage from './pages/QuotesPage';
 import QuoteDetailPage from './pages/QuoteDetailPage';
+import ResultPulesPage from './pages/ResultPulesPage';
 import { ToastContainer } from 'react-toastify';
 import AdminDashboard from './pages/AdminDashboard';
 import { AuthProvider } from './context/AuthContext';
@@ -78,6 +79,7 @@ function App() {
           <Route path="/relatorios/consulta-saldo" element={<BalanceReportPage />} />
           <Route path="/relatorios/cotacoes" element={<QuotesPage />} />
           <Route path="/relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
+          <Route path="/relatorios/pules-resultado" element={<ResultPulesPage />} />
         </Route>
 
         <Route

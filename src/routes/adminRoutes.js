@@ -24,6 +24,7 @@ router.post('/results', adminController.createResult);
 router.get('/results', adminController.listResults);
 router.post('/results/:id/settle', adminController.settleResult);
 router.get('/results/:id/settle', adminController.settleResult); // fallback para chamadas GET
+router.post('/results/:id/pule', adminController.generateResultPule);
 
 // Saques
 router.get('/withdrawals', adminController.listWithdrawals);
