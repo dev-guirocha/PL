@@ -24,13 +24,20 @@ const envOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || '
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+// Permite domínios *.vercel.app e o próprio domínio Railway
+const wildcardOrigins = [
+  /\.vercel\.app$/,
+  /\.up\.railway\.app$/,
+];
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Permite ferramentas sem origin (Postman, curl) e origens explicitamente permitidas
-      if (!origin || allowedOrigins.includes(origin)) {
+      const isListed = origin && allowedOrigins.includes(origin);
+      const matchesWildcard = origin && wildcardOrigins.some((re) => re.test(origin));
+      if (!origin || isListed || matchesWildcard) {
         return callback(null, true);
       }
       return callback(new Error('Origin not allowed by CORS'));
