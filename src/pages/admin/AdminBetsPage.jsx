@@ -37,7 +37,11 @@ const extractModalities = (bet) => {
     if (ap.modalidade || ap.jogo) mods.push(ap.modalidade || ap.jogo);
   });
   const unique = [...new Set(mods.filter(Boolean))];
-  return unique.length ? unique : ['—'];
+  if (!unique.length) return ['—'];
+  if (unique.length === 1) return unique;
+  // Se houver descrições específicas, remove o genérico "MULTIPLAS"/"MULTIPLA"
+  const filtered = unique.filter((m) => !/^MULTIPL/i.test((m || '').trim()));
+  return filtered.length ? filtered : unique;
 };
 
 const extractPrize = (bet) => {
@@ -94,6 +98,34 @@ const extractNumbers = (bet) => {
   } catch {
     return [];
   }
+};
+
+const extractPalpitesFromAposta = (ap) => {
+  if (Array.isArray(ap?.palpites)) return ap.palpites;
+  if (typeof ap?.palpites === 'string') {
+    try {
+      const parsed = JSON.parse(ap.palpites);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const formatModalitiesWithNumbers = (bet) => {
+  const parts = [];
+  (bet.apostas || []).forEach((ap) => {
+    const nome = ap.modalidade || ap.jogo || bet.modalidade || bet.modality || bet.type || '—';
+    const coloc = ap.colocacao ? ` - ${ap.colocacao}` : '';
+    const nums = extractPalpitesFromAposta(ap);
+    parts.push({ label: `${nome}${coloc}`.trim(), numeros: nums });
+  });
+  if (!parts.length) {
+    const fallback = bet.modalidade || bet.modality || bet.type;
+    return [{ label: fallback || '—', numeros: extractNumbers(bet) }];
+  }
+  return parts;
 };
 
 const AdminBetsPage = () => {
@@ -199,15 +231,13 @@ const AdminBetsPage = () => {
       ) : (
         items.map((bet) => {
           const betId = bet.betRef || `${bet.userId || bet.user?.id || ''}-${bet.id || bet._id || bet.betId || ''}`;
-          const modalities = extractModalities(bet);
-          const modality = modalities[0] || '—';
+          const modalityList = extractModalities(bet);
+          const modality = modalityList.length > 1 ? modalityList.join(', ') : modalityList[0] || '—';
           const code = extractCode(bet);
           const value = bet.total || bet.valor || bet.amount;
           const prize = extractPrize(bet);
-          const numeros = extractNumbers(bet);
           const displayStatus = bet.displayStatus || computeStatus(bet);
-          const preview = numeros.slice(0, 6);
-          const extra = numeros.length - preview.length;
+          const grouped = formatModalitiesWithNumbers(bet);
           return (
             <AdminTableRow key={betId}>
               <AdminTableCell className="font-semibold text-slate-800">{betId}</AdminTableCell>
@@ -216,15 +246,25 @@ const AdminBetsPage = () => {
               <AdminTableCell>{bet.dataJogo || bet.data || '—'}</AdminTableCell>
               <AdminTableCell className="text-sm font-semibold text-slate-700">{prize}</AdminTableCell>
               <AdminTableCell>
-                <div className="flex flex-wrap gap-2">
-                  {preview.map((n, idx) => (
-                    <span key={`${betId}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-                      {n}
-                    </span>
-                  ))}
-                  {extra > 0 && <span className="text-xs text-slate-500">+{extra}</span>}
-                  {preview.length === 0 && <span className="text-slate-500 text-xs">—</span>}
-                </div>
+                {grouped.length ? (
+                  <div className="flex flex-col gap-2">
+                    {grouped.map((g, gIdx) => (
+                      <div key={`${betId}-group-${gIdx}`}>
+                        <div className="text-[11px] font-semibold text-slate-600 uppercase mb-1">{g.label}</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(g.numeros || []).map((n, idx) => (
+                            <span key={`${betId}-g${gIdx}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                              {n}
+                            </span>
+                          ))}
+                          {(!g.numeros || g.numeros.length === 0) && <span className="text-slate-500 text-xs">—</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-500 text-xs">—</span>
+                )}
               </AdminTableCell>
               <AdminTableCell className="font-semibold text-emerald-700">{formatCurrency(value)}</AdminTableCell>
               <AdminTableCell>{formatDateTime(bet.createdAt || bet.data)}</AdminTableCell>

@@ -22,10 +22,26 @@ const LoteriasFinalPage = () => {
     refreshUser();
   }, [refreshUser]);
 
+  const selecoes = useMemo(() => {
+    if (Array.isArray(draft?.selecoes) && draft.selecoes.length) return draft.selecoes;
+    if (draft?.loteria && draft?.codigoHorario) {
+      return [
+        {
+          key: `${draft?.slug || draft?.loteria}-${draft?.codigoHorario}`,
+          slug: draft?.slug,
+          nome: draft?.loteria,
+          horario: draft?.codigoHorario,
+        },
+      ];
+    }
+    return [];
+  }, [draft]);
+
   const total = useMemo(() => {
     const apostas = draft?.apostas || [];
-    return apostas.reduce((sum, ap) => sum + (ap.total || 0), 0);
-  }, [draft]);
+    const unit = apostas.reduce((sum, ap) => sum + (ap.total || 0), 0);
+    return unit * Math.max(selecoes.length || 1, 1);
+  }, [draft, selecoes.length]);
 
   const valorPorNumero = useMemo(() => {
     const apostas = draft?.apostas || [];
@@ -168,8 +184,20 @@ const LoteriasFinalPage = () => {
       <div style={styles.card}>
         <div style={styles.title}>Conferência final</div>
         <div style={styles.summary}>
-          {draft?.loteria && <span>Loteria: {draft.loteria}</span>}
-          {draft?.codigoHorario && <span>Horário: {draft.codigoHorario}</span>}
+          {selecoes.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {selecoes.map((s) => (
+                <span key={s.key || `${s.slug}-${s.horario}`} style={styles.chip}>
+                  {s.nome || s.slug} • {s.horario}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <>
+              {draft?.loteria && <span>Loteria: {draft.loteria}</span>}
+              {draft?.codigoHorario && <span>Horário: {draft.codigoHorario}</span>}
+            </>
+          )}
           {draft?.apostas?.map((ap, idx) => (
             <div key={idx} style={{ borderTop: '1px dashed #9ed8b6', paddingTop: '8px' }}>
               <div style={styles.totalRow}>
@@ -237,26 +265,45 @@ const LoteriasFinalPage = () => {
                 setMessage('Faça login para finalizar.');
                 return;
               }
+              if (!selecoes.length) {
+                setMessage('Selecione ao menos uma loteria/horário.');
+                return;
+              }
               try {
-                const res = await api.post(
-                  '/api/bets',
-                  {
-                    loteria: draft?.loteria,
-                    codigoHorario: draft?.codigoHorario,
-                    apostas: draft?.apostas || [],
-                  },
-                  { baseURL: '' }, // força usar rota absoluta /api/bets
-                );
-                const debited = res.data?.debited ?? total;
-                const betId = res.data?.bet?.id;
-                updateBalances({ balance: res.data?.balance, bonus: res.data?.bonus });
+                let lastBalances = {};
+                let totalDebited = 0;
+                const betsCreated = [];
+                for (const sel of selecoes) {
+                  const res = await api.post(
+                    '/api/bets',
+                    {
+                      loteria: sel.nome || draft?.loteria,
+                      codigoHorario: sel.horario,
+                      apostas: draft?.apostas || [],
+                    },
+                    { baseURL: '' },
+                  );
+                  const debited = res.data?.debited ?? 0;
+                  totalDebited += debited;
+                  if (res.data?.bet?.id) {
+                    betsCreated.push({
+                      betId: res.data.bet.id,
+                      loteria: sel.nome || draft?.loteria,
+                      horario: sel.horario,
+                      total: debited,
+                    });
+                  }
+                  lastBalances = { balance: res.data?.balance, bonus: res.data?.bonus };
+                }
+                if (lastBalances.balance !== undefined) {
+                  updateBalances(lastBalances);
+                }
                 appendToHistory({
                   criadoEm: new Date().toISOString(),
-                  loteria: draft?.loteria,
-                  horario: draft?.codigoHorario,
+                  selecoes,
                   apostas: draft?.apostas || [],
-                  total: debited,
-                  betId,
+                  total: totalDebited || total,
+                  bets: betsCreated,
                 });
                 setSuccess('Aposta realizada com sucesso! PULE salvo no histórico.');
                 setMessage('');

@@ -26,6 +26,9 @@ const UserLayout = ({ children }) => {
   const [showBalance, setShowBalance] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const numericBalance = Number(balance ?? 0);
+  const numericBonus = Number(bonus ?? 0);
+
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
@@ -62,7 +65,7 @@ const UserLayout = ({ children }) => {
               {loadingUser ? (
                 <Spinner size={16} color="#fff" />
               ) : (
-                <span>{showBalance ? `R$ ${(balance ?? 0).toFixed(2).replace('.', ',')}` : '••••'}</span>
+                <span>{showBalance ? `R$ ${numericBalance.toFixed(2).replace('.', ',')}` : '••••'}</span>
               )}
               <button
                 type="button"
@@ -74,7 +77,7 @@ const UserLayout = ({ children }) => {
               </button>
             </div>
             <div className="hidden items-center rounded-full bg-emerald-800/60 px-3 py-1 text-xs font-semibold md:flex">
-              Bônus: {showBalance ? `R$ ${(bonus ?? 0).toFixed(2).replace('.', ',')}` : '••••'}
+              Bônus: {showBalance ? `R$ ${numericBonus.toFixed(2).replace('.', ',')}` : '••••'}
             </div>
             <button
               type="button"
@@ -90,7 +93,7 @@ const UserLayout = ({ children }) => {
 
       <main className="mx-auto min-h-screen max-w-6xl px-4 pb-24 pt-20">{content}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-100 bg-white/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
           {navLinks.map((link) => {
             const isActive = activePath === link.path || activePath.startsWith(`${link.path}/`);
@@ -144,7 +147,7 @@ const UserLayout = ({ children }) => {
                     <span className="text-sm font-semibold">{item.label}</span>
                     {item.path === '/relatorios/consulta-saldo' ? (
                       <span className="text-xs text-slate-500">
-                        Bônus: {showBalance ? `R$ ${(bonus ?? 0).toFixed(2).replace('.', ',')}` : '••••'}
+                        Bônus: {showBalance ? `R$ ${numericBonus.toFixed(2).replace('.', ',')}` : '••••'}
                       </span>
                     ) : null}
                   </div>

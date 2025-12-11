@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -18,8 +17,8 @@ model User {
   supervisor   Supervisor? @relation(fields: [supervisorId], references: [id])
   supervisorId Int?
   pendingSupCode String?
-  balance   Float    @default(0)
-  bonus     Float    @default(0)
+  balance   Decimal  @db.Decimal(18, 2) @default(0)
+  bonus     Decimal  @db.Decimal(18, 2) @default(0)
   cpf       String?  @unique
   birthDate String?
   email     String?
@@ -35,7 +34,7 @@ model PixCharge {
   id            Int       @id @default(autoincrement())
   user          User      @relation(fields: [userId], references: [id])
   userId        Int
-  amount        Float
+  amount        Decimal   @db.Decimal(18, 2)
   status        String    @default("created") // created, pending, paid, failed, expired
   txid          String    @unique
   locId         String?
@@ -53,7 +52,7 @@ model Transaction {
   user        User     @relation(fields: [userId], references: [id])
   userId      Int
   type        String   // deposit, debit, prize, adjustment
-  amount      Float    // valores positivos ou negativos
+  amount      Decimal  @db.Decimal(18, 2) // valores positivos ou negativos
   description String?
   createdAt   DateTime @default(now())
 }
@@ -64,18 +63,21 @@ model Bet {
   userId      Int
   loteria     String?
   codigoHorario String?
-  total       Float
+  total       Decimal  @db.Decimal(18, 2)
   dataJogo    String?
   modalidade  String?
   colocacao   String?
   palpites    String   // JSON string de palpites/apostas
   status      String   @default("open") // open, won, lost, settled
-  prize       Float    @default(0)
+  prize       Decimal  @db.Decimal(18, 2) @default(0)
   settledAt   DateTime?
   result      Result?  @relation(fields: [resultId], references: [id])
   resultId    Int?
   createdAt   DateTime @default(now())
   commissions SupervisorCommission[]
+
+  @@index([loteria, dataJogo, codigoHorario])
+  @@index([userId, createdAt])
 }
 
 model Supervisor {
@@ -116,7 +118,7 @@ model WithdrawalRequest {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  amount    Float
+  amount    Decimal  @db.Decimal(18, 2)
   status    String   @default("pending") // pending, approved, rejected, paid
   createdAt DateTime @default(now())
 }
@@ -125,7 +127,7 @@ model Coupon {
   id         Int      @id @default(autoincrement())
   code       String   @unique
   type       String   @default("bonus") // bonus ou saldo
-  amount     Float
+  amount     Decimal  @db.Decimal(18, 2)
   active     Boolean  @default(true)
   expiresAt  DateTime?
   createdAt  DateTime @default(now())
@@ -139,7 +141,7 @@ model SupervisorCommission {
   userId       Int
   bet          Bet?       @relation(fields: [betId], references: [id])
   betId        Int?
-  amount       Float
+  amount       Decimal    @db.Decimal(18, 2)
   basis        String?    // stake, loss etc.
   status       String     @default("pending") // pending, paid, canceled
   createdAt    DateTime   @default(now())

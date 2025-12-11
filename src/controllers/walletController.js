@@ -1,8 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
 const { z } = require('zod');
 const { recordTransaction } = require('../services/financeService');
-
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 
 const amountSchema = z.preprocess(
   (val) => Number(val),

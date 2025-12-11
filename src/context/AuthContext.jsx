@@ -23,9 +23,10 @@ export const AuthProvider = ({ children }) => {
     setLoadingUser(true);
     try {
       const res = await api.get('/wallet/me');
-      setUser(res.data || null);
-      setBalance(res.data?.balance || 0);
-      setBonus(res.data?.bonus || 0);
+      const payload = res.data || {};
+      setUser(payload || null);
+      setBalance(Number(payload.balance ?? 0));
+      setBonus(Number(payload.bonus ?? 0));
     } catch (err) {
       setAuthError(err.response?.data?.error || 'Erro ao buscar usuário.');
       setUser(null);
@@ -41,14 +42,14 @@ export const AuthProvider = ({ children }) => {
   }, [refreshUser]);
 
   const updateBalances = ({ balance: newBalance, bonus: newBonus }) => {
-    if (typeof newBalance === 'number') setBalance(newBalance);
-    if (typeof newBonus === 'number') setBonus(newBonus);
+    if (newBalance !== undefined) setBalance(Number(newBalance));
+    if (newBonus !== undefined) setBonus(Number(newBonus));
   };
 
   const setAuthUser = (data) => {
     setUser(data || null);
-    if (data?.balance !== undefined) setBalance(data.balance);
-    if (data?.bonus !== undefined) setBonus(data.bonus);
+    if (data?.balance !== undefined) setBalance(Number(data.balance));
+    if (data?.bonus !== undefined) setBonus(Number(data.bonus));
   };
 
   const logout = () => {

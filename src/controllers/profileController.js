@@ -1,5 +1,5 @@
-const { PrismaClient, Prisma } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { Prisma } = require('@prisma/client');
+const prisma = require('../prisma');
 
 exports.update = async (req, res) => {
   const { name, phone, cpf, birthDate, email } = req.body;

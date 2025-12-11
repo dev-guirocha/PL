@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaClock } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
@@ -11,12 +11,14 @@ const LoteriasSorteiosPage = () => {
   const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
   const [expanded, setExpanded] = useState(null);
-  const [selected, setSelected] = useState({ loteria: null, horario: null });
+  const [selected, setSelected] = useState([]);
   const [draft, setDraft] = useState({});
 
   useEffect(() => {
     refreshUser();
-    setDraft(getDraft());
+    const d = getDraft();
+    setDraft(d);
+    setSelected(d?.selecoes || []);
   }, [refreshUser]);
 
   const timeValue = (txt) => {
@@ -126,6 +128,16 @@ const LoteriasSorteiosPage = () => {
     return hour <= currentHour;
   };
 
+  const toggleSelection = (slug, nome, horario) => {
+    const key = `${slug}-${horario}`;
+    const exists = selected.find((s) => s.key === key);
+    if (exists) {
+      setSelected(selected.filter((s) => s.key !== key));
+    } else {
+      setSelected([...selected, { key, slug, nome, horario }]);
+    }
+  };
+
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -147,47 +159,116 @@ const LoteriasSorteiosPage = () => {
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
-      <div style={styles.list}>
-        {LOTERIAS_SORTEIOS.map((lot) => (
-          <div
-            key={lot.slug}
-            style={styles.item}
-            onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}
-          >
-            <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
-            {expanded === lot.slug && (
-              <div style={styles.horarios}>
-                {lot.horarios
-                  .slice()
-                  .sort((a, b) => timeValue(a) - timeValue(b))
-                  .map((h, idx) => (
-                    <span
-                      key={idx}
-                      style={
-                        isPastHorario(h)
-                          ? styles.tagDisabled
-                          : selected.horario === h && selected.loteria === lot.slug
-                            ? styles.tagSelected
-                            : styles.tag
-                      }
-                      onClick={() => {
-                        if (isPastHorario(h)) return;
-                        setSelected({ loteria: lot.slug, horario: h });
-                        updateDraft({ loteria: lot.nome, codigoHorario: h, horarioSelecionado: h });
-                        navigate('/loterias-final');
-                      }}
-                    >
-                      <span>{h}</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <FaClock style={{ opacity: 0.8 }} />
-                        <span>{formatTime(h)}</span>
-                      </span>
-                    </span>
-                  ))}
-             </div>
-           )}
-         </div>
-        ))}
+      <div style={{ width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {selected.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {selected.map((s) => (
+              <span
+                key={s.key}
+                style={{
+                  padding: '6px 10px',
+                  background: '#166534',
+                  color: '#fff',
+                  borderRadius: '999px',
+                  display: 'inline-flex',
+                  gap: '6px',
+                  alignItems: 'center',
+                }}
+              >
+                {s.nome} • {s.horario}
+                <button
+                  type="button"
+                  onClick={() => toggleSelection(s.slug, s.nome, s.horario)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                  }}
+                  aria-label="Remover seleção"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <div style={styles.list}>
+          {LOTERIAS_SORTEIOS.map((lot) => (
+            <div
+              key={lot.slug}
+              style={styles.item}
+              onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}
+            >
+              <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
+              {expanded === lot.slug && (
+                <div style={styles.horarios}>
+                  {lot.horarios
+                    .slice()
+                    .sort((a, b) => timeValue(a) - timeValue(b))
+                    .map((h, idx) => {
+                      const isSelected = selected.some((s) => s.slug === lot.slug && s.horario === h);
+                      return (
+                        <span
+                          key={idx}
+                          style={
+                            isPastHorario(h)
+                              ? styles.tagDisabled
+                              : isSelected
+                                ? styles.tagSelected
+                                : styles.tag
+                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (isPastHorario(h)) return;
+                            toggleSelection(lot.slug, lot.nome, h);
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {isSelected && <FaCheck />}
+                            <span>{h}</span>
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <FaClock style={{ opacity: 0.8 }} />
+                            <span>{formatTime(h)}</span>
+                          </span>
+                        </span>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button
+          style={{
+            padding: '12px',
+            background: '#166534',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '10px',
+            fontWeight: 'bold',
+            width: '100%',
+            cursor: selected.length ? 'pointer' : 'not-allowed',
+            opacity: selected.length ? 1 : 0.5,
+          }}
+          disabled={!selected.length}
+          onClick={() => {
+            if (!selected.length) return;
+            updateDraft({
+              selecoes: selected,
+              loteria: selected[0]?.nome || null,
+              codigoHorario: selected[0]?.horario || null,
+            });
+            navigate('/loterias-final');
+          }}
+        >
+          Confirmar horários selecionados
+        </button>
       </div>
     </div>
   );

@@ -1,7 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../prisma');
 const { PAYOUTS } = require('../constants/payouts');
-
-const prisma = new PrismaClient();
 
 const parseIntParam = (value, fallback) => {
   const n = Number(value);
@@ -57,14 +55,18 @@ exports.stats = async (req, res) => {
     const totalBalance = balanceAgg._sum.balance || 0;
     const totalBonus = balanceAgg._sum.bonus || 0;
     const activeUsers = activeUsersGroup.length;
-    const platformFunds = totalDeposits - totalWithdrawals; // dinheiro em custódia da plataforma
+    const platformFunds = totalBetsOut; // total apostado na plataforma
 
     return res.json({
       usersCount,
       activeUsersLast30d: activeUsers,
       betsCount,
-      wallets: { totalBalance, totalBonus },
-      platformFunds,
+      wallets: {
+        saldo: totalBalance,
+        bonus: totalBonus,
+        total: (totalBalance || 0) + (totalBonus || 0),
+      },
+      platformFunds, // total apostado
       moneyIn: { deposits: totalDeposits },
       moneyOut: { bets: totalBetsOut, withdrawals: totalWithdrawals },
     });

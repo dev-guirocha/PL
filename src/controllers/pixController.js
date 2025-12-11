@@ -1,168 +1,197 @@
 const axios = require('axios');
-const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+const { z } = require('zod');
+const prisma = require('../utils/prismaClient');
 
-const prisma = new PrismaClient();
+const amountSchema = z.preprocess(
+  (val) => Number(val),
+  z.number({ required_error: 'Valor inválido.' }).positive('O valor deve ser maior que zero.'),
+);
 
-const EFI_BASE_URL = process.env.EFI_BASE_URL || 'https://pix-h.efipay.com.br';
-const EFI_CLIENT_ID = process.env.EFI_CLIENT_ID || '';
-const EFI_CLIENT_SECRET = process.env.EFI_CLIENT_SECRET || '';
-const EFI_PIX_KEY = process.env.EFI_PIX_KEY || '';
-const SUITPAY_WEBHOOK_TOKEN = (process.env.SUITPAY_WEBHOOK_TOKEN || '').trim();
-const MIN_WEBHOOK_TOKEN_LENGTH = 32;
-
-// Gera txid simples para teste (troque por geração conforme regras do BACEN se necessário)
-function generateTxid() {
-  return `TX${Date.now()}${Math.floor(Math.random() * 1000)}`;
-}
-
-async function getEfiToken() {
-  // Esqueleto para obter token OAuth da Efí.
-  // TODO: Ajustar grant_type/client credentials conforme documentação oficial.
-  const basic = Buffer.from(`${EFI_CLIENT_ID}:${EFI_CLIENT_SECRET}`).toString('base64');
-  const res = await axios.post(
-    `${EFI_BASE_URL}/oauth/token`,
-    { grant_type: 'client_credentials' },
-    {
-      headers: {
-        Authorization: `Basic ${basic}`,
-        'Content-Type': 'application/json',
-      },
-    },
-  );
-  return res.data?.access_token;
-}
+const suitPayApi = axios.create({
+  baseURL: process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1',
+  headers: {
+    'Content-Type': 'application/json',
+    ci: process.env.SUITPAY_CLIENT_ID,
+    cs: process.env.SUITPAY_CLIENT_SECRET,
+  },
+});
 
 exports.createCharge = async (req, res) => {
-  const { amount } = req.body;
-  if (!amount || Number(amount) <= 0) {
-    return res.status(400).json({ error: 'Valor inválido.' });
-  }
+  const parsed = amountSchema.safeParse(req.body.amount);
+  if (!parsed.success) return res.status(400).json({ error: 'Valor inválido.' });
 
-  const value = Number(amount);
-  const txid = generateTxid();
+  const amount = parsed.data;
+  const userId = req.userId;
 
   try {
-    // Salva cobrança antes de chamar provedor (estado created)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, cpf: true },
+    });
+
+    if (!user || !user.cpf) {
+      return res.status(400).json({ error: 'CPF obrigatório para gerar PIX.' });
+    }
+
+    const tempId = `REQ-${Date.now()}`;
     const charge = await prisma.pixCharge.create({
       data: {
-        userId: req.userId,
-        amount: value,
-        status: 'created',
-        txid,
+        userId,
+        amount,
+        status: 'pending',
+        txid: tempId,
       },
     });
 
-    // Obtém token da Efí (sandbox/produção conforme BASE_URL)
-    const token = await getEfiToken();
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+    const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook`;
 
-    // Esqueleto da criação de cobrança imediata na Efí
-    // TODO: Ajustar payload conforme API Efí (campo calendario, valor.original, chave etc.)
     const payload = {
-      calendario: { expiracao: 3600 },
-      devedor: {},
-      valor: { original: value.toFixed(2) },
-      chave: EFI_PIX_KEY,
-      solicitacaoPagador: 'Recarga Pix',
+      requestNumber: String(charge.id),
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      amount,
+      shippingAmount: 0.0,
+      usernameCheckout: 'checkout',
+      callbackUrl,
+      client: {
+        name: user.name,
+        document: user.cpf.replace(/\D/g, ''),
+        email: user.email || 'cliente@plataforma.com',
+      },
     };
 
-    let efiResponse;
-    try {
-      efiResponse = await axios.put(`${EFI_BASE_URL}/v2/cob/${txid}`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (err) {
-      // Falhou no provedor; marca cobrança como failed
-      await prisma.pixCharge.update({
-        where: { id: charge.id },
-        data: { status: 'failed' },
-      });
-      return res.status(502).json({ error: 'Erro ao criar cobrança Pix (Efí).' });
+    const response = await suitPayApi.post('/gateway/request-qrcode', payload);
+
+    if (response.data.response !== 'OK') {
+      console.error('Erro SuitPay:', response.data);
+      await prisma.pixCharge.update({ where: { id: charge.id }, data: { status: 'failed' } });
+      throw new Error('Falha no gateway de pagamento.');
     }
 
-    const { loc, pixCopiaECola, qrCode } = efiResponse.data || {};
+    const { idTransaction, paymentCode, paymentCodeBase64 } = response.data;
 
     const updated = await prisma.pixCharge.update({
       where: { id: charge.id },
       data: {
-        status: 'pending',
-        locId: loc?.id ? String(loc.id) : null,
-        copyAndPaste: pixCopiaECola || null,
-        qrCodeImage: qrCode || null,
-        expiresAt: loc?.criacao ? new Date(Date.now() + 3600 * 1000) : null,
+        txid: String(idTransaction),
+        copyAndPaste: paymentCode,
+        qrCodeImage: paymentCodeBase64,
+        locId: String(idTransaction),
       },
     });
 
     return res.json({
-      id: updated.id,
-      txid: updated.txid,
-      status: updated.status,
       copyAndPaste: updated.copyAndPaste,
       qrCode: updated.qrCodeImage,
-      expiresAt: updated.expiresAt,
+      txid: updated.txid,
     });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao registrar cobrança.' });
+  } catch (error) {
+    console.error('Erro createCharge:', error.message);
+    return res.status(500).json({ error: 'Erro ao gerar PIX.' });
   }
 };
 
 exports.handleWebhook = async (req, res) => {
-  // Validação do webhook SuitPay via header de assinatura ou token de URL
-  if (!SUITPAY_WEBHOOK_TOKEN || SUITPAY_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
-    console.error('Webhook SuitPay não configurado com token forte. Defina um SUITPAY_WEBHOOK_TOKEN longo/aleatório no .env.');
-    return res.status(500).json({ error: 'Webhook indisponível por configuração insegura.' });
-  }
-
-  const signatureHeader = req.get('x-suitpay-signature');
-  const tokenFromHeader = req.get('x-webhook-token');
-  const tokenFromQuery = req.query?.token;
-  const providedSecret = signatureHeader || tokenFromHeader || tokenFromQuery;
-
-  if (!providedSecret || providedSecret !== SUITPAY_WEBHOOK_TOKEN) {
-    return res.status(401).json({ error: 'Assinatura do webhook inválida.' });
-  }
-
-  // Esqueleto de webhook: espera receber txid e status pago
-  // Ajuste conforme payload real da Efí (provavelmente em req.body.pix[0].txid)
-  const { txid, status } = req.body || {};
-
-  if (!txid) {
-    return res.status(400).json({ error: 'txid ausente.' });
-  }
-
   try {
-    const charge = await prisma.pixCharge.findUnique({ where: { txid } });
-    if (!charge) {
-      return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    const secret = process.env.SUITPAY_WEBHOOK_SECRET || process.env.SUITPAY_CLIENT_SECRET;
+    const { token } = req.query;
+    const { idTransaction, typeTransaction, statusTransaction, value, payerName, payerTaxId, paymentDate, paymentCode, requestNumber, hash } = req.body || {};
+
+    if (!idTransaction) return res.status(400).json({ error: 'Dados inválidos.' });
+
+    // Validação de integridade conforme SuitPay (concatenação + SHA-256)
+    if (hash && secret) {
+      const parts = [
+        idTransaction,
+        typeTransaction,
+        statusTransaction,
+        value,
+        payerName,
+        payerTaxId,
+        paymentDate,
+        paymentCode,
+        requestNumber,
+      ].map((p) => (p === undefined || p === null ? '' : String(p)));
+      const concatenated = parts.join('') + secret;
+      const computed = crypto.createHash('sha256').update(concatenated).digest('hex');
+      if (computed !== hash) {
+        return res.status(403).json({ error: 'Hash inválido.' });
+      }
+    } else if (process.env.SUITPAY_WEBHOOK_TOKEN) {
+      if (token !== process.env.SUITPAY_WEBHOOK_TOKEN) {
+        return res.status(403).json({ error: 'Token inválido.' });
+      }
     }
 
-    // Só credita uma vez
-    if (status === 'CONCLUIDA' || status === 'paid') {
-      await prisma.$transaction([
-        prisma.pixCharge.update({
+    const charge = await prisma.pixCharge.findFirst({
+      where: { txid: String(idTransaction) },
+    });
+
+    if (!charge) return res.status(200).json({ message: 'Cobrança não encontrada (ignorado).' });
+
+    const paidStatuses = ['PAID_OUT', 'PAYMENT_CONFIRMED', 'COMPLETED', 'PAID', 'RECEIVABLE'];
+    const isPaid = paidStatuses.includes((statusTransaction || '').toUpperCase());
+    const isChargeback = (statusTransaction || '').toUpperCase() === 'CHARGEBACK';
+
+    if (isPaid && !charge.credited) {
+      await prisma.$transaction(async (tx) => {
+        await tx.pixCharge.update({
           where: { id: charge.id },
           data: {
             status: 'paid',
             paidAt: new Date(),
             credited: true,
           },
-        }),
-        prisma.user.update({
+        });
+
+        await tx.user.update({
           where: { id: charge.userId },
           data: { balance: { increment: charge.amount } },
-        }),
-      ]);
-    } else {
-      await prisma.pixCharge.update({
-        where: { id: charge.id },
-        data: { status: status?.toLowerCase?.() || 'unknown' },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId: charge.userId,
+            type: 'deposit',
+            amount: charge.amount,
+            description: `Depósito PIX (SuitPay #${idTransaction})`,
+          },
+        });
       });
+      console.log(`[Webhook] Pix ${idTransaction} processado com sucesso.`);
     }
 
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ error: 'Erro ao processar webhook.' });
+    if (isChargeback && charge.credited) {
+      await prisma.$transaction(async (tx) => {
+        await tx.pixCharge.update({
+          where: { id: charge.id },
+          data: {
+            status: 'chargeback',
+            credited: false,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: charge.userId },
+          data: { balance: { decrement: charge.amount } },
+        });
+
+        await tx.transaction.create({
+          data: {
+            userId: charge.userId,
+            type: 'debit',
+            amount: -charge.amount,
+            description: `Chargeback PIX (SuitPay #${idTransaction})`,
+          },
+        });
+      });
+      console.log(`[Webhook] Pix ${idTransaction} marcado como chargeback.`);
+    }
+
+    return res.status(200).json({ message: 'Recebido.' });
+  } catch (error) {
+    console.error('Erro Webhook:', error);
+    return res.status(500).json({ error: 'Erro interno.' });
   }
 };

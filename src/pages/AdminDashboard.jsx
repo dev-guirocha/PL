@@ -79,7 +79,7 @@ const AdminDashboard = () => {
             <StatCard
               title="Saldo Plataforma"
               value={formatCurrency(stats?.platformFunds)}
-              subtext={`Carteiras: ${formatCurrency(stats?.wallets?.totalBalance)}`}
+              subtext={`Total apostado na plataforma`}
               icon={<FaWallet />}
               color="emerald"
             />
@@ -93,7 +93,7 @@ const AdminDashboard = () => {
             <StatCard
               title="Saques Pendentes"
               value={formatCurrency(stats?.moneyOut?.withdrawals)}
-              subtext={`Entradas: ${formatCurrency(stats?.moneyIn?.deposits)}`}
+              subtext={`Carteiras (saldo+bonus): ${formatCurrency(stats?.wallets?.total || 0)}`}
               icon={<FaExchangeAlt />}
               color="amber"
             />

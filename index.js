@@ -14,7 +14,12 @@ const createCsrfProtection = require('./src/middleware/csrf');
 const app = express();
 
 // Configura CORS permitindo apenas domínios autorizados
-const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+];
 const envOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
@@ -58,6 +63,11 @@ app.use('/api/pix', pixRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/bets', betRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Healthcheck simples para validar deploy/back-end
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

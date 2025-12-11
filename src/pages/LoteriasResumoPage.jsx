@@ -302,7 +302,18 @@ const LoteriasResumoPage = () => {
             </button>
             <button
               style={{ ...styles.actionBtn, ...styles.secondary }}
-              onClick={() => navigate(`/loterias/${jogo}/modalidades`)}
+              onClick={() => {
+                // Reseta apenas o rascunho atual para começar uma nova aposta sem reutilizar palpites já digitados.
+                updateDraft({
+                  modalidade: null,
+                  colocacao: null,
+                  palpites: [],
+                  valorAposta: null,
+                  modoValor: null,
+                  currentSaved: false,
+                });
+                navigate(`/loterias/${jogo}/modalidades`);
+              }}
             >
               Fazer mais apostas
             </button>

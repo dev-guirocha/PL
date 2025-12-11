@@ -1,8 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
 const { z } = require('zod');
 const { recordTransaction } = require('../services/financeService');
-
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 const TIMEZONE = 'America/Sao_Paulo';
@@ -121,22 +119,37 @@ exports.create = async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.updateMany({
-        where: { id: req.userId, balance: { gte: totalDebit } },
-        data: { balance: { decrement: totalDebit } },
+      const userWallet = await tx.user.findUnique({
+        where: { id: req.userId },
+        select: { balance: true, bonus: true, supervisorId: true },
       });
 
-      if (updated.count === 0) {
-        const userExists = await tx.user.findUnique({ where: { id: req.userId }, select: { id: true } });
-        if (!userExists) {
-          const err = new Error('Usuário não encontrado.');
-          err.code = 'ERR_NO_USER';
-          throw err;
-        }
+      if (!userWallet) {
+        const err = new Error('Usuário não encontrado.');
+        err.code = 'ERR_NO_USER';
+        throw err;
+      }
+
+      const availableBalance = Number(userWallet.balance || 0);
+      const availableBonus = Number(userWallet.bonus || 0);
+      const totalAvailable = availableBalance + availableBonus;
+
+      if (totalAvailable < totalDebit) {
         const err = new Error('Saldo insuficiente.');
         err.code = 'ERR_NO_BALANCE';
         throw err;
       }
+
+      const debitFromBalance = Math.min(availableBalance, totalDebit);
+      const debitFromBonus = Number((totalDebit - debitFromBalance).toFixed(2));
+
+      await tx.user.update({
+        where: { id: req.userId },
+        data: {
+          balance: debitFromBalance > 0 ? { decrement: debitFromBalance } : undefined,
+          bonus: debitFromBonus > 0 ? { decrement: debitFromBonus } : undefined,
+        },
+      });
 
       const bet = await tx.bet.create({
         data: {
