@@ -311,7 +311,11 @@ const LoteriasFinalPage = () => {
                 setTimeout(() => navigate('/home'), 800);
                 setBetSaved(true);
               } catch (err) {
-                const msg = err.response?.data?.error || 'Erro ao debitar.';
+                const msg =
+                  err.response?.data?.error ||
+                  err.response?.data?.message ||
+                  err.message ||
+                  'Erro ao debitar.';
                 setMessage(msg);
                 setBetSaved(false);
               }
