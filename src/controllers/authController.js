@@ -90,8 +90,8 @@ exports.register = async (req, res) => {
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
+      secure: true,
       maxAge: COOKIE_MAX_AGE,
     });
 
@@ -124,8 +124,8 @@ exports.login = async (req, res) => {
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
+      secure: true,
       maxAge: COOKIE_MAX_AGE,
     });
 
