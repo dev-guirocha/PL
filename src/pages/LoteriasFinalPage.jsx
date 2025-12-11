@@ -275,13 +275,12 @@ const LoteriasFinalPage = () => {
                 const betsCreated = [];
                 for (const sel of selecoes) {
                   const res = await api.post(
-                    '/api/bets',
+                    '/bets',
                     {
                       loteria: sel.nome || draft?.loteria,
                       codigoHorario: sel.horario,
                       apostas: draft?.apostas || [],
                     },
-                    { baseURL: '' },
                   );
                   const debited = res.data?.debited ?? 0;
                   totalDebited += debited;
