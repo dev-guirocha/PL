@@ -46,7 +46,7 @@ app.use(
   }),
 ); // Deixa o Front-end falar com o Back-end
 app.use(express.json()); // Permite ler JSON no corpo da requisição
-app.use(createCsrfProtection(allowedOrigins));
+app.use(createCsrfProtection(allowedOrigins, wildcardOrigins));
 
 // Limitadores de requisição para mitigar brute force e spam
 const authLimiter = rateLimit({
