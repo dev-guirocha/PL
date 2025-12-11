@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // Garante que o baseURL sempre aponte para o backend + /api
-const envBase = import.meta?.env?.VITE_API_BASE_URL || '/api';
+const fallbackProd = 'https://pl-production.up.railway.app/api'; // fallback para produção caso a env não esteja setada
+const envBase = import.meta?.env?.VITE_API_BASE_URL || fallbackProd || '/api';
 const baseURL = envBase.endsWith('/api') ? envBase : `${envBase.replace(/\/$/, '')}/api`;
 
 // Axios pré-configurado para enviar cookies HttpOnly (auth) automaticamente
@@ -9,6 +10,11 @@ const api = axios.create({
   baseURL,
   withCredentials: true,
 });
+
+if (import.meta?.env?.MODE !== 'production') {
+  // Ajuda a diagnosticar baseURL em preview/local
+  console.log('API baseURL =>', baseURL);
+}
 
 // Desloga automaticamente em 401/403 e limpa storage local
 api.interceptors.response.use(
