@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+// Garante que o baseURL sempre aponte para o backend + /api
+const envBase = import.meta?.env?.VITE_API_BASE_URL || '/api';
+const baseURL = envBase.endsWith('/api') ? envBase : `${envBase.replace(/\/$/, '')}/api`;
+
 // Axios pré-configurado para enviar cookies HttpOnly (auth) automaticamente
 const api = axios.create({
-  baseURL: import.meta?.env?.VITE_API_BASE_URL || '/api',
+  baseURL,
   withCredentials: true,
 });
 
