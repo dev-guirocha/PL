@@ -85,7 +85,7 @@ const HomePage = () => {
     { title: 'Cassino', image: casinoImg, action: () => window.open('https://pandaloterias.com.br', '_blank') },
     { title: 'Bingo', image: bingoImg, action: () => toast.info('Bingo ainda está em implementação.') },
     { title: 'Suporte', image: suporteImg, action: openSupport },
-    { title: 'Recarga Pix', image: pixImg, action: createPixCharge },
+    { title: 'Recarga Pix', image: pixImg, action: () => navigate('/pix/recarga') },
   ];
 
   return (

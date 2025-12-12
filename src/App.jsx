@@ -31,6 +31,7 @@ import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import SupervisorDashboard from './pages/SupervisorDashboard';
 import UserLayout from './components/UserLayout';
+import PixRechargePage from './pages/PixRechargePage';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
@@ -80,6 +81,7 @@ function App() {
           <Route path="/relatorios/cotacoes" element={<QuotesPage />} />
           <Route path="/relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
           <Route path="/relatorios/pules-resultado" element={<ResultPulesPage />} />
+          <Route path="/pix/recarga" element={<PixRechargePage />} />
         </Route>
 
         <Route
