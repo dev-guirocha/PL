@@ -10,5 +10,7 @@ router.post('/login', authController.login);
 router.put('/password', authMiddleware, authController.changePassword);
 router.post('/forgot', authController.requestPasswordReset);
 router.post('/reset', authController.resetPassword);
+router.post('/forgot-password', authController.requestPasswordReset);
+router.post('/reset-password', authController.resetPassword);
 
 module.exports = router;

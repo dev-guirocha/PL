@@ -2,9 +2,11 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { z } = require('zod');
 const prisma = require('../prisma');
+const { sendRecoveryCode } = require('../services/whatsappService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
+const sendResetCodeInResponse = process.env.SEND_RESET_CODE_IN_RESPONSE === 'true' || process.env.NODE_ENV !== 'production';
 
 const phoneSchema = z
   .string()
@@ -32,16 +34,6 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   phone: phoneSchema,
   password: z.string().min(1, { message: 'Informe a senha.' }),
-});
-
-const resetRequestSchema = z.object({
-  phone: phoneSchema,
-});
-
-const resetConfirmSchema = z.object({
-  phone: phoneSchema,
-  code: z.string().trim().length(6, { message: 'Código inválido.' }),
-  newPassword: passwordSchema,
 });
 
 function getFirstIssue(zodError) {
@@ -152,60 +144,65 @@ exports.login = async (req, res) => {
 };
 
 exports.requestPasswordReset = async (req, res) => {
-  const parsed = resetRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    const { message, field } = getFirstIssue(parsed.error);
-    return res.status(400).json({ error: message, field });
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ error: 'Informe seu telefone.', field: 'phone' });
   }
-  const { phone } = parsed.data;
+  const cleanPhone = phone.replace(/\D/g, '');
+
   try {
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
     if (!user) {
-      return res.json({ message: 'Se o telefone existir, enviaremos um código.' });
+      return res.status(404).json({ error: 'Telefone não cadastrado.', field: 'phone' });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetCode: code, resetCodeExpires: expires },
+      data: { resetCode: code, resetExpires: expires },
     });
 
-    const payload = { message: 'Código enviado. Validade de 15 minutos.' };
-    if (process.env.NODE_ENV !== 'production') {
-      payload.code = code;
+    const sent = await sendRecoveryCode(cleanPhone, code);
+
+    const payload = { message: 'Código enviado para seu WhatsApp.' };
+    if (sendResetCodeInResponse) payload.code = code;
+
+    if (sent) {
+      return res.json(payload);
     }
-    return res.json(payload);
+    return res.status(500).json({ error: 'Erro ao enviar mensagem. Tente novamente.' });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao solicitar redefinição.' });
   }
 };
 
 exports.resetPassword = async (req, res) => {
-  const parsed = resetConfirmSchema.safeParse(req.body);
-  if (!parsed.success) {
-    const { message, field } = getFirstIssue(parsed.error);
-    return res.status(400).json({ error: message, field });
+  const { phone, code, newPassword } = req.body;
+  if (!phone || !code || !newPassword) {
+    return res.status(400).json({ error: 'Preencha todos os dados.' });
   }
-  const { phone, code, newPassword } = parsed.data;
+  const cleanPhone = phone.replace(/\D/g, '');
 
   try {
-    const user = await prisma.user.findUnique({ where: { phone } });
-    if (!user || !user.resetCode || !user.resetCodeExpires) {
-      return res.status(400).json({ error: 'Código inválido ou expirado.', field: 'resetCode' });
+    const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    if (user.resetCode !== code) {
+      return res.status(400).json({ error: 'Código inválido.', field: 'resetCode' });
     }
-    const now = new Date();
-    if (user.resetCode !== code || user.resetCodeExpires < now) {
-      return res.status(400).json({ error: 'Código inválido ou expirado.', field: 'resetCode' });
+
+    if (!user.resetExpires || new Date() > new Date(user.resetExpires)) {
+      return res.status(400).json({ error: 'Código expirado. Solicite um novo.', field: 'resetCode' });
     }
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashed, resetCode: null, resetCodeExpires: null },
+      data: { password: hashed, resetCode: null, resetExpires: null },
     });
-    return res.json({ message: 'Senha redefinida com sucesso.' });
+    return res.json({ message: 'Senha alterada com sucesso! Faça login.' });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao redefinir senha.' });
   }
