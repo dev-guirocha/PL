@@ -21,9 +21,19 @@ const HomePage = () => {
       navigate('/');
       return;
     }
+
+    const raw = window.prompt('Qual valor deseja depositar via Pix? (em reais)');
+    const amount = Number(raw);
+    if (!raw || Number.isNaN(amount) || amount <= 0) {
+      toast.info('Informe um valor válido.');
+      return;
+    }
+
     try {
-      const res = await api.post('/pix/charge', { amount: 20 });
+      const res = await api.post('/pix/charge', { amount });
       const copy = res.data?.copyAndPaste || 'Cobrança Pix criada.';
+      const qrBase64 = res.data?.qrCode;
+
       let copied = false;
       if (navigator?.clipboard?.writeText) {
         try {
@@ -34,11 +44,21 @@ const HomePage = () => {
           copied = false;
         }
       }
+
       if (!copied) {
-        toast.info(`Copie e cole no seu app bancário:\n${copy}`, { autoClose: 5000 });
+        toast.info(`Copie e cole no seu app bancário:\n${copy}`, { autoClose: 6000 });
+      }
+
+      if (qrBase64) {
+        // Abre o QR em nova aba se suportado
+        const win = window.open();
+        if (win) {
+          win.document.write(`<img src="data:image/png;base64,${qrBase64}" alt="QR Code Pix" />`);
+        }
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao gerar cobrança Pix.');
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Erro ao gerar cobrança Pix.';
+      toast.error(msg);
     }
   };
 
