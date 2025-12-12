@@ -166,7 +166,8 @@ exports.requestPasswordReset = async (req, res) => {
 
     const sendResult = await sendRecoveryCode(cleanPhone, code);
 
-    const exposeCode = sendResetCodeInResponse || sendResult?.detail === 'missing-config';
+    // Se falhar o envio, ainda expomos o código para não travar o usuário
+    const exposeCode = sendResetCodeInResponse || !sendResult?.success;
     const payload = { message: 'Código enviado para seu WhatsApp.' };
     if (exposeCode) payload.code = code;
 
@@ -175,8 +176,8 @@ exports.requestPasswordReset = async (req, res) => {
     }
 
     const fallback = exposeCode
-      ? { ...payload, message: 'Não foi possível enviar via WhatsApp. Segue o código para uso manual.' }
-      : { error: 'Erro ao enviar mensagem. Tente novamente.' };
+      ? { ...payload, message: 'Não foi possível enviar via WhatsApp. Segue o código para uso manual.', detail: sendResult?.detail }
+      : { error: 'Erro ao enviar mensagem. Tente novamente.', detail: sendResult?.detail };
 
     return res.status(exposeCode ? 200 : 500).json(fallback);
   } catch (error) {

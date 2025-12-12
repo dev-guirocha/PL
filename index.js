@@ -13,6 +13,9 @@ const createCsrfProtection = require('./src/middleware/csrf');
 
 const app = express();
 
+// Necessário atrás de proxies (Railway/Vercel) para rate-limit e cookies funcionarem corretamente
+app.set('trust proxy', true);
+
 // Configura CORS permitindo apenas domínios autorizados
 const defaultOrigins = [
   'http://localhost:5173',
