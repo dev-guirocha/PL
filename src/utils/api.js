@@ -2,8 +2,11 @@ import axios from 'axios';
 
 // Garante que o baseURL sempre aponte para o backend + /api
 const fallbackProd = 'https://pl-production.up.railway.app/api'; // fallback para produção caso a env não esteja setada
-const envBase = import.meta?.env?.VITE_API_BASE_URL || fallbackProd || '/api';
-const baseURL = envBase.endsWith('/api') ? envBase : `${envBase.replace(/\/$/, '')}/api`;
+const envBase = import.meta?.env?.VITE_API_BASE_URL;
+const isDev = import.meta?.env?.DEV;
+const defaultBase = isDev ? '/api' : fallbackProd;
+const baseCandidate = envBase || defaultBase;
+const baseURL = baseCandidate.endsWith('/api') ? baseCandidate : `${baseCandidate.replace(/\/$/, '')}/api`;
 
 // Axios pré-configurado para enviar cookies HttpOnly (auth) automaticamente
 const api = axios.create({

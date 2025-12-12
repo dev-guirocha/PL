@@ -24,25 +24,28 @@ const envOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || '
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
-// Permite domínios *.vercel.app e o próprio domínio Railway
 const wildcardOrigins = [
   /\.vercel\.app$/,
   /\.up\.railway\.app$/,
 ];
+const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
 
 app.use(
   cors({
     origin: (origin, callback) => {
+      if (allowAnyOrigin) return callback(null, true);
       // Permite ferramentas sem origin (Postman, curl) e origens explicitamente permitidas
       const isListed = origin && allowedOrigins.includes(origin);
       const matchesWildcard = origin && wildcardOrigins.some((re) => re.test(origin));
       if (!origin || isListed || matchesWildcard) {
         return callback(null, true);
       }
-      return callback(new Error('Origin not allowed by CORS'));
+      // Retorna false para evitar erro 500 em preflight; o browser irá bloquear se não houver header de CORS
+      return callback(null, false);
     },
     credentials: true,
+    optionsSuccessStatus: 204,
   }),
 ); // Deixa o Front-end falar com o Back-end
 app.use(express.json()); // Permite ler JSON no corpo da requisição

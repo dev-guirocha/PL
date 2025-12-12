@@ -18,8 +18,8 @@ const passwordSchema = z
   .string()
   .min(8, { message: 'A senha deve ter ao menos 8 caracteres.' })
   .max(64, { message: 'A senha é muito longa.' })
-  .refine((val) => /[A-Za-z]/.test(val) && /\d/.test(val), {
-    message: 'A senha deve conter letras e números.',
+  .refine((val) => /[A-Za-z]/.test(val) && /\d/.test(val) && /[^A-Za-z0-9]/.test(val), {
+    message: 'A senha deve conter letras, números e ao menos um caractere especial.',
   });
 
 const registerSchema = z.object({
@@ -34,6 +34,22 @@ const loginSchema = z.object({
   password: z.string().min(1, { message: 'Informe a senha.' }),
 });
 
+const resetRequestSchema = z.object({
+  phone: phoneSchema,
+});
+
+const resetConfirmSchema = z.object({
+  phone: phoneSchema,
+  code: z.string().trim().length(6, { message: 'Código inválido.' }),
+  newPassword: passwordSchema,
+});
+
+function getFirstIssue(zodError) {
+  const issue = zodError?.errors?.[0];
+  if (!issue) return { message: 'Dados inválidos.' };
+  return { message: issue.message, field: issue.path?.[0] };
+}
+
 // Remove campos sensíveis antes de enviar para o cliente
 function toSafeUser(user) {
   if (!user) return null;
@@ -44,8 +60,8 @@ function toSafeUser(user) {
 exports.register = async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    const message = parsed.error.errors?.[0]?.message || 'Dados inválidos.';
-    return res.status(400).json({ error: message });
+    const { message, field } = getFirstIssue(parsed.error);
+    return res.status(400).json({ error: message, field });
   }
   const { name, phone, password, supervisorCode } = parsed.data;
 
@@ -58,7 +74,7 @@ exports.register = async (req, res) => {
 
     const existingUser = await prisma.user.findUnique({ where: { phone } });
     if (existingUser) {
-      return res.status(400).json({ error: 'Este telefone já está cadastrado.' });
+      return res.status(400).json({ error: 'Este telefone já está cadastrado.', field: 'phone' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -104,8 +120,8 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    const message = parsed.error.errors?.[0]?.message || 'Dados inválidos.';
-    return res.status(400).json({ error: message });
+    const { message, field } = getFirstIssue(parsed.error);
+    return res.status(400).json({ error: message, field });
   }
   const { phone, password } = parsed.data;
 
@@ -113,12 +129,12 @@ exports.login = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { phone } });
 
     if (!user) {
-      return res.status(400).json({ error: 'Telefone não encontrado ou senha incorreta.' });
+      return res.status(400).json({ error: 'telefone ou senha incorretos.' });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(400).json({ error: 'Telefone não encontrado ou senha incorreta.' });
+      return res.status(400).json({ error: 'telefone ou senha incorretos.' });
     }
 
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
@@ -132,6 +148,66 @@ exports.login = async (req, res) => {
     res.json({ user: toSafeUser(user), token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login.' });
+  }
+};
+
+exports.requestPasswordReset = async (req, res) => {
+  const parsed = resetRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const { message, field } = getFirstIssue(parsed.error);
+    return res.status(400).json({ error: message, field });
+  }
+  const { phone } = parsed.data;
+  try {
+    const user = await prisma.user.findUnique({ where: { phone } });
+    if (!user) {
+      return res.json({ message: 'Se o telefone existir, enviaremos um código.' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetCode: code, resetCodeExpires: expires },
+    });
+
+    const payload = { message: 'Código enviado. Validade de 15 minutos.' };
+    if (process.env.NODE_ENV !== 'production') {
+      payload.code = code;
+    }
+    return res.json(payload);
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao solicitar redefinição.' });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  const parsed = resetConfirmSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const { message, field } = getFirstIssue(parsed.error);
+    return res.status(400).json({ error: message, field });
+  }
+  const { phone, code, newPassword } = parsed.data;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { phone } });
+    if (!user || !user.resetCode || !user.resetCodeExpires) {
+      return res.status(400).json({ error: 'Código inválido ou expirado.', field: 'resetCode' });
+    }
+    const now = new Date();
+    if (user.resetCode !== code || user.resetCodeExpires < now) {
+      return res.status(400).json({ error: 'Código inválido ou expirado.', field: 'resetCode' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashed, resetCode: null, resetCodeExpires: null },
+    });
+    return res.json({ message: 'Senha redefinida com sucesso.' });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao redefinir senha.' });
   }
 };
 

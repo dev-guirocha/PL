@@ -13,6 +13,8 @@ model User {
   name      String   // Apenas no Cadastro
   phone     String   @unique // O Login é via Telefone
   password  String
+  resetCode String?
+  resetCodeExpires DateTime?
   isAdmin   Boolean  @default(false)
   supervisor   Supervisor? @relation(fields: [supervisorId], references: [id])
   supervisorId Int?
