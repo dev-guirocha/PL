@@ -164,15 +164,21 @@ exports.requestPasswordReset = async (req, res) => {
       data: { resetCode: code, resetExpires: expires },
     });
 
-    const sent = await sendRecoveryCode(cleanPhone, code);
+    const sendResult = await sendRecoveryCode(cleanPhone, code);
 
+    const exposeCode = sendResetCodeInResponse || sendResult?.detail === 'missing-config';
     const payload = { message: 'Código enviado para seu WhatsApp.' };
-    if (sendResetCodeInResponse) payload.code = code;
+    if (exposeCode) payload.code = code;
 
-    if (sent) {
+    if (sendResult?.success) {
       return res.json(payload);
     }
-    return res.status(500).json({ error: 'Erro ao enviar mensagem. Tente novamente.' });
+
+    const fallback = exposeCode
+      ? { ...payload, message: 'Não foi possível enviar via WhatsApp. Segue o código para uso manual.' }
+      : { error: 'Erro ao enviar mensagem. Tente novamente.' };
+
+    return res.status(exposeCode ? 200 : 500).json(fallback);
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao solicitar redefinição.' });
   }

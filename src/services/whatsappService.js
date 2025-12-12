@@ -11,7 +11,7 @@ exports.sendRecoveryCode = async (phone, code) => {
 
   if (!ZAPI_INSTANCE || !ZAPI_TOKEN) {
     console.warn('Z-API não configurado (ZAPI_INSTANCE/ZAPI_TOKEN ausentes). Código não enviado.');
-    return false;
+    return { success: false, detail: 'missing-config' };
   }
 
   try {
@@ -22,9 +22,9 @@ exports.sendRecoveryCode = async (phone, code) => {
         message,
       },
     );
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('Erro ao enviar WhatsApp:', error.response?.data || error.message);
-    return false;
+    return { success: false, detail: error.response?.data || error.message };
   }
 };
