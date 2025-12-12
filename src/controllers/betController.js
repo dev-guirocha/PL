@@ -174,7 +174,9 @@ exports.create = async (req, res) => {
         userId: req.userId,
         type: 'bet',
         amount: -totalDebit,
-        description: `Aposta ${bet.id} - ${loteria}`,
+        description: `Aposta ${bet.id} - ${loteria} (Saldo: ${debitFromBalance.toFixed(
+          2,
+        )}, Bônus: ${debitFromBonus.toFixed(2)})`,
         client: tx,
         suppressErrors: false,
       });
