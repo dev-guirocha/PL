@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
@@ -13,6 +13,10 @@ const PixRechargePage = () => {
   const [copyCode, setCopyCode] = useState('');
   const [coupon, setCoupon] = useState('');
   const [appliedBonus, setAppliedBonus] = useState(0);
+  const [watchingDeposit, setWatchingDeposit] = useState(false);
+  const [depositDetected, setDepositDetected] = useState(false);
+  const baselineRef = useRef(0);
+  const pollRef = useRef(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -72,6 +76,7 @@ const PixRechargePage = () => {
 
     setLoading(true);
     try {
+      setDepositDetected(false);
       // Atualiza CPF se mudou
       if (cleanCpf !== (user?.cpf || storedUser?.cpf || '')) {
         await api.put('/profile', {
@@ -87,6 +92,9 @@ const PixRechargePage = () => {
       setCopyCode(res.data?.copyAndPaste || '');
       setQrCode(res.data?.qrCode || '');
       setAppliedBonus(res.data?.bonusAmount || 0);
+      // guarda baseline para detectar crédito (saldo + bônus)
+      baselineRef.current = Number(user?.balance || 0) + Number(user?.bonus || 0);
+      startPollingDeposit();
       toast.success('Cobrança Pix criada. Use o QR ou copie o código.');
     } catch (err) {
       const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Erro ao gerar Pix.';
@@ -95,6 +103,41 @@ const PixRechargePage = () => {
       setLoading(false);
     }
   };
+
+  const startPollingDeposit = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    setWatchingDeposit(true);
+    let attempts = 0;
+    pollRef.current = setInterval(async () => {
+      attempts += 1;
+      if (attempts > 40) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        setWatchingDeposit(false);
+        return;
+      }
+      try {
+        const res = await api.get('/wallet/me');
+        const total = Number(res.data?.balance || 0) + Number(res.data?.bonus || 0);
+        if (total > baselineRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setWatchingDeposit(false);
+          setDepositDetected(true);
+          toast.success('Depósito Pix confirmado e bônus aplicado!');
+          refreshUser();
+        }
+      } catch {
+        // ignora erros transitórios
+      }
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const copyToClipboard = async () => {
     if (!copyCode) return;
@@ -200,6 +243,17 @@ const PixRechargePage = () => {
           </div>
         ) : null}
       </div>
+
+      {watchingDeposit && (
+        <div className="mt-4 w-full max-w-xl rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm animate-pulse">
+          Aguardando confirmação do Pix... isso costuma levar poucos segundos.
+        </div>
+      )}
+      {depositDetected && (
+        <div className="mt-4 w-full max-w-xl rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-md">
+          🎉 Depósito reconhecido! Seu saldo e bônus foram atualizados.
+        </div>
+      )}
     </div>
   );
 };

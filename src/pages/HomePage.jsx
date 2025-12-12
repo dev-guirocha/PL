@@ -13,7 +13,7 @@ import Spinner from '../components/Spinner';
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const { user, loadingUser, refreshUser, authError } = useAuth();
+  const { user, balance, bonus, loadingUser, refreshUser, authError } = useAuth();
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const createPixCharge = async () => {
@@ -129,7 +129,18 @@ const HomePage = () => {
               <Spinner size={18} />
               <span className="text-sm font-semibold">Carregando saldo</span>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-white px-4 py-2 shadow border border-emerald-100">
+                <p className="text-[11px] font-bold uppercase text-emerald-700">Saldo</p>
+                <p className="text-lg font-extrabold text-emerald-800">R$ {Number(balance || 0).toFixed(2).replace('.', ',')}</p>
+              </div>
+              <div className="rounded-xl bg-emerald-600/10 px-4 py-2 shadow border border-emerald-100">
+                <p className="text-[11px] font-bold uppercase text-emerald-700">Bônus</p>
+                <p className="text-lg font-extrabold text-emerald-800">R$ {Number(bonus || 0).toFixed(2).replace('.', ',')}</p>
+              </div>
+            </div>
+          )}
         </div>
         {authError ? <div className="mt-3 text-sm font-semibold text-red-600">{authError}</div> : null}
       </div>
