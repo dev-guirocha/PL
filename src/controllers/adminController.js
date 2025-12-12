@@ -75,6 +75,41 @@ exports.stats = async (req, res) => {
   }
 };
 
+exports.manualCreditPix = async (req, res) => {
+  const { txid } = req.body || {};
+  if (!txid) return res.status(400).json({ error: 'txid é obrigatório.' });
+
+  try {
+    const charge = await prisma.pixCharge.findFirst({ where: { txid: String(txid) } });
+    if (!charge) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    if (charge.credited) return res.json({ message: 'Cobrança já creditada.', charge });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pixCharge.update({
+        where: { id: charge.id },
+        data: { status: 'paid', paidAt: new Date(), credited: true },
+      });
+      await tx.user.update({
+        where: { id: charge.userId },
+        data: { balance: { increment: charge.amount } },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: charge.userId,
+          type: 'deposit',
+          amount: charge.amount,
+          description: `Depósito PIX manual (txid ${txid})`,
+        },
+      });
+    });
+
+    return res.json({ message: 'Cobrança creditada manualmente.', txid });
+  } catch (err) {
+    console.error('Erro manualCreditPix', err);
+    return res.status(500).json({ error: 'Erro ao creditar Pix.' });
+  }
+};
+
 const normalizeMilhar = (val) => {
   const digits = String(val || '').replace(/\D/g, '');
   return digits.slice(-4).padStart(4, '0');

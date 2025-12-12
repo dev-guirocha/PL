@@ -34,4 +34,7 @@ router.patch('/withdrawals/:id/status', adminController.updateWithdrawalStatus);
 router.post('/coupons', adminController.createCoupon);
 router.get('/coupons', adminController.listCoupons);
 
+// Pix manual (fallback)
+router.post('/pix/credit', adminController.manualCreditPix);
+
 module.exports = router;
