@@ -42,6 +42,10 @@ model PixCharge {
   locId         String?
   copyAndPaste  String?
   qrCodeImage   String?
+  coupon        Coupon?   @relation(fields: [couponId], references: [id])
+  couponId      Int?
+  couponCode    String?
+  bonusAmount   Decimal   @db.Decimal(18, 2) @default(0)
   expiresAt     DateTime?
   paidAt        DateTime?
   credited      Boolean   @default(false)
@@ -128,11 +132,16 @@ model WithdrawalRequest {
 model Coupon {
   id         Int      @id @default(autoincrement())
   code       String   @unique
-  type       String   @default("bonus") // bonus ou saldo
+  description String?
+  type       String   @default("fixed") // fixed ou percent
   amount     Decimal  @db.Decimal(18, 2)
+  usageLimit Int?     // número máximo de usos
+  usedCount  Int      @default(0)
+  audience   String   @default("all")
   active     Boolean  @default(true)
   expiresAt  DateTime?
   createdAt  DateTime @default(now())
+  pixCharges PixCharge[]
 }
 
 model SupervisorCommission {

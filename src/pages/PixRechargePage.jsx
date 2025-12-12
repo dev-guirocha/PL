@@ -11,6 +11,8 @@ const PixRechargePage = () => {
   const [amount, setAmount] = useState('');
   const [qrCode, setQrCode] = useState('');
   const [copyCode, setCopyCode] = useState('');
+  const [coupon, setCoupon] = useState('');
+  const [appliedBonus, setAppliedBonus] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -81,9 +83,10 @@ const PixRechargePage = () => {
         });
       }
 
-      const res = await api.post('/pix/charge', { amount: val });
+      const res = await api.post('/pix/charge', { amount: val, coupon });
       setCopyCode(res.data?.copyAndPaste || '');
       setQrCode(res.data?.qrCode || '');
+      setAppliedBonus(res.data?.bonusAmount || 0);
       toast.success('Cobrança Pix criada. Use o QR ou copie o código.');
     } catch (err) {
       const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Erro ao gerar Pix.';
@@ -123,15 +126,26 @@ const PixRechargePage = () => {
           </button>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">CPF (obrigatório)</label>
-          <input
-            type="text"
-            value={cpf}
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-700">CPF (obrigatório)</label>
+        <input
+          type="text"
+          value={cpf}
             onChange={(e) => setCpf(sanitizeCpf(e.target.value))}
             maxLength={14}
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             placeholder="Somente números"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Cupom (opcional)</label>
+          <input
+            type="text"
+            value={coupon}
+            onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            placeholder="EX: BONUS10"
           />
         </div>
 
@@ -153,12 +167,18 @@ const PixRechargePage = () => {
           disabled={loading}
           onClick={handleGenerate}
           className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 text-sm font-extrabold uppercase text-white shadow-xl transition hover:-translate-y-0.5 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60"
-        >
-          {loading ? 'Gerando...' : 'Gerar QR Code Pix'}
-        </button>
+      >
+        {loading ? 'Gerando...' : 'Gerar QR Code Pix'}
+      </button>
 
-        {copyCode ? (
-          <div className="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+      {appliedBonus > 0 && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
+          Bônus aplicado: R$ {Number(appliedBonus).toFixed(2).replace('.', ',')} (será creditado como bônus)
+        </div>
+      )}
+
+      {copyCode ? (
+        <div className="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-emerald-800">Código copia e cola</span>
               <button

@@ -21,6 +21,8 @@ exports.createCharge = async (req, res) => {
   const parsed = amountSchema.safeParse(req.body.amount);
   if (!parsed.success) return res.status(400).json({ error: 'Valor inválido.' });
 
+  const couponCode = (req.body?.coupon || req.body?.couponCode || '').trim().toUpperCase();
+
   const amount = parsed.data;
   const userId = req.userId;
 
@@ -34,6 +36,27 @@ exports.createCharge = async (req, res) => {
       return res.status(400).json({ error: 'CPF obrigatório para gerar PIX.' });
     }
 
+    let coupon = null;
+    let bonusAmount = 0;
+
+    if (couponCode) {
+      coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
+      const now = new Date();
+      const usageLimit = coupon?.usageLimit;
+      const isExpired = coupon?.expiresAt && coupon.expiresAt < now;
+      const limitReached = typeof usageLimit === 'number' && coupon.usedCount >= usageLimit;
+
+      if (!coupon || !coupon.active || isExpired || limitReached) {
+        return res.status(400).json({ error: 'Cupom inválido ou inativo.' });
+      }
+
+      if (coupon.type === 'percent') {
+        bonusAmount = Number(((amount * Number(coupon.amount)) / 100).toFixed(2));
+      } else {
+        bonusAmount = Number(coupon.amount);
+      }
+    }
+
     const tempId = `REQ-${Date.now()}`;
     const charge = await prisma.pixCharge.create({
       data: {
@@ -41,6 +64,9 @@ exports.createCharge = async (req, res) => {
         amount,
         status: 'pending',
         txid: tempId,
+        couponId: coupon?.id || null,
+        couponCode: couponCode || null,
+        bonusAmount,
       },
     });
 
@@ -86,6 +112,8 @@ exports.createCharge = async (req, res) => {
       copyAndPaste: updated.copyAndPaste,
       qrCode: updated.qrCodeImage,
       txid: updated.txid,
+      bonusAmount,
+      couponCode: couponCode || null,
     });
   } catch (error) {
     console.error('Erro createCharge:', error.message);
@@ -162,6 +190,28 @@ exports.handleWebhook = async (req, res) => {
             description: `Depósito PIX (SuitPay #${idTransaction})`,
           },
         });
+
+        if (charge.bonusAmount && Number(charge.bonusAmount) > 0) {
+          await tx.user.update({
+            where: { id: charge.userId },
+            data: { bonus: { increment: charge.bonusAmount } },
+          });
+          await tx.transaction.create({
+            data: {
+              userId: charge.userId,
+              type: 'bonus',
+              amount: charge.bonusAmount,
+              description: `Bônus cupom ${charge.couponCode || ''}`.trim(),
+            },
+          });
+        }
+
+        if (charge.couponId) {
+          await tx.coupon.update({
+            where: { id: charge.couponId },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
       });
       console.log(`[Webhook] Pix ${idTransaction} processado com sucesso.`);
     }

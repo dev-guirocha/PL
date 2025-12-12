@@ -15,6 +15,7 @@ const AdminCouponsPage = () => {
     description: '',
     amount: '',
     type: 'fixed',
+    usageLimit: '',
     audience: 'all',
     active: true,
   });
@@ -36,13 +37,22 @@ const AdminCouponsPage = () => {
     fetchCoupons();
   }, []);
 
+  const toggleStatus = async (couponId, current) => {
+    try {
+      await api.put(`/admin/coupons/${couponId}`, { active: !current });
+      fetchCoupons();
+    } catch (err) {
+      setError('Erro ao atualizar status do cupom.');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
       await api.post('/admin/coupons', form);
-      setForm({ code: '', description: '', amount: '', type: 'fixed', audience: 'all', active: true });
+      setForm({ code: '', description: '', amount: '', type: 'fixed', usageLimit: '', audience: 'all', active: true });
       fetchCoupons();
     } catch (err) {
       setError('Erro ao criar cupom.');
@@ -119,6 +129,18 @@ const AdminCouponsPage = () => {
             />
           </div>
           <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Limite de usos</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.usageLimit}
+              onChange={(e) => setForm({ ...form, usageLimit: e.target.value })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+              placeholder="Ex: 100 (vazio = ilimitado)"
+            />
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Público</label>
             <select
               value={form.audience}
@@ -159,7 +181,7 @@ const AdminCouponsPage = () => {
           <Spinner size={40} />
         </div>
       ) : (
-        <AdminTable headers={['ID', 'Código', 'Descrição', 'Valor', 'Tipo', 'Público', 'Status']}>
+        <AdminTable headers={['ID', 'Código', 'Descrição', 'Valor', 'Tipo', 'Usos', 'Público', 'Status']}>
           {coupons.length === 0 ? (
             <AdminTableRow>
               <AdminTableCell className="text-center text-slate-500" colSpan={7}>
@@ -178,9 +200,19 @@ const AdminCouponsPage = () => {
                 <AdminTableCell className="uppercase text-xs font-semibold text-slate-700">
                   {c.type === 'percent' ? 'PERCENTUAL' : 'FIXO'}
                 </AdminTableCell>
+                <AdminTableCell className="text-sm font-semibold text-slate-700">
+                  {`${c.usedCount || 0}${c.usageLimit ? `/${c.usageLimit}` : ''}`}
+                </AdminTableCell>
                 <AdminTableCell className="capitalize">{c.audience || 'Todos'}</AdminTableCell>
-                <AdminTableCell>
+                <AdminTableCell className="flex items-center gap-2">
                   <StatusBadge status={c.active ? 'ativo' : 'inativo'} />
+                  <button
+                    type="button"
+                    onClick={() => toggleStatus(c.id || c._id, c.active)}
+                    className="text-xs font-semibold text-emerald-700 underline"
+                  >
+                    {c.active ? 'Desativar' : 'Ativar'}
+                  </button>
                 </AdminTableCell>
               </AdminTableRow>
             ))

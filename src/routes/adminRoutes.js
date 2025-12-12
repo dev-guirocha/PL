@@ -33,6 +33,7 @@ router.patch('/withdrawals/:id/status', adminController.updateWithdrawalStatus);
 // Cupons
 router.post('/coupons', adminController.createCoupon);
 router.get('/coupons', adminController.listCoupons);
+router.put('/coupons/:id', adminController.updateCoupon);
 
 // Pix manual (fallback)
 router.post('/pix/credit', adminController.manualCreditPix);

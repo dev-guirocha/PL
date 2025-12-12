@@ -666,16 +666,23 @@ exports.updateWithdrawalStatus = async (req, res) => {
 };
 
 exports.createCoupon = async (req, res) => {
-  const { code, type = 'bonus', amount, expiresAt } = req.body || {};
+  const { code, description = '', type = 'fixed', amount, expiresAt, usageLimit, audience = 'all', active = true } = req.body || {};
   if (!code || !amount || Number(amount) <= 0) {
     return res.status(400).json({ error: 'Informe código e valor do cupom.' });
+  }
+  if (!['fixed', 'percent'].includes(type)) {
+    return res.status(400).json({ error: 'Tipo inválido. Use fixed ou percent.' });
   }
   try {
     const coupon = await prisma.coupon.create({
       data: {
         code: String(code).trim().toUpperCase(),
+        description: description || null,
         type,
         amount: Number(amount),
+        usageLimit: usageLimit ? Number(usageLimit) : null,
+        audience,
+        active: Boolean(active),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
     });
@@ -700,13 +707,40 @@ exports.listCoupons = async (req, res) => {
   }
   try {
     const [items, total] = await prisma.$transaction([
-      prisma.coupon.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: pageSize }),
+      prisma.coupon.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
       prisma.coupon.count({ where }),
     ]);
     const hasMore = skip + items.length < total;
     return res.json({ coupons: items, page, pageSize, total, hasMore });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar cupons.' });
+  }
+};
+
+exports.updateCoupon = async (req, res) => {
+  const { id } = req.params;
+  const { active, usageLimit } = req.body || {};
+  const couponId = Number(id);
+  if (!couponId || Number.isNaN(couponId)) return res.status(400).json({ error: 'ID inválido.' });
+
+  try {
+    const data = {};
+    if (typeof active !== 'undefined') data.active = Boolean(active);
+    if (typeof usageLimit !== 'undefined') data.usageLimit = usageLimit === null ? null : Number(usageLimit);
+
+    const updated = await prisma.coupon.update({
+      where: { id: couponId },
+      data,
+    });
+    return res.json({ coupon: updated });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Cupom não encontrado.' });
+    return res.status(500).json({ error: 'Erro ao atualizar cupom.' });
   }
 };
 
