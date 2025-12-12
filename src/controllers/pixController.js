@@ -44,8 +44,9 @@ exports.createCharge = async (req, res) => {
       },
     });
 
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-    const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook`;
+    const backendUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
+    const tokenParam = process.env.SUITPAY_WEBHOOK_TOKEN ? `?token=${process.env.SUITPAY_WEBHOOK_TOKEN}` : '';
+    const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook${tokenParam}`;
 
     const payload = {
       requestNumber: String(charge.id),
@@ -116,10 +117,12 @@ exports.handleWebhook = async (req, res) => {
       const concatenated = parts.join('') + secret;
       const computed = crypto.createHash('sha256').update(concatenated).digest('hex');
       if (computed !== hash) {
+        console.warn('[PIX] Hash inválido', { idTransaction, statusTransaction });
         return res.status(403).json({ error: 'Hash inválido.' });
       }
     } else if (process.env.SUITPAY_WEBHOOK_TOKEN) {
       if (token !== process.env.SUITPAY_WEBHOOK_TOKEN) {
+        console.warn('[PIX] Token inválido no webhook', { token });
         return res.status(403).json({ error: 'Token inválido.' });
       }
     }
@@ -135,6 +138,7 @@ exports.handleWebhook = async (req, res) => {
     const isChargeback = (statusTransaction || '').toUpperCase() === 'CHARGEBACK';
 
     if (isPaid && !charge.credited) {
+      console.log('[PIX] Crédito aprovado', { idTransaction, value, statusTransaction, requestNumber });
       await prisma.$transaction(async (tx) => {
         await tx.pixCharge.update({
           where: { id: charge.id },
@@ -162,7 +166,16 @@ exports.handleWebhook = async (req, res) => {
       console.log(`[Webhook] Pix ${idTransaction} processado com sucesso.`);
     }
 
+    // Atualiza status intermediário (ex.: PROCESSING) mesmo sem crédito
+    if (!isPaid && !isChargeback && statusTransaction && charge.status !== statusTransaction.toLowerCase()) {
+      await prisma.pixCharge.update({
+        where: { id: charge.id },
+        data: { status: statusTransaction.toLowerCase() },
+      });
+    }
+
     if (isChargeback && charge.credited) {
+      console.warn('[PIX] Chargeback recebido', { idTransaction, statusTransaction, requestNumber });
       await prisma.$transaction(async (tx) => {
         await tx.pixCharge.update({
           where: { id: charge.id },

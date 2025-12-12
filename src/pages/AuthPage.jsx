@@ -418,19 +418,19 @@ const AuthPage = () => {
         </form>
 
         <div className="mt-4 space-y-2 text-center text-sm text-slate-600">
-          {!isReset && (
+          {!isReset && !isLogin && (
             <p>
-              {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
+              Já tem conta?{' '}
               <span
                 className="cursor-pointer font-bold text-emerald-700 underline"
                 onClick={() => {
-                  setMode(isLogin ? 'register' : 'login');
+                  setMode('login');
                   setError('');
                   setFormData({ name: '', phone: '', password: '' });
                   setFieldErrors({ name: '', phone: '', password: '', resetCode: '' });
                 }}
               >
-                {isLogin ? 'Cadastre-se' : 'Fazer Login'}
+                Fazer Login
               </span>
             </p>
           )}

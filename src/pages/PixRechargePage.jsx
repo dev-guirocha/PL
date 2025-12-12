@@ -103,6 +103,12 @@ const PixRechargePage = () => {
     }
   };
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-xl bg-white shadow-lg rounded-2xl p-6 space-y-4 border border-slate-100">
