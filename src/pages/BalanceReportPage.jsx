@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 const BalanceReportPage = () => {
   const navigate = useNavigate();
-  const { balance, loadingUser, authError, refreshUser } = useAuth();
+  const { balance, bonus, loadingUser, authError, refreshUser } = useAuth();
 
   useEffect(() => {
     refreshUser();
@@ -18,7 +18,8 @@ const BalanceReportPage = () => {
   const formattedDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
   const share = async () => {
-    const text = `CONSULTA SALDO\n${formattedDate}\nT.VENDAS: 0,00\nCOMISSAO: 0,00\nMANDOU: 0,00 (+)\nRECEBEU: 0,00 (-)\nSALDO ANT: ${formatCurrency(balance)} (+)\nHAVER: ${formatCurrency(balance)} (+)`;
+    const total = Number(balance || 0) + Number(bonus || 0);
+    const text = `CONSULTA SALDO\n${formattedDate}\nT.VENDAS: 0,00\nCOMISSAO: 0,00\nMANDOU: 0,00 (+)\nRECEBEU: 0,00 (-)\nSALDO: ${formatCurrency(balance)}\nBONUS: ${formatCurrency(bonus)}\nTOTAL: ${formatCurrency(total)} (+)`;
     if (navigator.share) {
       try {
         await navigator.share({ text });
@@ -61,12 +62,16 @@ const BalanceReportPage = () => {
               <span>0,00 (-)</span>
             </div>
             <div className="flex items-center justify-between text-sm font-bold">
-              <span>SALDO ANT:</span>
-              <span>{formatCurrency(balance)} (+)</span>
+              <span>SALDO:</span>
+              <span>{formatCurrency(balance)}</span>
             </div>
             <div className="flex items-center justify-between text-sm font-bold">
-              <span>HAVER:</span>
-              <span>{formatCurrency(balance)} (+)</span>
+              <span>BÔNUS:</span>
+              <span>{formatCurrency(bonus)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm font-bold">
+              <span>TOTAL:</span>
+              <span>{formatCurrency(Number(balance || 0) + Number(bonus || 0))} (+)</span>
             </div>
             {authError && <div className="text-xs font-semibold text-red-600">{authError}</div>}
           </>
@@ -78,6 +83,12 @@ const BalanceReportPage = () => {
             onClick={share}
           >
             <FaShareAlt /> Compartilhar
+          </button>
+          <button
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-extrabold text-emerald-800 shadow transition hover:-translate-y-0.5 hover:shadow-md"
+            onClick={refreshUser}
+          >
+            Atualizar
           </button>
           <button
             className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-extrabold text-emerald-800 shadow transition hover:-translate-y-0.5 hover:shadow-md"

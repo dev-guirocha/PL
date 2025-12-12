@@ -15,6 +15,8 @@ const HomePage = () => {
   const navigate = useNavigate();
   const { user, balance, bonus, loadingUser, refreshUser, authError } = useAuth();
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   const createPixCharge = async () => {
     if (!user) {
@@ -79,6 +81,28 @@ const HomePage = () => {
   useEffect(() => {
     refreshUser();
   }, [refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Captura o evento para instalar como PWA
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      toast.success('Atalho criado! Abra pelo app instalado.');
+    }
+    setShowInstallBanner(false);
+    setInstallPrompt(null);
+  };
 
   const tiles = [
     { title: 'Loterias', image: loteriasImg, action: () => navigate('/loterias') },
@@ -162,6 +186,31 @@ const HomePage = () => {
           </button>
         ))}
       </div>
+
+      {showInstallBanner && installPrompt && (
+        <div className="flex w-full max-w-4xl flex-col gap-2 rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-md sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-extrabold text-emerald-800">Adicionar atalho do app</p>
+            <p className="text-xs text-slate-600">Instale o Panda Loterias na tela inicial para abrir como aplicativo.</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              onClick={() => setShowInstallBanner(false)}
+            >
+              Agora não
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700"
+              onClick={handleInstall}
+            >
+              Instalar app
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-2">
         <button
