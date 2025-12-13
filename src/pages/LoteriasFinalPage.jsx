@@ -16,6 +16,7 @@ const LoteriasFinalPage = () => {
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState('');
   const [betSaved, setBetSaved] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setDraft(getDraft());
@@ -249,7 +250,25 @@ const LoteriasFinalPage = () => {
         </div>
 
         {message && <div style={styles.message}>{message}</div>}
-        {success && <div style={styles.success}>{success}</div>}
+        {success && (
+          <div style={styles.success}>
+            {success}
+            <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                style={{ ...styles.actionBtn, ...styles.secondary, minWidth: '140px' }}
+                onClick={() => navigate('/pules')}
+              >
+                Visualizar PULE
+              </button>
+              <button
+                style={{ ...styles.actionBtn, ...styles.primary, minWidth: '140px' }}
+                onClick={() => navigate('/home')}
+              >
+                Ir para Home
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={styles.actions}>
           <button
@@ -260,7 +279,9 @@ const LoteriasFinalPage = () => {
           </button>
           <button
             style={{ ...styles.actionBtn, ...styles.primary }}
+            disabled={submitting}
             onClick={async () => {
+              if (submitting) return;
               if (!isAuthenticated) {
                 setMessage('Faça login para finalizar.');
                 return;
@@ -270,6 +291,7 @@ const LoteriasFinalPage = () => {
                 return;
               }
               try {
+                setSubmitting(true);
                 let lastBalances = {};
                 let totalDebited = 0;
                 const betsCreated = [];
@@ -317,10 +339,12 @@ const LoteriasFinalPage = () => {
                   'Erro ao debitar.';
                 setMessage(msg);
                 setBetSaved(false);
+              } finally {
+                setSubmitting(false);
               }
             }}
           >
-            Finalizar
+            {submitting ? 'Processando...' : 'Finalizar'}
           </button>
         </div>
 

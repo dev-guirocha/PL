@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet } from 'react-icons/fa';
+import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet, FaMobileAlt } from 'react-icons/fa';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
 import logo from '../assets/images/logo.png';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 const navLinks = [
   { label: 'Início', icon: <FaHome />, path: '/home' },
@@ -25,6 +26,7 @@ const UserLayout = ({ children }) => {
   const { balance, bonus, loadingUser, refreshUser, logout, user } = useAuth();
   const [showBalance, setShowBalance] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   const numericBalance = Number(balance ?? 0);
   const numericBonus = Number(bonus ?? 0);
@@ -32,6 +34,12 @@ const UserLayout = ({ children }) => {
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [activePath]);
 
   const activePath = useMemo(() => location.pathname, [location.pathname]);
 
@@ -153,6 +161,26 @@ const UserLayout = ({ children }) => {
                   </div>
                 </button>
               ))}
+              {canInstall && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await promptInstall();
+                    if (res?.outcome === 'accepted') {
+                      navigate('/home');
+                    }
+                  }}
+                  className="flex items-center gap-3 rounded-xl border border-emerald-100 px-3 py-2 text-left text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50"
+                >
+                  <span className="text-emerald-700">
+                    <FaMobileAlt />
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold">Adicionar atalho do app</span>
+                    <span className="text-xs text-emerald-700">Instale na tela inicial do celular</span>
+                  </div>
+                </button>
+              )}
             </div>
 
             <div className="mt-auto">

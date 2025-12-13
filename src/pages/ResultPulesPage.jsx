@@ -7,10 +7,11 @@ import { formatDateBR, formatDateTimeBR } from '../utils/date';
 const ResultPulesPage = () => {
   const navigate = useNavigate();
   const [pules, setPules] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterLottery, setFilterLottery] = useState('');
+  const [filterHorario, setFilterHorario] = useState('');
 
   const LOTERIAS = [
     'LT PT RIO',
@@ -32,22 +33,28 @@ const ResultPulesPage = () => {
     'LT URUGUAI',
   ];
 
-  const fetchPules = async ({ loteria = filterLottery, date = filterDate } = {}) => {
+  const fetchPules = async ({ loteria = filterLottery, date = filterDate, horario = filterHorario } = {}) => {
+    if (!date || !loteria || !horario) {
+      setError('Selecione data, loteria e horário.');
+      setPules([]);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/bets/result-pules', { params: { take: 100, skip: 0, loteria, date } });
+      const res = await api.get('/bets/result-pules', { params: { take: 100, skip: 0, loteria, date, horario } });
       const list = res.data?.pules || [];
       setPules(list);
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao carregar pules de resultados.');
+      setError(err.response?.data?.error || 'Erro ao carregar resultados.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPules();
+    // limpa lista até que filtros sejam preenchidos
+    setPules([]);
   }, []);
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
@@ -93,8 +100,8 @@ const ResultPulesPage = () => {
           Voltar
         </button>
         <div className="text-right">
-          <p className="text-xs font-semibold uppercase text-emerald-700">Relatório</p>
-          <h1 className="text-lg font-extrabold text-emerald-900">Pules de Resultados</h1>
+          <p className="text-xs font-semibold uppercase text-emerald-700">Resultados</p>
+          <h1 className="text-lg font-extrabold text-emerald-900">Consultar resultados</h1>
         </div>
       </div>
 
@@ -105,56 +112,68 @@ const ResultPulesPage = () => {
       )}
 
       <div className="mx-auto mt-4 max-w-5xl rounded-xl border border-emerald-100 bg-white px-4 py-3 shadow">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-3 flex-1">
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
-              <input
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo de loteria</label>
-              <select
-                value={filterLottery}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilterLottery(val);
-                }}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              >
-                <option value="">Todas</option>
-                {LOTERIAS.map((lot) => (
-                  <option key={lot} value={lot}>
-                    {lot}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+            />
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => fetchPules({ loteria: filterLottery, date: filterDate })}
-              className="rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-              disabled={loading}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo de loteria</label>
+            <select
+              value={filterLottery}
+              onChange={(e) => setFilterLottery(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
             >
-              Buscar
-            </button>
-            <button
-              onClick={() => {
-                setFilterDate('');
-                setFilterLottery('');
-                fetchPules({ loteria: '', date: '' });
-              }}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              disabled={loading}
-            >
-              Limpar
-            </button>
+              <option value="">Selecione</option>
+              {LOTERIAS.map((lot) => (
+                <option key={lot} value={lot}>
+                  {lot}
+                </option>
+              ))}
+            </select>
           </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Horário</label>
+            <select
+              value={filterHorario}
+              onChange={(e) => setFilterHorario(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+            >
+              <option value="">Selecione</option>
+              {['07HS', '08HS', '09HS', '10HS', '11HS', '12HS', '13HS', '14HS', '15HS', '16HS', '17HS', '18HS', '19HS', '20HS', '21HS', '22HS', '23HS'].map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => fetchPules({ loteria: filterLottery, date: filterDate, horario: filterHorario })}
+            className="rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            disabled={loading}
+          >
+            Buscar
+          </button>
+          <button
+            onClick={() => {
+              setFilterDate('');
+              setFilterLottery('');
+              setFilterHorario('');
+              setPules([]);
+              setError('');
+            }}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            disabled={loading}
+          >
+            Limpar
+          </button>
         </div>
       </div>
 

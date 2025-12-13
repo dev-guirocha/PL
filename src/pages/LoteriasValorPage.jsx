@@ -26,6 +26,13 @@ const LoteriasValorPage = () => {
     refreshUser();
   }, [refreshUser]);
 
+  const formatInputMoney = (raw) => {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '';
+    const number = Number(digits) / 100;
+    return number.toFixed(2);
+  };
+
   const parsedValor = Number(valor) || 0;
 
   const addQuick = (n) => {
@@ -68,10 +75,14 @@ const LoteriasValorPage = () => {
         <p className="text-sm text-gray-600">Digite o valor ou use os atalhos.</p>
         <div className="flex items-center gap-2 flex-wrap">
           <input
-            type="number"
+            inputMode="decimal"
             min="0"
             value={valor}
-            onChange={(e) => setValor(e.target.value)}
+            onChange={(e) => {
+              const formatted = formatInputMoney(e.target.value);
+              setValor(formatted);
+              updateDraft({ valorAposta: Number(formatted), modoValor });
+            }}
             placeholder="0,00"
             className="flex-1 min-w-[160px] px-3 py-3 border border-gray-300 rounded-lg text-lg focus:ring-emerald-500 focus:border-emerald-500 transition"
           />

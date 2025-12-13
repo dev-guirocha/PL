@@ -19,7 +19,7 @@ const LoteriasDatePage = () => {
   const days = useMemo(() => {
     const arr = [];
     const today = new Date();
-    for (let i = 0; i <= 7; i++) {
+    for (let i = 0; i <= 2; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       arr.push({
@@ -114,9 +114,7 @@ const LoteriasDatePage = () => {
 
       <div style={styles.card}>
         <div style={styles.title}>{gameTitle}</div>
-        <div style={{ color: '#6b7280', fontSize: '13px' }}>
-          Escolha uma data (hoje ou até 7 dias à frente). A lista é atualizada diariamente.
-        </div>
+        <div style={{ color: '#6b7280', fontSize: '13px' }}>Escolha uma data (hoje ou até 2 dias à frente).</div>
         {draft?.jogo && (
           <div style={{ color: '#166534', fontSize: '13px', fontWeight: 'bold' }}>
             Jogo selecionado: {draft.jogo}

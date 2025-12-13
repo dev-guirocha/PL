@@ -37,11 +37,24 @@ function calculateTotal(apostas) {
 const getBrazilTodayStr = () =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: TIMEZONE }).format(new Date()); // YYYY-MM-DD
 
-// Verifica se a aposta é permitida considerando Data e Hora (fuso Brasil)
+const parseNowInTimezone = () => {
+  const now = new Date();
+  const tzString = now.toLocaleString('en-US', { timeZone: TIMEZONE });
+  return new Date(tzString);
+};
+
 const isBettingAllowed = (codigoHorario, dataJogoStr) => {
-  // Libera apostas; validação de horário foi causando falsos negativos.
   if (!codigoHorario || !dataJogoStr) return true;
-  return true;
+  // Tenta extrair HH:mm do código/horário
+  const match = String(codigoHorario).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return true;
+  const [_, hh, mm] = match;
+  const slotStr = `${dataJogoStr}T${hh.padStart(2, '0')}:${mm}:00`;
+  const slot = new Date(`${slotStr}-03:00`); // TZ Brasil fixa; simplificação
+  if (Number.isNaN(slot.getTime())) return true;
+  const deadline = new Date(slot.getTime() - DEFAULT_GRACE_MINUTES * 60 * 1000);
+  const now = parseNowInTimezone();
+  return now <= deadline;
 };
 
 const serializeBet = (bet) => {
@@ -143,13 +156,23 @@ exports.create = async (req, res) => {
       const debitFromBalance = Math.min(availableBalance, totalDebit);
       const debitFromBonus = Number((totalDebit - debitFromBalance).toFixed(2));
 
-      await tx.user.update({
-        where: { id: req.userId },
+      const updated = await tx.user.updateMany({
+        where: {
+          id: req.userId,
+          balance: { gte: debitFromBalance },
+          bonus: { gte: debitFromBonus },
+        },
         data: {
           balance: debitFromBalance > 0 ? { decrement: debitFromBalance } : undefined,
           bonus: debitFromBonus > 0 ? { decrement: debitFromBonus } : undefined,
         },
       });
+
+      if (!updated.count) {
+        const err = new Error('Saldo insuficiente.');
+        err.code = 'ERR_NO_BALANCE';
+        throw err;
+      }
 
       const bet = await tx.bet.create({
         data: {

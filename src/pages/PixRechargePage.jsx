@@ -125,6 +125,7 @@ const PixRechargePage = () => {
           setWatchingDeposit(false);
           setDepositDetected(true);
           toast.success('Depósito Pix confirmado e bônus aplicado!');
+          navigate('/home');
           refreshUser();
         }
       } catch {
