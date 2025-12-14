@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
@@ -6,17 +6,11 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 
-const LOTERIAS_UM_DECIMO = ['lotece-lotep', 'bahia']; // LOTEP/LOTECE e Bahia/BA Maluca agrupadas
-const LOTERIAS_URUGUAIA = ['uruguaia'];
-const LOTERIAS_SENINHA = ['seninha'];
-const LOTERIAS_SUPER15 = ['super15'];
-const LOTERIAS_SENINHA = ['seninha'];
-const LOTERIAS_SUPER15 = ['super15'];
+const LOTERIAS_1_10_ALLOWED = ['lotece-lotep', 'bahia'];
 
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
-  const { balance, loadingUser, refreshUser, authError } = useAuth();
-  const [showBalance, setShowBalance] = useState(true);
+  const { authError, refreshUser } = useAuth();
   const [expanded, setExpanded] = useState(null);
   const [selected, setSelected] = useState([]);
   const [draft, setDraft] = useState({});
@@ -27,6 +21,24 @@ const LoteriasSorteiosPage = () => {
     setDraft(d);
     setSelected(d?.selecoes || []);
   }, [refreshUser]);
+
+  const loteriasExibidas = useMemo(() => {
+    const jogoAtual = draft?.jogo || '';
+
+    if (jogoAtual === 'Tradicional 1/10') {
+      return LOTERIAS_SORTEIOS.filter((l) => LOTERIAS_1_10_ALLOWED.includes(l.slug));
+    }
+
+    if (jogoAtual === 'Lot. Uruguaia' || jogoAtual === 'Loteria Uruguaia') {
+      return LOTERIAS_SORTEIOS.filter((l) => l.slug === 'uruguaia');
+    }
+
+    if (['Quininha', 'Seninha', 'Super15'].includes(jogoAtual)) {
+      return LOTERIAS_SORTEIOS.filter((l) => l.slug.toLowerCase() === jogoAtual.toLowerCase());
+    }
+
+    return LOTERIAS_SORTEIOS.filter((l) => !['uruguaia', 'quininha', 'seninha', 'super15'].includes(l.slug));
+  }, [draft]);
 
   const timeValue = (txt) => {
     const matches = txt.match(/\d+/g);
@@ -145,28 +157,6 @@ const LoteriasSorteiosPage = () => {
     }
   };
 
-  const loteriasExibidas = useMemo(() => {
-    const jogo = (draft?.jogo || '').toLowerCase();
-    const isUmDecimo = jogo.includes('1/10') || jogo.includes('1-10') || (draft?.slug || '').includes('1-10');
-    const isUruguaia = jogo.includes('uruguaia');
-    const isSeninha = jogo.includes('seninha');
-    const isSuper15 = jogo.includes('super 15') || jogo.includes('super15');
-    if (isUmDecimo) {
-      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_UM_DECIMO.includes(lot.slug));
-    }
-    if (isUruguaia) {
-      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_URUGUAIA.includes(lot.slug));
-    }
-    if (isSeninha) {
-      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_SENINHA.includes(lot.slug));
-    }
-    if (isSuper15) {
-      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_SUPER15.includes(lot.slug));
-    }
-    // Tradicional normal: exclui uruguaias para não misturar
-    return LOTERIAS_SORTEIOS.filter((lot) => !LOTERIAS_URUGUAIA.includes(lot.slug));
-  }, [draft]);
-
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -225,12 +215,14 @@ const LoteriasSorteiosPage = () => {
         ) : null}
 
         <div style={styles.list}>
+          {loteriasExibidas.length === 0 && (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+              Nenhuma loteria disponível para este modo ({draft?.jogo}).
+            </div>
+          )}
+
           {loteriasExibidas.map((lot) => (
-            <div
-              key={lot.slug}
-              style={styles.item}
-              onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}
-            >
+            <div key={lot.slug} style={styles.item} onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}>
               <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
               {expanded === lot.slug && (
                 <div style={styles.horarios}>
@@ -242,13 +234,7 @@ const LoteriasSorteiosPage = () => {
                       return (
                         <span
                           key={idx}
-                          style={
-                            isPastHorario(h)
-                              ? styles.tagDisabled
-                              : isSelected
-                                ? styles.tagSelected
-                                : styles.tag
-                          }
+                          style={isPastHorario(h) ? styles.tagDisabled : isSelected ? styles.tagSelected : styles.tag}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
