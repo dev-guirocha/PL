@@ -32,5 +32,5 @@ const PAYOUTS = {
 };
 
 // Exporta de forma compatível com CommonJS (backend) e default/named (frontend)
-module.exports = { PAYOUTS };
-module.exports.default = PAYOUTS;
+exports.PAYOUTS = PAYOUTS;
+exports.default = PAYOUTS;
