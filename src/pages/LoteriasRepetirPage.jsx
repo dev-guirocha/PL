@@ -82,7 +82,7 @@ const LoteriasRepetirPage = () => {
       },
     };
     setDraft(newDraft);
-    toast.success(`PULE ${payload.repeatSource.betRef} carregada. Informe o valor e prossiga.`);
+    toast.success(`PULE ${newDraft.repeatSource.betRef} carregada. Informe o valor e prossiga.`);
     navigate('/loterias/repetir/valor');
   };
 
