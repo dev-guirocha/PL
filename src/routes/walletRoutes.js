@@ -7,5 +7,7 @@ router.use(authMiddleware);
 
 router.get('/me', walletController.me);
 router.post('/deposit', walletController.deposit);
+router.post('/withdraw', walletController.requestWithdrawal);
+router.get('/withdraws', walletController.listMyWithdrawals);
 
 module.exports = router;

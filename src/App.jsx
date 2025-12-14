@@ -34,6 +34,7 @@ import PixRechargePage from './pages/PixRechargePage';
 import LoteriasRepetirPage from './pages/LoteriasRepetirPage';
 import LoteriasRepetirValorPage from './pages/LoteriasRepetirValorPage';
 import LoteriasRepetirDatePage from './pages/LoteriasRepetirDatePage';
+import WithdrawPage from './pages/WithdrawPage';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
@@ -87,6 +88,7 @@ function App() {
           <Route path="relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
           <Route path="relatorios/pules-resultado" element={<ResultPulesPage />} />
           <Route path="pix/recarga" element={<PixRechargePage />} />
+          <Route path="saque" element={<WithdrawPage />} />
         </Route>
 
         <Route

@@ -73,3 +73,44 @@ exports.deposit = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao registrar depósito.' });
   }
 };
+
+exports.requestWithdrawal = async (req, res) => {
+  const parsed = amountSchema.safeParse(req.body.amount);
+  if (!parsed.success) {
+    const message = parsed.error.errors?.[0]?.message || 'Valor inválido.';
+    return res.status(400).json({ error: message });
+  }
+  const value = parsed.data;
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { id: true, balance: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (Number(user.balance || 0) < value) return res.status(400).json({ error: 'Saldo insuficiente.' });
+
+    const request = await prisma.withdrawalRequest.create({
+      data: { userId: req.userId, amount: value, status: 'pending' },
+      select: { id: true, amount: true, status: true, createdAt: true },
+    });
+
+    return res.status(201).json({ request });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao solicitar saque.' });
+  }
+};
+
+exports.listMyWithdrawals = async (req, res) => {
+  try {
+    const requests = await prisma.withdrawalRequest.findMany({
+      where: { userId: req.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, amount: true, status: true, createdAt: true },
+    });
+    return res.json({ withdrawals: requests });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar saques.' });
+  }
+};

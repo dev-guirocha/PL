@@ -645,23 +645,41 @@ exports.updateWithdrawalStatus = async (req, res) => {
     const withdrawal = await prisma.withdrawalRequest.findUnique({ where: { id: Number(id) } });
     if (!withdrawal) return res.status(404).json({ error: 'Solicitação não encontrada.' });
 
-    await prisma.withdrawalRequest.update({ where: { id: withdrawal.id }, data: { status } });
+    // Evita processar pagamento duas vezes
+    if (withdrawal.status === 'paid' && status === 'paid') {
+      return res.json({ message: 'Já pago.' });
+    }
 
-    // Log simples em transactions quando marcado como paid
     if (status === 'paid') {
-      await prisma.transaction.create({
-        data: {
-          userId: withdrawal.userId,
-          type: 'withdraw',
-          amount: -Math.abs(withdrawal.amount),
-          description: 'Saque pago (admin)',
-        },
+      // Debita saldo e registra transação
+      const result = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({ where: { id: withdrawal.userId }, select: { balance: true } });
+        if (!user || Number(user.balance || 0) < Number(withdrawal.amount || 0)) {
+          throw new Error('Saldo insuficiente para pagar o saque.');
+        }
+        await tx.user.update({
+          where: { id: withdrawal.userId },
+          data: { balance: { decrement: withdrawal.amount } },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: withdrawal.userId,
+            type: 'withdraw',
+            amount: -Math.abs(withdrawal.amount),
+            description: 'Saque pago (admin)',
+          },
+        });
+        await tx.withdrawalRequest.update({ where: { id: withdrawal.id }, data: { status } });
+        return true;
       });
+    } else {
+      await prisma.withdrawalRequest.update({ where: { id: withdrawal.id }, data: { status } });
     }
 
     return res.json({ message: 'Status atualizado.' });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao atualizar saque.' });
+    const msg = err.message || 'Erro ao atualizar saque.';
+    return res.status(500).json({ error: msg });
   }
 };
 

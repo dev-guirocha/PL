@@ -16,6 +16,7 @@ const navLinks = [
 const extraMenuLinks = [
   { label: 'Relatórios', icon: <FaChartBar />, path: '/relatorios' },
   { label: 'Consulta saldo', icon: <FaWallet />, path: '/relatorios/consulta-saldo' },
+  { label: 'Solicitar saque', icon: <FaWallet />, path: '/saque' },
 ];
 
 const UserLayout = ({ children }) => {
