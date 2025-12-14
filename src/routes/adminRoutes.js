@@ -10,6 +10,7 @@ router.use(authMiddleware, adminOnly);
 router.get('/stats', adminController.stats);
 router.get('/bets', adminController.listBets);
 router.get('/users', adminController.listUsers);
+router.patch('/users/:id/roles', adminController.updateUserRoles);
 router.delete('/users/:id', adminController.deleteUser);
 router.delete('/users', adminController.deleteUser);
 

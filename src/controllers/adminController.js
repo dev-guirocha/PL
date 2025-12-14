@@ -462,7 +462,7 @@ exports.listUsers = async (req, res) => {
   const skip = (page - 1) * pageSize;
 
   try {
-    const [users, total] = await prisma.$transaction([
+    const [users, total, supervisors] = await prisma.$transaction([
       prisma.user.findMany({
         orderBy: { createdAt: 'desc' },
         skip,
@@ -474,16 +474,43 @@ exports.listUsers = async (req, res) => {
           balance: true,
           bonus: true,
           createdAt: true,
+          isAdmin: true,
         },
       }),
       prisma.user.count(),
+      prisma.supervisor.findMany({ select: { id: true, phone: true, name: true, code: true } }),
     ]);
 
+    const supPhones = new Set(
+      supervisors
+        .map((s) => String(s.phone || '').replace(/\D/g, ''))
+        .filter(Boolean),
+    );
+
+    const enhancedUsers = users.map((u) => {
+      const phoneClean = String(u.phone || '').replace(/\D/g, '');
+      return {
+        ...u,
+        isSupervisor: supPhones.has(phoneClean),
+      };
+    });
+
     const hasMore = skip + users.length < total;
-    return res.json({ users, page, pageSize, total, hasMore });
+    return res.json({ users: enhancedUsers, supervisors, page, pageSize, total, hasMore });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar usuários.' });
   }
+};
+
+const generateSupervisorCode = (name, preferred = '') => {
+  const base = preferred ? String(preferred).trim().toUpperCase() : '';
+  const namePart = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 6);
+  const suffix = Math.floor(100 + Math.random() * 900);
+  const sanitized = base.replace(/^99/, '') || namePart || 'SUP';
+  return `99${sanitized}${suffix}`;
 };
 
 exports.deleteUser = async (req, res) => {
@@ -522,14 +549,7 @@ exports.createSupervisor = async (req, res) => {
     return res.status(400).json({ error: 'Informe o nome do supervisor.' });
   }
   try {
-    const base = code ? String(code).trim().toUpperCase() : '';
-    const namePart = String(name)
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 6);
-    const suffix = Math.floor(100 + Math.random() * 900); // 3 dígitos
-    const sanitized = base.replace(/^99/, '') || namePart || 'SUP';
-    const finalCode = `99${sanitized}${suffix}`;
+    const finalCode = generateSupervisorCode(name, code);
 
     const supervisor = await prisma.supervisor.create({
       data: { name, phone: phone || null, code: finalCode },
@@ -914,5 +934,66 @@ exports.updateSupervisor = async (req, res) => {
   } catch (err) {
     console.error('Erro ao atualizar supervisor', err);
     return res.status(500).json({ error: 'Erro ao atualizar supervisor.' });
+  }
+};
+
+exports.updateUserRoles = async (req, res) => {
+  const { id } = req.params;
+  const userId = Number(id);
+  if (!userId || Number.isNaN(userId)) return res.status(400).json({ error: 'ID inválido.' });
+
+  const { isAdmin, makeSupervisor } = req.body || {};
+  if (typeof isAdmin === 'undefined' && !makeSupervisor) {
+    return res.status(400).json({ error: 'Nenhuma alteração informada.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    let supervisor = null;
+
+    if (makeSupervisor) {
+      const phoneClean = String(user.phone || '').replace(/\D/g, '');
+      supervisor =
+        (await prisma.supervisor.findFirst({
+          where: {
+            OR: [{ phone: phoneClean || null }, { name: user.name }],
+          },
+        })) ||
+        (await prisma.supervisor.create({
+          data: {
+            name: user.name || `Supervisor ${user.id}`,
+            phone: phoneClean || null,
+            code: generateSupervisorCode(user.name),
+          },
+        }));
+    }
+
+    let updatedUser = user;
+    if (typeof isAdmin === 'boolean') {
+      updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { isAdmin },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          balance: true,
+          bonus: true,
+          createdAt: true,
+          isAdmin: true,
+        },
+      });
+    }
+
+    return res.json({
+      user: { ...updatedUser, isSupervisor: Boolean(supervisor) },
+      supervisor,
+      message: 'Usuário atualizado.',
+    });
+  } catch (err) {
+    console.error('Erro ao atualizar papéis do usuário', err);
+    return res.status(500).json({ error: 'Erro ao atualizar usuário.' });
   }
 };
