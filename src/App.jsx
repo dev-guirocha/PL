@@ -1,5 +1,5 @@
 // src/App.jsx
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AuthPage from './pages/AuthPage';
 import HomePage from './pages/HomePage';
@@ -25,13 +25,14 @@ import QuotesPage from './pages/QuotesPage';
 import QuoteDetailPage from './pages/QuoteDetailPage';
 import ResultPulesPage from './pages/ResultPulesPage';
 import { ToastContainer } from 'react-toastify';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import AdminBetsPage from './pages/admin/AdminBetsPage';
-import AdminSupervisorsPage from './pages/admin/AdminSupervisorsPage';
-import AdminResultsPage from './pages/admin/AdminResultsPage';
-import AdminWithdrawalsPage from './pages/admin/AdminWithdrawalsPage';
-import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+import Spinner from './components/Spinner';
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const AdminBetsPage = lazy(() => import('./pages/admin/AdminBetsPage'));
+const AdminSupervisorsPage = lazy(() => import('./pages/admin/AdminSupervisorsPage'));
+const AdminResultsPage = lazy(() => import('./pages/admin/AdminResultsPage'));
+const AdminWithdrawalsPage = lazy(() => import('./pages/admin/AdminWithdrawalsPage'));
+const AdminCouponsPage = lazy(() => import('./pages/admin/AdminCouponsPage'));
 import SupervisorDashboard from './pages/SupervisorDashboard';
 import UserLayout from './components/UserLayout';
 import PixRechargePage from './pages/PixRechargePage';
@@ -59,7 +60,13 @@ const RequireAdmin = ({ children }) => {
 
 function App() {
   return (
-    <>
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <Spinner />
+        </div>
+      }
+    >
       <Routes>
         <Route path="/" element={<AuthPage />} />
 
@@ -160,7 +167,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-    </>
+    </Suspense>
   );
 }
 

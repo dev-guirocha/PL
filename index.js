@@ -3,6 +3,8 @@ require('dotenv').config(); // Para ler o .env
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const compression = require('compression');
 const authRoutes = require('./src/routes/authRoutes');
 const walletRoutes = require('./src/routes/walletRoutes');
 const pixRoutes = require('./src/routes/pixRoutes');
@@ -33,6 +35,9 @@ const wildcardOrigins = [
 ];
 const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
+
+app.use(helmet());
+app.use(compression());
 
 app.use(
   cors({

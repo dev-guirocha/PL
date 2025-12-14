@@ -88,7 +88,7 @@ const LoteriasSeninhaPage = () => {
   const premioEstimado = (Number(valorAposta) || 0) * multiplicador;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 pb-24 font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 pb-32 font-sans">
       <div className="w-full max-w-lg flex items-center justify-between mb-4">
         <button onClick={() => navigate('/loterias')} className="text-emerald-700 font-bold">
           Voltar
@@ -171,6 +171,20 @@ const LoteriasSeninhaPage = () => {
         <button onClick={handleFinalize} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 transition">
           Confirmar Aposta
         </button>
+      </div>
+      <div className="fixed bottom-0 left-0 w-full bg-white border-t border-emerald-100 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-50">
+        <div className="flex justify-between items-center max-w-lg mx-auto">
+          <div className="text-sm">
+            <p className="text-gray-500">Prêmio Estimado</p>
+            <p className="font-bold text-emerald-700 text-lg">R$ {premioEstimado.toFixed(2)}</p>
+          </div>
+          <button
+            onClick={handleFinalize}
+            className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow hover:bg-emerald-700 transition"
+          >
+            Confirmar
+          </button>
+        </div>
       </div>
     </div>
   );
