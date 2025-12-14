@@ -9,7 +9,7 @@ const ResultPulesPage = () => {
   const [pules, setPules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [filterLottery, setFilterLottery] = useState('');
   const [filterHorario, setFilterHorario] = useState('');
 
@@ -53,7 +53,7 @@ const ResultPulesPage = () => {
   };
 
   useEffect(() => {
-    // limpa lista até que filtros sejam preenchidos
+    // limpa lista até que filtros sejam preenchidos; data já inicia como hoje
     setPules([]);
   }, []);
 

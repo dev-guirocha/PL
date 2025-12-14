@@ -26,10 +26,11 @@ const LOTERIAS = [
 ];
 
 const AdminResultsPage = () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     loteria: '',
     horario: '',
-    data: '',
+    data: todayStr,
     n1: '',
     n2: '',
     n3: '',
@@ -57,7 +58,7 @@ const AdminResultsPage = () => {
   const selectedLottery = LOTERIAS.find((l) => l.code === form.loteria);
   const horariosDisponiveis = selectedLottery?.horarios || [];
   const codigoPreview = form.loteria && form.horario ? `${form.loteria} ${form.horario}` : '';
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, setFilterDate] = useState(todayStr);
   const [filterLottery, setFilterLottery] = useState('');
 
   const fetchResults = async ({ loteria = filterLottery, date = filterDate } = {}) => {
