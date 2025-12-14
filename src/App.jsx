@@ -22,7 +22,6 @@ import QuoteDetailPage from './pages/QuoteDetailPage';
 import ResultPulesPage from './pages/ResultPulesPage';
 import { ToastContainer } from 'react-toastify';
 import AdminDashboard from './pages/AdminDashboard';
-import { AuthProvider } from './context/AuthContext';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminBetsPage from './pages/admin/AdminBetsPage';
 import AdminSupervisorsPage from './pages/admin/AdminSupervisorsPage';
@@ -52,7 +51,7 @@ const RequireAdmin = ({ children }) => {
 
 function App() {
   return (
-    <AuthProvider>
+    <>
       <Routes>
         <Route path="/" element={<AuthPage />} />
 
@@ -145,7 +144,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-    </AuthProvider>
+    </>
   );
 }
 
