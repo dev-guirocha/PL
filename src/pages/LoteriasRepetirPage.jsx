@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR, formatDateTimeBR } from '../utils/date';
-import { updateDraft } from '../utils/receipt';
+import { setDraft } from '../utils/receipt';
 import api from '../utils/api';
 
 const LoteriasRepetirPage = () => {
@@ -48,19 +48,31 @@ const LoteriasRepetirPage = () => {
   const handleRepeat = (pule, ap) => {
     const valorBase = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? 0) || 0;
     const modoValor = ap?.modoValor || (ap?.palpites?.length > 1 ? 'cada' : 'todos');
-    const payload = {
-      jogo: null,
+    const newDraft = {
+      jogo: ap?.jogo || pule.loteria || '',
       slug: null,
-      data: null,
-      codigoHorario: null,
+      data: ap?.data || null,
+      codigoHorario: pule.codigoHorario || null,
       selecoes: [],
-      loteria: null,
+      loteria: pule.loteria || null,
       modalidade: ap?.modalidade || ap?.jogo || '',
       colocacao: ap?.colocacao || null,
       palpites: ap?.palpites || [],
       valorAposta: valorBase,
       modoValor,
       currentSaved: false,
+      apostas: [
+        {
+          ...ap,
+          data: ap?.data || null,
+          modalidade: ap?.modalidade || ap?.jogo || '',
+          colocacao: ap?.colocacao || null,
+          palpites: ap?.palpites || [],
+          valorAposta: valorBase,
+          modoValor,
+          total: ap?.total ?? valorBase,
+        },
+      ],
       repeatSource: {
         betId: pule.id,
         betRef: pule.betRef || `${pule.userId || ''}-${pule.id}`,
@@ -69,7 +81,7 @@ const LoteriasRepetirPage = () => {
         createdAt: pule.createdAt || null,
       },
     };
-    updateDraft(payload);
+    setDraft(newDraft);
     toast.success(`PULE ${payload.repeatSource.betRef} carregada. Informe o valor e prossiga.`);
     navigate('/loterias/repetir/valor');
   };

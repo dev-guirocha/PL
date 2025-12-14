@@ -23,6 +23,11 @@ export const updateDraft = (partial) => {
   return updated;
 };
 
+export const setDraft = (data) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(data || {}));
+};
+
 export const clearDraft = () => {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(DRAFT_KEY);
