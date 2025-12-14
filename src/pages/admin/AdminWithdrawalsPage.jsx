@@ -17,6 +17,7 @@ const AdminWithdrawalsPage = () => {
   const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
 
   const fetchWithdrawals = async () => {
     setLoading(true);
@@ -28,6 +29,20 @@ const AdminWithdrawalsPage = () => {
       setError('Erro ao carregar solicitações de saque.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateStatus = async (id, status) => {
+    if (!id || !status) return;
+    setUpdatingId(id);
+    setError('');
+    try {
+      await api.patch(`/admin/withdrawals/${id}/status`, { status });
+      await fetchWithdrawals();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao atualizar status.');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -69,10 +84,10 @@ const AdminWithdrawalsPage = () => {
           <Spinner size={40} />
         </div>
       ) : (
-        <AdminTable headers={['ID', 'Usuário', 'Valor', 'Pix (CPF)', 'Status', 'Criado em']}>
+        <AdminTable headers={['ID', 'Usuário', 'Valor', 'Pix (CPF)', 'Status', 'Criado em', 'Ações']}>
           {withdrawals.length === 0 ? (
             <AdminTableRow>
-              <AdminTableCell className="text-center text-slate-500" colSpan={6}>
+              <AdminTableCell className="text-center text-slate-500" colSpan={7}>
                 Nenhuma solicitação de saque.
               </AdminTableCell>
             </AdminTableRow>
@@ -87,6 +102,32 @@ const AdminWithdrawalsPage = () => {
                   <StatusBadge status={w.status || 'pending'} />
                 </AdminTableCell>
                 <AdminTableCell>{formatDateTime(w.createdAt)}</AdminTableCell>
+                <AdminTableCell className="space-y-1">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => updateStatus(w.id || w._id, 'approved')}
+                      disabled={updatingId === (w.id || w._id) || w.status === 'approved' || w.status === 'paid'}
+                      className="px-3 py-1 rounded-md bg-sky-600 text-white text-xs font-semibold hover:bg-sky-700 transition disabled:opacity-60"
+                    >
+                      {updatingId === (w.id || w._id) ? 'Salvando...' : 'Aprovar'}
+                    </button>
+                    <button
+                      onClick={() => updateStatus(w.id || w._id, 'rejected')}
+                      disabled={updatingId === (w.id || w._id) || w.status === 'rejected' || w.status === 'paid'}
+                      className="px-3 py-1 rounded-md bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition disabled:opacity-60"
+                    >
+                      Reprovar
+                    </button>
+                    <button
+                      onClick={() => updateStatus(w.id || w._id, 'paid')}
+                      disabled={updatingId === (w.id || w._id) || w.status === 'paid'}
+                      className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition disabled:opacity-60"
+                    >
+                      Marcar pago
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">Marcar pago pressupõe transferência manual já realizada.</p>
+                </AdminTableCell>
               </AdminTableRow>
             ))
           )}
