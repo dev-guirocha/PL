@@ -63,25 +63,25 @@ function App() {
             </RequireAuth>
           }
         >
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/perfil" element={<ProfilePage />} />
-          <Route path="/configuracoes" element={<SettingsPage />} />
-          <Route path="/loterias" element={<LoteriasPage />} />
-          <Route path="/loterias/:jogo" element={<LoteriasDatePage />} />
-          <Route path="/loterias/:jogo/modalidades" element={<LoteriasModalidadesPage />} />
-          <Route path="/loterias/:jogo/colocacao" element={<LoteriasColocacaoPage />} />
-          <Route path="/loterias/:jogo/palpites" element={<LoteriasPalpitesPage />} />
-          <Route path="/loterias/:jogo/valor" element={<LoteriasValorPage />} />
-          <Route path="/loterias/:jogo/resumo" element={<LoteriasResumoPage />} />
-          <Route path="/loterias-sorteios" element={<LoteriasSorteiosPage />} />
-          <Route path="/loterias-final" element={<LoteriasFinalPage />} />
-          <Route path="/pules" element={<PulesPage />} />
-          <Route path="/relatorios" element={<ReportsPage />} />
-          <Route path="/relatorios/consulta-saldo" element={<BalanceReportPage />} />
-          <Route path="/relatorios/cotacoes" element={<QuotesPage />} />
-          <Route path="/relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
-          <Route path="/relatorios/pules-resultado" element={<ResultPulesPage />} />
-          <Route path="/pix/recarga" element={<PixRechargePage />} />
+          <Route path="home" element={<HomePage />} />
+          <Route path="perfil" element={<ProfilePage />} />
+          <Route path="configuracoes" element={<SettingsPage />} />
+          <Route path="loterias" element={<LoteriasPage />} />
+          <Route path="loterias/:jogo" element={<LoteriasDatePage />} />
+          <Route path="loterias/:jogo/modalidades" element={<LoteriasModalidadesPage />} />
+          <Route path="loterias/:jogo/colocacao" element={<LoteriasColocacaoPage />} />
+          <Route path="loterias/:jogo/palpites" element={<LoteriasPalpitesPage />} />
+          <Route path="loterias/:jogo/valor" element={<LoteriasValorPage />} />
+          <Route path="loterias/:jogo/resumo" element={<LoteriasResumoPage />} />
+          <Route path="loterias-sorteios" element={<LoteriasSorteiosPage />} />
+          <Route path="loterias-final" element={<LoteriasFinalPage />} />
+          <Route path="pules" element={<PulesPage />} />
+          <Route path="relatorios" element={<ReportsPage />} />
+          <Route path="relatorios/consulta-saldo" element={<BalanceReportPage />} />
+          <Route path="relatorios/cotacoes" element={<QuotesPage />} />
+          <Route path="relatorios/cotacoes/:slug" element={<QuoteDetailPage />} />
+          <Route path="relatorios/pules-resultado" element={<ResultPulesPage />} />
+          <Route path="pix/recarga" element={<PixRechargePage />} />
         </Route>
 
         <Route
