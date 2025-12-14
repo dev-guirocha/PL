@@ -133,7 +133,7 @@ const AdminBetsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalityFilter, setModalityFilter] = useState('ALL');
-  const [viewMode, setViewMode] = useState('active');
+  const [viewMode, setViewMode] = useState('active'); // active | archive | archiveWon
   const [selectedFolder, setSelectedFolder] = useState('ALL');
 
   const fetchBets = async () => {
@@ -174,24 +174,29 @@ const AdminBetsPage = () => {
     return bets.filter((bet) => matchesFilter(extractModalities(bet), modalityFilter));
   }, [bets, modalityFilter]);
 
-  const { activeBets, archivedBets } = useMemo(() => {
+  const { activeBets, archivedBets, archivedWon } = useMemo(() => {
     const active = [];
     const archived = [];
+    const archivedWinners = [];
     filteredBets.forEach((bet) => {
       const status = computeStatus(bet);
       const extended = { ...bet, displayStatus: status };
       if (status === 'nao premiado') {
         archived.push(extended);
+      } else if (status === 'won' || status === 'paid') {
+        archivedWinners.push(extended);
       } else {
         active.push(extended);
       }
     });
-    return { activeBets: active, archivedBets: archived };
+    return { activeBets: active, archivedBets: archived, archivedWon: archivedWinners };
   }, [filteredBets]);
+
+  const currentArchived = viewMode === 'archiveWon' ? archivedWon : archivedBets;
 
   const archiveFolders = useMemo(() => {
     const groups = {};
-    archivedBets.forEach((bet) => {
+    currentArchived.forEach((bet) => {
       const code = extractCode(bet);
       const key = code && code !== '—' ? code : 'SEM CÓDIGO';
       if (!groups[key]) groups[key] = { code: key, count: 0, total: 0 };
@@ -199,24 +204,24 @@ const AdminBetsPage = () => {
       groups[key].total += Number(bet.total) || Number(bet.valor) || 0;
     });
     return Object.values(groups).sort((a, b) => a.code.localeCompare(b.code));
-  }, [archivedBets]);
+  }, [currentArchived]);
 
   useEffect(() => {
     if (selectedFolder !== 'ALL' && !archiveFolders.some((f) => f.code === selectedFolder)) {
       setSelectedFolder('ALL');
     }
-  }, [archiveFolders, selectedFolder]);
+  }, [archiveFolders, selectedFolder, viewMode]);
 
   const visibleArchivedBets = useMemo(() => {
-    if (selectedFolder === 'ALL') return archivedBets;
-    return archivedBets.filter((bet) => {
+    if (selectedFolder === 'ALL') return currentArchived;
+    return currentArchived.filter((bet) => {
       const code = extractCode(bet);
       const key = code && code !== '—' ? code : 'SEM CÓDIGO';
       return key === selectedFolder;
     });
-  }, [archivedBets, selectedFolder]);
+  }, [currentArchived, selectedFolder]);
 
-  const visibleBets = viewMode === 'archive' ? visibleArchivedBets : activeBets;
+  const visibleBets = viewMode === 'active' ? activeBets : visibleArchivedBets;
 
   const totalValue = visibleBets.reduce((acc, b) => acc + (Number(b.total) || Number(b.valor) || 0), 0);
 
@@ -335,14 +340,26 @@ const AdminBetsPage = () => {
         >
           <FaArchive /> Arquivadas (status Não premiada)
         </button>
-        <span className="text-xs text-slate-500">Apostas com status &quot;Não premiada&quot; saem da lista ativa automaticamente.</span>
+        <button
+          onClick={() => setViewMode('archiveWon')}
+          className={`px-3 py-1 rounded-full border text-sm font-semibold transition flex items-center gap-2 ${
+            viewMode === 'archiveWon'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : 'bg-white text-slate-700 border-slate-200 hover:border-amber-300'
+          }`}
+        >
+          <FaArchive /> Arquivadas (premiadas)
+        </button>
+        <span className="text-xs text-slate-500">
+          Apostas com status &quot;Não premiada&quot; ou &quot;Ganhou&quot; saem da lista ativa automaticamente.
+        </span>
       </div>
 
       <div className="mb-3 text-sm text-slate-600">
-        {viewMode === 'archive' ? 'Total arquivado exibido:' : 'Total exibido:'}{' '}
+        {viewMode === 'active' ? 'Total exibido:' : 'Total arquivado exibido:'}{' '}
         <span className="font-semibold text-emerald-700">{formatCurrency(totalValue)}</span> | Apostas:{' '}
         <span className="font-semibold text-slate-800">{visibleBets.length}</span>
-        {viewMode === 'archive' && selectedFolder !== 'ALL' && (
+        {viewMode !== 'active' && selectedFolder !== 'ALL' && (
           <span className="text-slate-500 text-xs ml-2">Pasta: {selectedFolder}</span>
         )}
       </div>
@@ -353,7 +370,7 @@ const AdminBetsPage = () => {
         </div>
       ) : (
         <>
-          {viewMode === 'archive' ? (
+          {viewMode !== 'active' ? (
             <div className="grid md:grid-cols-[260px_1fr] gap-4">
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-3 h-fit">
                 <div className="flex items-center gap-2 mb-3">
@@ -362,7 +379,9 @@ const AdminBetsPage = () => {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-800">Pastas de arquivados</p>
-                    <p className="text-xs text-slate-500">Agrupados pelo código/horário da aposta.</p>
+                    <p className="text-xs text-slate-500">
+                      {viewMode === 'archive' ? 'Agrupados pelo código/horário (não premiadas).' : 'Agrupados pelo código/horário (premiadas).'}
+                    </p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -374,7 +393,7 @@ const AdminBetsPage = () => {
                         : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-200'
                     }`}
                   >
-                    Todas as pastas ({archivedBets.length})
+                    Todas as pastas ({currentArchived.length})
                   </button>
                   {archiveFolders.length === 0 ? (
                     <p className="text-xs text-slate-500 px-1">Nenhuma aposta arquivada ainda.</p>
