@@ -31,4 +31,5 @@ const PAYOUTS = {
   'PASSE VAI VEM': 55,
 };
 
-module.exports = { PAYOUTS };
+// Exporta como CommonJS para backend e permite import default no front
+module.exports = PAYOUTS;
