@@ -11,7 +11,6 @@ const ResultPulesPage = () => {
   const [error, setError] = useState('');
   const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [filterLottery, setFilterLottery] = useState('');
-  const [filterHorario, setFilterHorario] = useState('');
 
   const LOTERIAS = [
     'LT PT RIO',
@@ -33,16 +32,16 @@ const ResultPulesPage = () => {
     'LT URUGUAI',
   ];
 
-  const fetchPules = async ({ loteria = filterLottery, date = filterDate, horario = filterHorario } = {}) => {
-    if (!date || !loteria || !horario) {
-      setError('Selecione data, loteria e horário.');
+  const fetchPules = async ({ loteria = filterLottery, date = filterDate } = {}) => {
+    if (!date || !loteria) {
+      setError('Selecione data e loteria.');
       setPules([]);
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/bets/result-pules', { params: { take: 100, skip: 0, loteria, date, horario } });
+      const res = await api.get('/bets/result-pules', { params: { take: 100, skip: 0, loteria, date } });
       const list = res.data?.pules || [];
       setPules(list);
     } catch (err) {
@@ -112,7 +111,7 @@ const ResultPulesPage = () => {
       )}
 
       <div className="mx-auto mt-4 max-w-5xl rounded-xl border border-emerald-100 bg-white px-4 py-3 shadow">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
             <input
@@ -137,25 +136,10 @@ const ResultPulesPage = () => {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Horário</label>
-            <select
-              value={filterHorario}
-              onChange={(e) => setFilterHorario(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-            >
-              <option value="">Selecione</option>
-              {['07HS', '08HS', '09HS', '10HS', '11HS', '12HS', '13HS', '14HS', '15HS', '16HS', '17HS', '18HS', '19HS', '20HS', '21HS', '22HS', '23HS'].map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         <div className="mt-3 flex gap-2">
           <button
-            onClick={() => fetchPules({ loteria: filterLottery, date: filterDate, horario: filterHorario })}
+            onClick={() => fetchPules({ loteria: filterLottery, date: filterDate })}
             className="rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             disabled={loading}
           >
@@ -165,7 +149,6 @@ const ResultPulesPage = () => {
             onClick={() => {
               setFilterDate('');
               setFilterLottery('');
-              setFilterHorario('');
               setPules([]);
               setError('');
             }}
