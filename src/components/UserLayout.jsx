@@ -28,6 +28,7 @@ const UserLayout = ({ children }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { canInstall, promptInstall } = useInstallPrompt();
 
+  const activePath = useMemo(() => location.pathname, [location.pathname]);
   const numericBalance = Number(balance ?? 0);
   const numericBonus = Number(bonus ?? 0);
 
@@ -40,8 +41,6 @@ const UserLayout = ({ children }) => {
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
   }, [activePath]);
-
-  const activePath = useMemo(() => location.pathname, [location.pathname]);
 
   const handleNav = (path) => {
     navigate(path);
