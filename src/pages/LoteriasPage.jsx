@@ -80,6 +80,10 @@ const LoteriasPage = () => {
             key={item.title}
             style={styles.card}
             onClick={() => {
+              if (item.slug === 'repetir-pule') {
+                navigate('/loterias/repetir');
+                return;
+              }
               const route = `/loterias/${item.slug}`;
               updateDraft({
                 jogo: item.title,

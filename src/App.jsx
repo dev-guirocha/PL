@@ -31,6 +31,7 @@ import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import SupervisorDashboard from './pages/SupervisorDashboard';
 import UserLayout from './components/UserLayout';
 import PixRechargePage from './pages/PixRechargePage';
+import LoteriasRepetirPage from './pages/LoteriasRepetirPage';
 
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
@@ -66,6 +67,7 @@ function App() {
           <Route path="perfil" element={<ProfilePage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="loterias" element={<LoteriasPage />} />
+          <Route path="loterias/repetir" element={<LoteriasRepetirPage />} />
           <Route path="loterias/:jogo" element={<LoteriasDatePage />} />
           <Route path="loterias/:jogo/modalidades" element={<LoteriasModalidadesPage />} />
           <Route path="loterias/:jogo/colocacao" element={<LoteriasColocacaoPage />} />
