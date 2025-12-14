@@ -125,6 +125,19 @@ const normalizeMilhar = (val) => {
   return digits.slice(-4).padStart(4, '0');
 };
 
+const normalizeDezena = (val) => {
+  const digits = String(val || '').replace(/\D/g, '');
+  return digits.slice(-2).padStart(2, '0');
+};
+
+const getNormalizerForGame = (loteriaStr) => {
+  const nome = (loteriaStr || '').toUpperCase();
+  if (nome.includes('QUININHA') || nome.includes('SENINHA') || nome.includes('SUPER')) {
+    return normalizeDezena;
+  }
+  return normalizeMilhar;
+};
+
 const getSlice = (milhar, type) => {
   const m = normalizeMilhar(milhar);
   switch (type) {
@@ -719,21 +732,27 @@ exports.createResult = async (req, res) => {
   }
 
   try {
-    const numerosNorm = numeros.map((n) => normalizeMilhar(n));
+    const normalizer = getNormalizerForGame(loteria);
+    const numerosNorm = numeros.map((n) => normalizer(n));
     let gruposFinal = [];
-    try {
-      gruposFinal = Array.isArray(grupos) ? grupos : JSON.parse(grupos || '[]');
-    } catch {
+    const isLoteriaNumerica = (loteria || '').toUpperCase().match(/QUININHA|SENINHA|SUPER/);
+
+    if (!isLoteriaNumerica) {
+      try {
+        gruposFinal = Array.isArray(grupos) ? grupos : JSON.parse(grupos || '[]');
+      } catch {
+        gruposFinal = [];
+      }
+      if (!gruposFinal.length || gruposFinal.length < numerosNorm.length) {
+        gruposFinal = numerosNorm.map((n, idx) => {
+          const provided = gruposFinal[idx];
+          if (provided) return provided;
+          const g = getGrupo(n);
+          return g ? String(g).padStart(2, '0') : null;
+        });
+      }
+    } else {
       gruposFinal = [];
-    }
-    // Se grupos não vieram ou estão incompletos, calcula a partir da dezena.
-    if (!gruposFinal.length || gruposFinal.length < numerosNorm.length) {
-      gruposFinal = numerosNorm.map((n, idx) => {
-        const provided = gruposFinal[idx];
-        if (provided) return provided;
-        const g = getGrupo(n);
-        return g ? String(g).padStart(2, '0') : null;
-      });
     }
 
     const created = await prisma.result.create({
