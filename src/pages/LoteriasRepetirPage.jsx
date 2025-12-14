@@ -64,7 +64,7 @@ const LoteriasRepetirPage = () => {
     };
     updateDraft(payload);
     toast.success('Números carregados. Escolha a loteria e finalize a aposta.');
-    navigate('/loterias');
+    navigate('/loterias/repetir/valor');
   };
 
   const filteredBets = useMemo(() => {
