@@ -39,21 +39,30 @@ exports.stats = async (req, res) => {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   try {
-    const [usersCount, betsCount, balanceAgg, depositsAgg, betsAgg, withdrawalsAgg, activeUsersGroup] = await Promise.all([
+    const [usersCount, betsCount, balanceAgg, depositsAgg, betsAgg, withdrawalsAgg, pendingWithdrawalsAgg, activeUsersGroup] = await Promise.all([
       prisma.user.count(),
       prisma.bet.count(),
       prisma.user.aggregate({ _sum: { balance: true, bonus: true } }),
       prisma.transaction.aggregate({ where: { type: 'deposit' }, _sum: { amount: true } }),
       prisma.transaction.aggregate({ where: { type: 'bet' }, _sum: { amount: true } }),
       prisma.transaction.aggregate({ where: { type: 'withdraw' }, _sum: { amount: true } }),
+      prisma.withdrawalRequest.aggregate({
+        where: { status: { in: ['pending', 'approved'] } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
       prisma.bet.groupBy({ by: ['userId'], where: { createdAt: { gte: thirtyDaysAgo } } }),
     ]);
 
     const totalDeposits = depositsAgg._sum.amount || 0;
     const totalBetsOut = Math.abs(betsAgg._sum.amount || 0); // são negativos
     const totalWithdrawals = Math.abs(withdrawalsAgg._sum.amount || 0);
-    const totalBalance = balanceAgg._sum.balance || 0;
-    const totalBonus = balanceAgg._sum.bonus || 0;
+    const totalBalance = Number(balanceAgg._sum.balance || 0);
+    const totalBonus = Number(balanceAgg._sum.bonus || 0);
+    const pendingWithdrawals = {
+      amount: Number(pendingWithdrawalsAgg._sum.amount || 0),
+      count: pendingWithdrawalsAgg._count?._all || 0,
+    };
     const activeUsers = activeUsersGroup.length;
     const platformFunds = totalBetsOut; // total apostado na plataforma
 
@@ -69,6 +78,7 @@ exports.stats = async (req, res) => {
       platformFunds, // total apostado
       moneyIn: { deposits: totalDeposits },
       moneyOut: { bets: totalBetsOut, withdrawals: totalWithdrawals },
+      pendingWithdrawals,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao carregar estatísticas admin.' });

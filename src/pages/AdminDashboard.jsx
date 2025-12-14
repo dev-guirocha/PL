@@ -92,8 +92,8 @@ const AdminDashboard = () => {
             />
             <StatCard
               title="Saques Pendentes"
-              value={formatCurrency(stats?.moneyOut?.withdrawals)}
-              subtext={`Carteiras (saldo+bonus): ${formatCurrency(stats?.wallets?.total || 0)}`}
+              value={formatCurrency(stats?.pendingWithdrawals?.amount)}
+              subtext={`Qtd: ${stats?.pendingWithdrawals?.count || 0} | Carteiras: ${formatCurrency(stats?.wallets?.total || 0)}`}
               icon={<FaExchangeAlt />}
               color="amber"
             />
