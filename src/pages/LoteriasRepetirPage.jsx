@@ -61,9 +61,16 @@ const LoteriasRepetirPage = () => {
       valorAposta: valorBase,
       modoValor,
       currentSaved: false,
+      repeatSource: {
+        betId: pule.id,
+        betRef: pule.betRef || `${pule.userId || ''}-${pule.id}`,
+        loteria: pule.loteria || null,
+        codigoHorario: pule.codigoHorario || null,
+        createdAt: pule.createdAt || null,
+      },
     };
     updateDraft(payload);
-    toast.success('Números carregados. Escolha a loteria e finalize a aposta.');
+    toast.success(`PULE ${payload.repeatSource.betRef} carregada. Informe o valor e prossiga.`);
     navigate('/loterias/repetir/valor');
   };
 

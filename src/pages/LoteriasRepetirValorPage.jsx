@@ -11,6 +11,7 @@ const LoteriasRepetirValorPage = () => {
   const [draft, setDraft] = useState({});
   const [valor, setValor] = useState('');
   const [modoValor, setModoValor] = useState('todos');
+  const source = draft?.repeatSource;
 
   useEffect(() => {
     refreshUser();
@@ -71,6 +72,14 @@ const LoteriasRepetirValorPage = () => {
 
       <Card className="w-full max-w-lg flex flex-col gap-4 mt-4">
         <h2 className="text-xl font-bold text-emerald-800 border-b pb-2">Repetir PULE - Valor</h2>
+
+        {source && (
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <div className="font-semibold">PULE selecionada: {source.betRef}</div>
+            {source.loteria && <div>Loteria original: {source.loteria}</div>}
+            {source.codigoHorario && <div>Horário original: {source.codigoHorario}</div>}
+          </div>
+        )}
 
         {draft?.apostas?.map((ap, idx) => (
           <div key={idx} className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-800 text-sm flex flex-col gap-1">

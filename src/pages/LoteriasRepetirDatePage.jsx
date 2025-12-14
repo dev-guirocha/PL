@@ -110,6 +110,9 @@ const LoteriasRepetirDatePage = () => {
 
       <div style={styles.card}>
         <div style={{ fontWeight: 'bold', color: '#166534', fontSize: '19px' }}>Repetir PULE - Data</div>
+        {getDraft()?.repeatSource?.betRef && (
+          <div style={{ color: '#166534', fontSize: '13px', fontWeight: 'bold' }}>PULE selecionada: {getDraft().repeatSource.betRef}</div>
+        )}
         <div style={{ color: '#6b7280', fontSize: '13px' }}>Escolha uma data (hoje ou até 2 dias à frente).</div>
         <div style={styles.daysGrid}>
           {days.map((d) => (
