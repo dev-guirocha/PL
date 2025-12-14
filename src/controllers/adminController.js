@@ -1,5 +1,5 @@
 const prisma = require('../prisma');
-const { PAYOUTS } = require('../constants/payouts');
+const PAYOUTS = require('../constants/payouts.json');
 
 const parseIntParam = (value, fallback) => {
   const n = Number(value);
