@@ -14,7 +14,11 @@ import LoteriasValorPage from './pages/LoteriasValorPage';
 import LoteriasResumoPage from './pages/LoteriasResumoPage';
 import LoteriasSorteiosPage from './pages/LoteriasSorteiosPage';
 import LoteriasFinalPage from './pages/LoteriasFinalPage';
+import LoteriasQuininhaPage from './pages/LoteriasQuininhaPage';
+import LoteriasSeninhaPage from './pages/LoteriasSeninhaPage';
+import LoteriasSuper15Page from './pages/LoteriasSuper15Page';
 import PulesPage from './pages/PulesPage';
+import WonBetsPage from './pages/WonBetsPage';
 import ReportsPage from './pages/ReportsPage';
 import BalanceReportPage from './pages/BalanceReportPage';
 import QuotesPage from './pages/QuotesPage';
@@ -81,7 +85,11 @@ function App() {
           <Route path="loterias/:jogo/resumo" element={<LoteriasResumoPage />} />
           <Route path="loterias-sorteios" element={<LoteriasSorteiosPage />} />
           <Route path="loterias-final" element={<LoteriasFinalPage />} />
+          <Route path="loterias/quininha/jogar" element={<LoteriasQuininhaPage />} />
+          <Route path="loterias/seninha/jogar" element={<LoteriasSeninhaPage />} />
+          <Route path="loterias/super15/jogar" element={<LoteriasSuper15Page />} />
           <Route path="pules" element={<PulesPage />} />
+          <Route path="premiadas" element={<WonBetsPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="relatorios/consulta-saldo" element={<BalanceReportPage />} />
           <Route path="relatorios/cotacoes" element={<QuotesPage />} />

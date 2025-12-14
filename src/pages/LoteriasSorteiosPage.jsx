@@ -1,10 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+
+const LOTERIAS_UM_DECIMO = ['lotece-lotep', 'bahia']; // LOTEP/LOTECE e Bahia/BA Maluca agrupadas
+const LOTERIAS_URUGUAIA = ['uruguaia'];
+const LOTERIAS_SENINHA = ['seninha'];
+const LOTERIAS_SUPER15 = ['super15'];
+const LOTERIAS_SENINHA = ['seninha'];
+const LOTERIAS_SUPER15 = ['super15'];
 
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
@@ -138,6 +145,28 @@ const LoteriasSorteiosPage = () => {
     }
   };
 
+  const loteriasExibidas = useMemo(() => {
+    const jogo = (draft?.jogo || '').toLowerCase();
+    const isUmDecimo = jogo.includes('1/10') || jogo.includes('1-10') || (draft?.slug || '').includes('1-10');
+    const isUruguaia = jogo.includes('uruguaia');
+    const isSeninha = jogo.includes('seninha');
+    const isSuper15 = jogo.includes('super 15') || jogo.includes('super15');
+    if (isUmDecimo) {
+      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_UM_DECIMO.includes(lot.slug));
+    }
+    if (isUruguaia) {
+      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_URUGUAIA.includes(lot.slug));
+    }
+    if (isSeninha) {
+      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_SENINHA.includes(lot.slug));
+    }
+    if (isSuper15) {
+      return LOTERIAS_SORTEIOS.filter((lot) => LOTERIAS_SUPER15.includes(lot.slug));
+    }
+    // Tradicional normal: exclui uruguaias para não misturar
+    return LOTERIAS_SORTEIOS.filter((lot) => !LOTERIAS_URUGUAIA.includes(lot.slug));
+  }, [draft]);
+
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -196,7 +225,7 @@ const LoteriasSorteiosPage = () => {
         ) : null}
 
         <div style={styles.list}>
-          {LOTERIAS_SORTEIOS.map((lot) => (
+          {loteriasExibidas.map((lot) => (
             <div
               key={lot.slug}
               style={styles.item}

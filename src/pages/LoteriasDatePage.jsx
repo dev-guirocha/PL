@@ -135,6 +135,18 @@ const LoteriasDatePage = () => {
           style={styles.action}
           onClick={() => {
             updateDraft({ data: selectedDate, jogo: gameTitle, slug: `/loterias/${jogo}` });
+            if (jogo === 'quininha') {
+              navigate('/loterias/quininha/jogar');
+              return;
+            }
+            if (jogo === 'seninha') {
+              navigate('/loterias/seninha/jogar');
+              return;
+            }
+            if (jogo === 'super15') {
+              navigate('/loterias/super15/jogar');
+              return;
+            }
             const allowed = ['tradicional', 'tradicional-1-10', 'uruguaia'];
             if (allowed.includes(jogo)) {
               navigate(`/loterias/${jogo}/modalidades`);

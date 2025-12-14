@@ -243,6 +243,134 @@ const getPermutationDivisor = (modal, palpite) => {
   return countPermutations(getSegmentForModal(key, palpite));
 };
 
+const getTargetRange = (modal) => {
+  const key = normalizeModal(modal);
+  // Default: cabeça
+  let indices = [0];
+  let divisor = 1;
+
+  if (key.includes('ESQ') || key.includes('MEIO') || key.includes('1/5') || key.includes('1 AO 5') || key.includes('1A5') || key.includes('3X') || key.includes('8/5')) {
+    indices = [0, 1, 2, 3, 4];
+    divisor = 5;
+  }
+
+  if (key.includes('10/6') || key.includes('SENA')) {
+    indices = [0, 1, 2, 3, 4, 5];
+    divisor = 6;
+  }
+
+  return { indices, divisor };
+};
+
+const checkVictory = ({ modal, palpites, premios }) => {
+  const key = normalizeModal(modal);
+  const { indices, divisor } = getTargetRange(key);
+  const targets = premios.map((p) => normalizeMilhar(p));
+  let matches = 0;
+  let permutationsDiv = 1;
+  let hit = false;
+
+  // Numéricas simples
+  if (key.includes('MILHAR') || key.includes('CENTENA') || key.includes('DEZENA') || key.includes('UNIDADE')) {
+    let sliceSize = 4;
+    if (key.includes('CENTENA')) sliceSize = 3;
+    if (key.includes('DEZENA')) sliceSize = 2;
+    if (key.includes('UNIDADE')) sliceSize = 1;
+    const isInv = key.includes('INV');
+
+    palpites.forEach((palp) => {
+      const palStr = String(palp).padStart(4, '0').slice(-sliceSize);
+      const permDiv = isInv ? countPermutations(palStr) : 1;
+      permutationsDiv = Math.max(permutationsDiv, permDiv);
+      indices.forEach((idx) => {
+        const sorteado = targets[idx];
+        if (!sorteado) return;
+        const slice = sorteado.slice(-sliceSize);
+        const win = isInv ? sameDigits(slice, palStr) : slice === palStr;
+        if (win) {
+          hit = true;
+          matches += 1;
+        }
+      });
+    });
+  } else if (key.includes('GRUPO')) {
+    const gruposSorteio = indices.map((idx) => getGrupo(targets[idx]));
+    palpites.forEach((palp) => {
+      const gPalp = Number(palp);
+      const hitCount = gruposSorteio.filter((g) => g === gPalp).length;
+      if (hitCount > 0) {
+        hit = true;
+        matches += hitCount;
+      }
+    });
+  } else if (key.includes('DUQUE') || key.includes('TERNO') || key.includes('QUADRA') || key.includes('QUINA') || key.includes('SENA')) {
+    const isGrupo = key.includes('GP') || key.includes('GRUPO');
+    const sorteados = indices
+      .map((idx) => {
+        const num = targets[idx];
+        if (!num) return null;
+        if (isGrupo) return getGrupo(num);
+        const dez = parseInt(num.slice(-2), 10);
+        return Number.isNaN(dez) ? null : dez;
+      })
+      .filter((v) => v !== null);
+
+    let required = 2;
+    if (key.includes('TERNO')) required = 3;
+    if (key.includes('QUADRA')) required = 4;
+    if (key.includes('QUINA')) required = 5;
+    if (key.includes('SENA')) required = 6;
+
+    const hits = palpites.map((p) => Number(p)).filter((p) => sorteados.includes(p)).length;
+    if (hits >= required) {
+      hit = true;
+      matches = 1;
+      return { factor: 1, hit: true };
+    }
+    return { factor: 0, hit: false };
+  } else if (key.includes('PASSE')) {
+    const g1 = getGrupo(targets[0]);
+    const g2 = getGrupo(targets[1]);
+    const p1 = Number(palpites[0]);
+    const p2 = Number(palpites[1]);
+    if (key.includes('VAI VEM')) {
+      const sorteados = [g1, g2];
+      if (sorteados.includes(p1) && sorteados.includes(p2)) return { factor: 1, hit: true };
+    } else if (g1 === p1 && g2 === p2) {
+      return { factor: 1, hit: true };
+    }
+    return { factor: 0, hit: false };
+  } else if (key.startsWith('QUININHA')) {
+    const dezenasSorteadas = premios.slice(0, 5).map((n) => String(n).slice(-2).padStart(2, '0'));
+    const palpitesUsuario = palpites.map((p) => String(p).padStart(2, '0'));
+    const acertos = dezenasSorteadas.filter((d) => palpitesUsuario.includes(d)).length;
+    if (acertos >= 5) {
+      return { factor: 1, hit: true };
+    }
+    return { factor: 0, hit: false };
+  } else if (key.startsWith('SENINHA')) {
+    const dezenasSorteadas = premios.slice(0, 6).map((n) => String(n).slice(-2).padStart(2, '0'));
+    const palpitesUsuario = palpites.map((p) => String(p).padStart(2, '0'));
+    const acertos = dezenasSorteadas.filter((d) => palpitesUsuario.includes(d)).length;
+    if (acertos >= 6) {
+      return { factor: 1, hit: true };
+    }
+    return { factor: 0, hit: false };
+  } else if (key.startsWith('SUPER15')) {
+    const dezenasSorteadas = premios.slice(0, 15).map((n) => String(n).slice(-2).padStart(2, '0'));
+    const palpitesUsuario = palpites.map((p) => String(p).padStart(2, '0'));
+    const acertos = dezenasSorteadas.filter((d) => palpitesUsuario.includes(d)).length;
+    if (acertos >= 15) {
+      return { factor: 1, hit: true };
+    }
+    return { factor: 0, hit: false };
+  }
+
+  if (!hit) return { factor: 0, hit: false };
+  const factor = (matches || 1) / (divisor * permutationsDiv || 1);
+  return { factor, hit: true };
+};
+
 const parseApostasFromBet = (bet) => {
   let apostas = [];
   try {
@@ -350,24 +478,12 @@ const settleBetsForResult = async (resultId) => {
         if (!payout) return;
 
         const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-        const colocacoes = parseColocacao(aposta.colocacao || bet.colocacao);
         const unitStake = resolveUnitStake(aposta, apostas.length, bet.total);
+        const { factor } = checkVictory({ modal, palpites, premios });
 
-        palpites.forEach((palpite) => {
-          colocacoes.forEach(({ indices, divisor, stakeFactor }) => {
-            indices.forEach((idx) => {
-              const sorteado = premios[idx];
-              if (!sorteado) return;
-
-              const isWin = matchModalidade(modal, palpite, sorteado);
-              if (!isWin) return;
-
-              const permutationDivisor = getPermutationDivisor(modal, palpite) || 1;
-              const stake = unitStake * (stakeFactor || 1);
-              prize += (stake * (payout / permutationDivisor)) / (divisor || 1);
-            });
-          });
-        });
+        if (factor > 0) {
+          prize += unitStake * payout * factor;
+        }
       });
 
       const finalPrize = Number(prize.toFixed(2));

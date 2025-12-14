@@ -71,6 +71,8 @@ const serializeBet = (bet) => {
     loteria: bet.loteria,
     codigoHorario: bet.codigoHorario,
     total: bet.total,
+    status: bet.status,
+    prize: bet.prize,
     createdAt: bet.createdAt,
     dataJogo: bet.dataJogo,
     modalidade: bet.modalidade,
@@ -292,11 +294,23 @@ exports.myBets = async (req, res) => {
   }
 
   const { take, skip } = normalizePagination(parsed.data);
+  const rawStatuses = parsed.data.statuses || parsed.data.status || req.query.statuses || req.query.status;
+  const statuses = rawStatuses
+    ? String(rawStatuses)
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+    : null;
 
   try {
+    const where = { userId: req.userId };
+    if (statuses && statuses.length) {
+      where.status = { in: statuses };
+    }
+
     const [bets, total] = await prisma.$transaction([
       prisma.bet.findMany({
-        where: { userId: req.userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take,
@@ -311,9 +325,11 @@ exports.myBets = async (req, res) => {
           colocacao: true,
           palpites: true,
           userId: true,
+          status: true,
+          prize: true,
         },
       }),
-      prisma.bet.count({ where: { userId: req.userId } }),
+      prisma.bet.count({ where }),
     ]);
 
     const hasMore = skip + bets.length < total;

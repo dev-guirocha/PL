@@ -69,4 +69,24 @@ export const LOTERIAS_SORTEIOS = [
     slug: 'loteria-instantanea',
     horarios: ['LT INSTANTANEA 22HS'],
   },
+  {
+    nome: 'LOTERIA URUGUAIA',
+    slug: 'uruguaia',
+    horarios: ['URUGUAIA 09HS', 'URUGUAIA 12HS', 'URUGUAIA 15HS', 'URUGUAIA 18HS', 'URUGUAIA 21HS'],
+  },
+  {
+    nome: 'QUININHA',
+    slug: 'quininha',
+    horarios: ['DIARIO'],
+  },
+  {
+    nome: 'SENINHA',
+    slug: 'seninha',
+    horarios: ['TER-QUI-SAB'],
+  },
+  {
+    nome: 'SUPER 15',
+    slug: 'super15',
+    horarios: ['SEG-SAB'],
+  },
 ];
