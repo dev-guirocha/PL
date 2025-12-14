@@ -69,10 +69,10 @@ const AdminWithdrawalsPage = () => {
           <Spinner size={40} />
         </div>
       ) : (
-        <AdminTable headers={['ID', 'Usuário', 'Valor', 'Status', 'Criado em']}>
+        <AdminTable headers={['ID', 'Usuário', 'Valor', 'Pix (CPF)', 'Status', 'Criado em']}>
           {withdrawals.length === 0 ? (
             <AdminTableRow>
-              <AdminTableCell className="text-center text-slate-500" colSpan={5}>
+              <AdminTableCell className="text-center text-slate-500" colSpan={6}>
                 Nenhuma solicitação de saque.
               </AdminTableCell>
             </AdminTableRow>
@@ -82,6 +82,7 @@ const AdminWithdrawalsPage = () => {
                 <AdminTableCell className="font-semibold text-slate-800">{w.id || w._id}</AdminTableCell>
                 <AdminTableCell>{w.user?.name || w.userName || w.userId || '—'}</AdminTableCell>
                 <AdminTableCell className="font-semibold text-emerald-700">{formatCurrency(w.amount)}</AdminTableCell>
+                <AdminTableCell className="text-sm text-slate-700">{w.pixKey || '—'}</AdminTableCell>
                 <AdminTableCell>
                   <StatusBadge status={w.status || 'pending'} />
                 </AdminTableCell>

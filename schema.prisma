@@ -126,6 +126,8 @@ model WithdrawalRequest {
   userId    Int
   amount    Decimal  @db.Decimal(18, 2)
   status    String   @default("pending") // pending, approved, rejected, paid
+  pixKey    String?
+  pixType   String?  @default("cpf")
   createdAt DateTime @default(now())
 }
 

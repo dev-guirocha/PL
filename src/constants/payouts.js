@@ -1,7 +1,7 @@
-export const PAYOUTS = {
+const PAYOUTS = {
   UNIDADE: 8,
   GRUPO: 20,
-  'DEZENA': 80,
+  DEZENA: 80,
   'DEZENA ESQ': 80,
   'DEZENA MEIO': 80,
   CENTENA: 800,
@@ -30,3 +30,5 @@ export const PAYOUTS = {
   'PASSE VAI': 110,
   'PASSE VAI VEM': 55,
 };
+
+module.exports = { PAYOUTS };

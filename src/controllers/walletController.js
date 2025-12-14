@@ -12,11 +12,30 @@ const amountSchema = z.preprocess(
     .positive('O valor deve ser maior que zero.'),
 );
 
+const cpfSchema = z.preprocess(
+  (val) => (val || '').toString().replace(/\D/g, ''),
+  z
+    .string({
+      required_error: 'CPF é obrigatório.',
+      invalid_type_error: 'CPF inválido.',
+    })
+    .length(11, 'CPF deve conter 11 dígitos.'),
+);
+
 exports.me = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, balance: true, bonus: true, supervisorId: true, pendingSupCode: true },
+      select: {
+        id: true,
+        name: true,
+        balance: true,
+        bonus: true,
+        supervisorId: true,
+        pendingSupCode: true,
+        cpf: true,
+        phone: true,
+      },
     });
 
     if (!user) {
@@ -75,24 +94,35 @@ exports.deposit = async (req, res) => {
 };
 
 exports.requestWithdrawal = async (req, res) => {
-  const parsed = amountSchema.safeParse(req.body.amount);
-  if (!parsed.success) {
-    const message = parsed.error.errors?.[0]?.message || 'Valor inválido.';
+  const parsedAmount = amountSchema.safeParse(req.body.amount);
+  const parsedCpf = cpfSchema.safeParse(req.body.cpf);
+
+  if (!parsedAmount.success) {
+    const message = parsedAmount.error.errors?.[0]?.message || 'Valor inválido.';
     return res.status(400).json({ error: message });
   }
-  const value = parsed.data;
+  if (!parsedCpf.success) {
+    const message = parsedCpf.error.errors?.[0]?.message || 'CPF inválido.';
+    return res.status(400).json({ error: message });
+  }
+
+  const value = parsedAmount.data;
+  const cpf = parsedCpf.data;
 
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, balance: true },
+      select: { id: true, balance: true, cpf: true },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (!user.cpf) return res.status(400).json({ error: 'Cadastre o CPF na recarga Pix antes de solicitar saque.' });
+    const storedCpf = (user.cpf || '').replace(/\D/g, '');
+    if (storedCpf !== cpf) return res.status(400).json({ error: 'CPF divergente do cadastrado. Solicitação cancelada.' });
     if (Number(user.balance || 0) < value) return res.status(400).json({ error: 'Saldo insuficiente.' });
 
     const request = await prisma.withdrawalRequest.create({
-      data: { userId: req.userId, amount: value, status: 'pending' },
-      select: { id: true, amount: true, status: true, createdAt: true },
+      data: { userId: req.userId, amount: value, status: 'pending', pixKey: cpf, pixType: 'cpf' },
+      select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
     });
 
     return res.status(201).json({ request });
@@ -107,7 +137,7 @@ exports.listMyWithdrawals = async (req, res) => {
       where: { userId: req.userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, amount: true, status: true, createdAt: true },
+      select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
     });
     return res.json({ withdrawals: requests });
   } catch (err) {

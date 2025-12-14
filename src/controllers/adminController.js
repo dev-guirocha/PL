@@ -138,6 +138,142 @@ const getGrupo = (milhar) => {
   return Math.ceil(dezena / 4);
 };
 
+const factorial = (n) => {
+  if (!n || n < 0) return 1;
+  return n <= 1 ? 1 : n * factorial(n - 1);
+};
+
+const countPermutations = (digits) => {
+  const clean = (digits || '').toString();
+  if (!clean) return 1;
+  const counts = clean.split('').reduce((acc, d) => {
+    acc[d] = (acc[d] || 0) + 1;
+    return acc;
+  }, {});
+  const denominator = Object.values(counts).reduce((acc, qty) => acc * factorial(qty), 1);
+  return Math.max(1, factorial(clean.length) / denominator);
+};
+
+const sameDigits = (a, b) => {
+  const sort = (val) => (val || '').toString().split('').sort().join('');
+  return sort(a) === sort(b);
+};
+
+const normalizeModal = (modal) => (modal || '').toString().toUpperCase().trim();
+
+const resolvePayout = (modal) => {
+  const key = normalizeModal(modal);
+  if (PAYOUTS[key]) return PAYOUTS[key];
+
+  const withoutInv = key.replace(/\s+INV\b/g, '').trim();
+  if (PAYOUTS[withoutInv]) return PAYOUTS[withoutInv];
+
+  const withoutSide = withoutInv.replace(/\s+(ESQ|MEIO)\b/g, '').trim();
+  if (PAYOUTS[withoutSide]) return PAYOUTS[withoutSide];
+
+  if (key.includes('GRUPO')) return PAYOUTS.GRUPO || 0;
+  if (key.includes('DEZENA')) return PAYOUTS.DEZENA || 0;
+  if (key.includes('CENTENA')) return PAYOUTS.CENTENA || 0;
+  if (key.includes('MILHAR')) return PAYOUTS.MILHAR || 0;
+  return 0;
+};
+
+const getSegmentForModal = (modal, numero) => {
+  const normalized = normalizeMilhar(numero);
+  const key = normalizeModal(modal);
+  if (key.includes('MILHAR')) return normalized;
+
+  if (key.includes('CENTENA')) {
+    if (key.includes('ESQ')) return normalized.slice(0, 3);
+    if (key.includes('MEIO')) return normalized.slice(1, 4);
+    return normalized.slice(-3);
+  }
+
+  if (key.includes('DEZENA') || key.includes('GRUPO')) {
+    if (key.includes('ESQ')) return normalized.slice(0, 2);
+    if (key.includes('MEIO')) return normalized.slice(1, 3);
+    return normalized.slice(-2);
+  }
+
+  if (key.includes('UNIDADE')) return normalized.slice(-1);
+  return normalized;
+};
+
+const matchModalidade = (modal, palpite, sorteado) => {
+  const key = normalizeModal(modal);
+
+  if (key.includes('GRUPO')) {
+    const palGrupo = Number(palpite);
+    const targetSegment = getSegmentForModal(key, sorteado);
+    const sorteioGrupo = getGrupo(targetSegment);
+    return palGrupo && sorteioGrupo && palGrupo === sorteioGrupo;
+  }
+
+  // Modalidade que paga milhar ou centena
+  if (key.includes('MILHAR E CT')) {
+    const palMilhar = getSegmentForModal('MILHAR', palpite);
+    const palCentena = getSegmentForModal('CENTENA', palpite);
+    const sorteioMilhar = getSegmentForModal('MILHAR', sorteado);
+    const sorteioCentena = getSegmentForModal('CENTENA', sorteado);
+    if (key.includes('INV')) {
+      return sameDigits(palMilhar, sorteioMilhar) || sameDigits(palCentena, sorteioCentena);
+    }
+    return palMilhar === sorteioMilhar || palCentena === sorteioCentena;
+  }
+
+  const palSegment = getSegmentForModal(key, palpite);
+  const sorteioSegment = getSegmentForModal(key, sorteado);
+  if (key.includes('INV')) return sameDigits(palSegment, sorteioSegment);
+  return palSegment === sorteioSegment;
+};
+
+const getPermutationDivisor = (modal, palpite) => {
+  const key = normalizeModal(modal);
+  if (!key.includes('INV')) return 1;
+  return countPermutations(getSegmentForModal(key, palpite));
+};
+
+const parseApostasFromBet = (bet) => {
+  let apostas = [];
+  try {
+    const parsed = typeof bet.palpites === 'string' ? JSON.parse(bet.palpites) : bet.palpites || [];
+    if (Array.isArray(parsed)) apostas = parsed;
+    else if (parsed && parsed.apostas) apostas = parsed.apostas;
+  } catch {
+    apostas = [];
+  }
+
+  if (Array.isArray(apostas) && apostas.length && apostas[0]?.palpites) {
+    return apostas;
+  }
+
+  if (Array.isArray(apostas) && apostas.length) {
+    return [
+      {
+        modalidade: bet.modalidade,
+        colocacao: bet.colocacao,
+        palpites: apostas,
+        valorAposta: Number(bet.total || 0),
+        modoValor: 'cada',
+      },
+    ];
+  }
+
+  return [];
+};
+
+const resolveUnitStake = (aposta, apostaCount, betTotal) => {
+  const palpites = Array.isArray(aposta?.palpites) ? aposta.palpites : [];
+  const qtd = palpites.length || 1;
+  const valorBase = Number(aposta?.valorAposta ?? aposta?.valorPorNumero ?? aposta?.total ?? 0);
+  const hasBase = !Number.isNaN(valorBase) && valorBase > 0;
+  const fallbackPerAposta = apostaCount ? Number(betTotal || 0) / apostaCount : 0;
+  const base = hasBase ? valorBase : fallbackPerAposta;
+  const unit = aposta?.modoValor === 'cada' ? base : base / qtd;
+  if (!Number.isFinite(unit) || unit <= 0) return 0;
+  return unit;
+};
+
 const parseColocacao = (colocacaoStr) => {
   const c = (colocacaoStr || '').toUpperCase().trim();
 
@@ -189,97 +325,74 @@ const settleBetsForResult = async (resultId) => {
 
   for (const bet of bets) {
     try {
-      let palpites = [];
-      try {
-        palpites = typeof bet.palpites === 'string' ? JSON.parse(bet.palpites) : bet.palpites || [];
-      } catch {
-        palpites = [];
-      }
-
-      if (!Array.isArray(palpites) && palpites.apostas) {
-        palpites = palpites.apostas;
-      }
-
-      const modal = (bet.modalidade || '').toUpperCase().trim();
-      const payout = PAYOUTS[modal] || 0;
-      if (!payout) {
-        await prisma.bet.update({ where: { id: bet.id }, data: { status: 'lost', settledAt: new Date(), resultId } });
+      const apostas = parseApostasFromBet(bet);
+      if (!apostas.length) {
+        await prisma.bet.update({ where: { id: bet.id }, data: { status: 'nao premiado', settledAt: new Date(), resultId } });
         summary.processed += 1;
         continue;
       }
 
-      const colocacoes = parseColocacao(bet.colocacao);
-      const unitStake =
-        bet.total && palpites.length
-          ? Number(bet.total) / palpites.length
-          : Number(bet.total || 0) / (palpites.length || 1);
       let prize = 0;
 
-      palpites.forEach((palpite) => {
-        const palpStr = String(palpite).trim();
-        const palNorm = normalizeMilhar(palpStr);
-        const palGrupo = getGrupo(palpStr);
+      apostas.forEach((aposta) => {
+        const modal = normalizeModal(aposta.modalidade || bet.modalidade);
+        const payout = resolvePayout(modal);
+        if (!payout) return;
 
-        colocacoes.forEach(({ indices, divisor, stakeFactor }) => {
-          indices.forEach((idx) => {
-            const sorteado = premios[idx];
-            if (!sorteado) return;
-            const sorteioGrupo = getGrupo(sorteado);
+        const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
+        const colocacoes = parseColocacao(aposta.colocacao || bet.colocacao);
+        const unitStake = resolveUnitStake(aposta, apostas.length, bet.total);
 
-            let isWin = false;
+        palpites.forEach((palpite) => {
+          colocacoes.forEach(({ indices, divisor, stakeFactor }) => {
+            indices.forEach((idx) => {
+              const sorteado = premios[idx];
+              if (!sorteado) return;
 
-            // Modalidade CENTENA: compara últimas 3 casas
-            if (modal.includes('CENTENA')) {
-              isWin = getSlice(sorteado, 'CENTENA') === getSlice(palNorm, 'CENTENA');
-            } else if (modal.includes('DEZENA')) {
-              isWin = getSlice(sorteado, 'DEZENA') === getSlice(palNorm, 'DEZENA');
-            } else if (modal.includes('UNIDADE')) {
-              isWin = getSlice(sorteado, 'UNIDADE') === getSlice(palNorm, 'UNIDADE');
-            } else if (modal.includes('MILHAR')) {
-              isWin = getSlice(sorteado, 'MILHAR') === getSlice(palNorm, 'MILHAR');
-            } else if (modal.includes('GRUPO') && palGrupo) {
-              isWin = sorteioGrupo === Number(palpite);
-            }
+              const isWin = matchModalidade(modal, palpite, sorteado);
+              if (!isWin) return;
 
-            if (isWin) {
+              const permutationDivisor = getPermutationDivisor(modal, palpite) || 1;
               const stake = unitStake * (stakeFactor || 1);
-              prize += (stake * payout) / divisor;
-            }
+              prize += (stake * (payout / permutationDivisor)) / (divisor || 1);
+            });
           });
         });
       });
 
-      const status = prize > 0 ? 'won' : 'nao premiado';
+      const finalPrize = Number(prize.toFixed(2));
+      const modalDesc = normalizeModal(apostas[0]?.modalidade || bet.modalidade);
+      const status = finalPrize > 0 ? 'won' : 'nao premiado';
       await prisma.$transaction(async (tx) => {
         await tx.bet.update({
           where: { id: bet.id },
           data: {
             status,
-            prize,
+            prize: finalPrize,
             settledAt: new Date(),
             resultId: resultId,
           },
         });
 
-        if (prize > 0) {
+        if (finalPrize > 0) {
           await tx.user.update({
             where: { id: bet.userId },
-            data: { balance: { increment: prize } },
+            data: { balance: { increment: finalPrize } },
           });
 
           await tx.transaction.create({
             data: {
               userId: bet.userId,
               type: 'prize',
-              amount: prize,
-              description: `Prêmio ${modal} - ${result.loteria || ''} (${bet.id})`,
+              amount: finalPrize,
+              description: `Prêmio ${modalDesc} - ${result.loteria || ''} (${bet.id})`,
             },
           });
         }
       });
 
       summary.processed += 1;
-      if (prize > 0) summary.wins += 1;
+      if (finalPrize > 0) summary.wins += 1;
     } catch (err) {
       console.error('Erro ao liquidar aposta', bet.id, err);
       summary.errors.push({ betId: bet.id, message: err?.message || 'Erro desconhecido' });

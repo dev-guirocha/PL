@@ -13,13 +13,27 @@ exports.update = async (req, res) => {
     return res.status(400).json({ error: 'Telefone inválido.' });
   }
 
+  const sanitizedCpf = cpf ? cpf.replace(/\D/g, '') : null;
+  if (sanitizedCpf && sanitizedCpf.length !== 11) {
+    return res.status(400).json({ error: 'CPF deve conter 11 dígitos.' });
+  }
+
   try {
+    const current = await prisma.user.findUnique({ where: { id: req.userId }, select: { cpf: true } });
+    if (!current) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    if (current.cpf && sanitizedCpf && sanitizedCpf !== (current.cpf || '').replace(/\D/g, '')) {
+      return res.status(400).json({ error: 'CPF já cadastrado. Para alterar, contate o suporte via WhatsApp.' });
+    }
+
     const user = await prisma.user.update({
       where: { id: req.userId },
       data: {
         name,
         phone: cleanPhone,
-        cpf: cpf || null,
+        cpf: sanitizedCpf || current.cpf || null,
         birthDate: birthDate || null,
         email: email || null,
       },

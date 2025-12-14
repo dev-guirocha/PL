@@ -6,8 +6,10 @@ import { useAuth } from '../context/AuthContext';
 
 const WithdrawPage = () => {
   const navigate = useNavigate();
-  const { balance, bonus, refreshUser } = useAuth();
+  const { balance, bonus, refreshUser, user } = useAuth();
   const [amount, setAmount] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [confirmCpf, setConfirmCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState('');
@@ -17,6 +19,23 @@ const WithdrawPage = () => {
     fetchRequests();
   }, [refreshUser]);
 
+  useEffect(() => {
+    const storedCpf = user?.cpf || (() => {
+      if (typeof window === 'undefined') return '';
+      const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        return parsed?.cpf || '';
+      } catch {
+        return '';
+      }
+    })();
+    if (storedCpf) {
+      setCpf(storedCpf);
+      setConfirmCpf(storedCpf);
+    }
+  }, [user]);
+
   const formatInputMoney = (raw) => {
     const digits = String(raw || '').replace(/\D/g, '');
     if (!digits) return '';
@@ -25,6 +44,14 @@ const WithdrawPage = () => {
   };
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
+  const formatCpf = (value) => {
+    const digits = (value || '').replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  };
+  const sanitizeCpf = (value) => (value || '').replace(/\D/g, '').slice(0, 11);
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -42,15 +69,35 @@ const WithdrawPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const val = Number(amount);
+    const cleanCpf = sanitizeCpf(cpf);
+    const cleanConfirm = sanitizeCpf(confirmCpf);
+
     if (!val || val <= 0) {
       setError('Informe um valor válido.');
+      return;
+    }
+    if (val > Number(balance || 0)) {
+      setError('O valor precisa ser menor ou igual ao saldo disponível.');
+      return;
+    }
+    if (cleanCpf.length !== 11) {
+      setError('Informe um CPF válido (11 dígitos).');
+      return;
+    }
+    if (cleanCpf !== cleanConfirm) {
+      setError('O CPF e a confirmação devem ser iguais.');
+      return;
+    }
+    if (user?.cpf && sanitizeCpf(user.cpf) !== cleanCpf) {
+      setError('Use o mesmo CPF cadastrado na recarga Pix. Para alterar, contate o suporte.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      await api.post('/wallet/withdraw', { amount: val });
+      await api.post('/wallet/withdraw', { amount: val, cpf: cleanCpf });
       setAmount('');
+      setConfirmCpf(cleanCpf);
       fetchRequests();
       refreshUser();
     } catch (err) {
@@ -61,6 +108,18 @@ const WithdrawPage = () => {
   };
 
   const available = useMemo(() => Number(balance || 0), [balance]);
+  const statusLabels = {
+    pending: 'Pendente',
+    approved: 'Aprovado',
+    paid: 'Pago',
+    rejected: 'Recusado',
+  };
+  const statusColors = {
+    paid: 'bg-emerald-100 text-emerald-700',
+    approved: 'bg-sky-100 text-sky-700',
+    rejected: 'bg-red-100 text-red-700',
+    pending: 'bg-amber-100 text-amber-700',
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-100 px-4 py-6">
@@ -74,6 +133,12 @@ const WithdrawPage = () => {
         <div className="text-right">
           <p className="text-xs font-semibold uppercase text-emerald-700">Saque</p>
           <h1 className="text-lg font-extrabold text-emerald-900">Solicitar saque</h1>
+        </div>
+      </div>
+
+      <div className="mx-auto mt-3 max-w-4xl">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow">
+          Saques via Pix só podem ser solicitados para o mesmo CPF utilizado nas recargas. Para alterar o CPF, entre em contato com o suporte via WhatsApp.
         </div>
       </div>
 
@@ -105,8 +170,31 @@ const WithdrawPage = () => {
                 placeholder="0,00"
                 className="w-full rounded-lg border border-slate-200 px-3 py-3 text-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
               />
+              <p className="mt-1 text-[11px] text-slate-500">Sempre menor ou igual ao saldo disponível (bônus não é sacável).</p>
             </div>
-            <div className="flex items-end">
+            <div className="grid gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">CPF para receber via Pix</label>
+                <input
+                  inputMode="numeric"
+                  value={formatCpf(cpf)}
+                  onChange={(e) => setCpf(sanitizeCpf(e.target.value))}
+                  placeholder="000.000.000-00"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Confirme o CPF</label>
+                <input
+                  inputMode="numeric"
+                  value={formatCpf(confirmCpf)}
+                  onChange={(e) => setConfirmCpf(sanitizeCpf(e.target.value))}
+                  placeholder="Repita o CPF"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+                />
+              </div>
+            </div>
+            <div className="md:col-span-2 flex items-end">
               <button
                 type="submit"
                 disabled={loading}
@@ -136,16 +224,9 @@ const WithdrawPage = () => {
                   >
                     <span className="font-semibold">#{r.id}</span>
                     <span>{formatCurrency(r.amount)}</span>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${
-                        r.status === 'paid'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : r.status === 'rejected'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-amber-100 text-amber-700'
-                      }`}
-                    >
-                      {r.status}
+                    <span className="text-xs text-slate-500">{r.pixKey ? `CPF: ${formatCpf(r.pixKey)}` : 'CPF não informado'}</span>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${statusColors[r.status] || 'bg-amber-100 text-amber-700'}`}>
+                      {statusLabels[r.status] || r.status}
                     </span>
                     <span className="text-xs text-slate-500">
                       {new Date(r.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
