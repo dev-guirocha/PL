@@ -32,7 +32,8 @@ exports.createCharge = async (req, res) => {
       select: { name: true, email: true, cpf: true },
     });
 
-    if (!user || !user.cpf) {
+    const cleanCpf = (user?.cpf || '').replace(/\D/g, '');
+    if (!user || !cleanCpf || cleanCpf.length !== 11) {
       return res.status(400).json({ error: 'CPF obrigatório para gerar PIX.' });
     }
 
@@ -83,7 +84,7 @@ exports.createCharge = async (req, res) => {
       callbackUrl,
       client: {
         name: user.name,
-        document: user.cpf.replace(/\D/g, ''),
+        document: cleanCpf,
         email: user.email || 'cliente@plataforma.com',
       },
     };
@@ -116,7 +117,7 @@ exports.createCharge = async (req, res) => {
       couponCode: couponCode || null,
     });
   } catch (error) {
-    console.error('Erro createCharge:', error.message);
+    console.error('Erro createCharge:', error.response?.data || error.message);
     return res.status(500).json({ error: 'Erro ao gerar PIX.' });
   }
 };

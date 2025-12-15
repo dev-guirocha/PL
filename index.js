@@ -67,13 +67,11 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' },
-  trustProxy: false,
 });
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
-  trustProxy: false,
 });
 
 app.use('/api/', apiLimiter);
