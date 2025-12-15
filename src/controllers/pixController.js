@@ -94,6 +94,10 @@ exports.createCharge = async (req, res) => {
       },
     };
 
+    // Debug de ambiente SuitPay
+    console.log('🔗 URL ALVO:', process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || suitPayApi.defaults.baseURL);
+    console.log('🔑 CI:', process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID ? 'Configurado' : 'Faltando');
+
     const response = await suitPayApi.post('/gateway/request-qrcode', payload);
 
     if (response.data.response !== 'OK') {
