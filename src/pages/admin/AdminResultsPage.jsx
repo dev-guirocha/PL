@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
+import { getNomeBicho } from '../../utils/bichos';
 
 const LOTERIAS = [
   { code: 'LT PT RIO', horarios: ['09HS', '11HS', '14HS', '16HS', '18HS', '21HS'] },
@@ -504,7 +505,10 @@ const AdminResultsPage = () => {
                     <AdminTableCell key={`${r.id || r._id}-n-${i}`}>
                       <div className="flex flex-col">
                         <span className="font-semibold">{num || '—'}</span>
-                        <span className="text-xs text-slate-500">Grupo: {groupsWithFallback[i] || '—'}</span>
+                        <span className="text-xs text-slate-500">
+                          Grupo: {groupsWithFallback[i] || '—'}{' '}
+                          {groupsWithFallback[i] ? `(${getNomeBicho(groupsWithFallback[i]) || ''})` : ''}
+                        </span>
                       </div>
                     </AdminTableCell>
                   ))}

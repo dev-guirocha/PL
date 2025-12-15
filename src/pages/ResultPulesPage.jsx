@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Spinner from '../components/Spinner';
 import api from '../utils/api';
 import { formatDateBR, formatDateTimeBR } from '../utils/date';
+import { getNomeBicho } from '../utils/bichos';
 
 const ResultPulesPage = () => {
   const navigate = useNavigate();
@@ -83,7 +84,14 @@ const ResultPulesPage = () => {
           }
         }
       }
-      return { label: `N${idx + 1}`, number: num || '—', group: group || '—' };
+      let bicho = '—';
+      if (group && group !== '—') {
+        const gNum = Number(String(group).replace(/\D/g, ''));
+        const normalized = gNum === 0 ? 25 : gNum;
+        const nome = getNomeBicho(normalized);
+        if (nome) bicho = nome;
+      }
+      return { label: `N${idx + 1}`, number: num || '—', group: group || '—', bicho };
     });
   };
 
@@ -197,7 +205,10 @@ const ResultPulesPage = () => {
                     <span className="rounded-full bg-emerald-600 px-2 py-1 text-[11px] font-bold uppercase text-white">{pair.label}</span>
                     <span className="text-sm font-semibold text-emerald-800">{pair.number}</span>
                   </div>
-                  <span className="text-xs font-semibold text-emerald-700">Grupo: {pair.group}</span>
+                  <div className="text-right text-xs font-semibold text-emerald-700">
+                    <div>Grupo: {pair.group}</div>
+                    <div className="text-[11px] text-emerald-600">{pair.bicho}</div>
+                  </div>
                 </div>
               ))}
             </div>
