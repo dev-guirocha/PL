@@ -16,7 +16,8 @@ const createCsrfProtection = require('./src/middleware/csrf');
 const app = express();
 
 // Necessário atrás de proxies (Railway/Vercel) para rate-limit e cookies funcionarem corretamente
-app.set('trust proxy', true);
+// Use número de hops ou rede loopback para não acionar alerta do express-rate-limit
+app.set('trust proxy', 1);
 
 // Configura CORS permitindo apenas domínios autorizados
 const defaultOrigins = [
@@ -66,11 +67,13 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' },
+  trustProxy: false,
 });
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+  trustProxy: false,
 });
 
 app.use('/api/', apiLimiter);
