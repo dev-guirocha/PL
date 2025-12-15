@@ -97,6 +97,28 @@ const ResultPulesPage = () => {
 
   const isEmpty = !loading && pules.length === 0;
 
+  const handleDownload = (pule) => {
+    const pairs = buildPairs(pule);
+    const linhas = [];
+    linhas.push(`Loteria: ${pule.loteria || '—'}`);
+    if (pule.codigoHorario) linhas.push(`Horário: ${pule.codigoHorario}`);
+    if (pule.dataJogo) linhas.push(`Data do jogo: ${formatDateBR(pule.dataJogo)}`);
+    linhas.push(`Referência: ${pule.betRef || `RESULT-${pule.id}`}`);
+    linhas.push('--- Resultados ---');
+    pairs.forEach((p) => {
+      linhas.push(`${p.label}: ${p.number} | Grupo: ${p.group} | Bicho: ${p.bicho}`);
+    });
+    const blob = new Blob([linhas.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resultado-${pule.loteria || 'loteria'}-${pule.dataJogo || 'hoje'}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 px-4 py-6">
       <div className="mx-auto flex max-w-5xl items-center justify-between">
@@ -197,6 +219,15 @@ const ResultPulesPage = () => {
             <span className="inline-flex w-fit items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
               Comparativo (Resultado)
             </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownload(pule)}
+                className="rounded-lg border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                Baixar resultado (.txt)
+              </button>
+            </div>
 
             <div className="mt-2 grid grid-cols-1 gap-2 border-t border-dashed border-emerald-100 pt-2 text-sm md:grid-cols-2">
               {buildPairs(pule).map((pair, i) => (
