@@ -5,7 +5,7 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 import 'react-toastify/dist/ReactToastify.css';
-import logo from './assets/logo.png';
+import logo from '../icon.png';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
