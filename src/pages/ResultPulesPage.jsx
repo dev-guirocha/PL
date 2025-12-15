@@ -4,6 +4,7 @@ import Spinner from '../components/Spinner';
 import api from '../utils/api';
 import { formatDateBR, formatDateTimeBR } from '../utils/date';
 import { getNomeBicho } from '../utils/bichos';
+import { generateResultPDF } from '../utils/pdfGenerator';
 
 const ResultPulesPage = () => {
   const navigate = useNavigate();
@@ -285,7 +286,14 @@ const ResultPulesPage = () => {
                 onClick={() => handleDownloadPdf(pule)}
                 className="rounded-lg border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
               >
-                Baixar PDF
+                Baixar PDF (print)
+              </button>
+              <button
+                type="button"
+                onClick={() => generateResultPDF(pule)}
+                className="rounded-lg border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                Baixar PDF (nativo)
               </button>
             </div>
 

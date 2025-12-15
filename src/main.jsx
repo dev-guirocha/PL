@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 import 'react-toastify/dist/ReactToastify.css';
+import logo from './assets/logo.png';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -16,10 +17,21 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <React.Suspense
+      fallback={
+        <div className="splash-screen">
+          <div className="splash-logo">
+            <img src={logo} alt="Carregando" />
+          </div>
+          <div className="splash-spinner" />
+        </div>
+      }
+    >
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </React.Suspense>
   </React.StrictMode>,
 );
