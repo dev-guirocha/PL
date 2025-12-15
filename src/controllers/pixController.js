@@ -25,8 +25,17 @@ exports.createPixCharge = async (req, res) => {
     }
 
     // 3. Preparação dos Dados
-    const cleanCpf = String(cpf).replace(/\D/g, '');
+    const cleanCpf = String(cpf || '').replace(/\D/g, '');
     const valueFloat = Number(amount);
+
+    // Validação defensiva de CPF antes de chamar a Suitpay
+    console.log('🔍 CPF Processado:', cleanCpf);
+    if (!cleanCpf || cleanCpf.length !== 11) {
+      return res.status(400).json({
+        error: 'CPF Inválido',
+        message: 'O CPF deve conter 11 números. Verifique o cadastro.',
+      });
+    }
 
     const payload = {
       requestNumber: `pix-${Date.now()}`,
