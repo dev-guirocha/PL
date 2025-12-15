@@ -1,6 +1,13 @@
 const { PrismaClient } = require('@prisma/client');
 
-// Singleton para evitar múltiplas conexões em ambiente serverless/hot-reload
-const prisma = new PrismaClient();
+// Singleton com configuração explícita para evitar erros de inicialização
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+  log: ['error', 'warn'],
+});
 
 module.exports = prisma;
