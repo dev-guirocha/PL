@@ -54,7 +54,14 @@ exports.createPixCharge = async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      redirect: 'manual',
     });
+
+    console.log('ℹ️ SuitPay status:', response.status, response.statusText, 'url:', response.url);
+    const location = response.headers.get('location');
+    if (location) console.warn('➡️ Redirect location:', location);
+    const serverHeader = response.headers.get('server') || response.headers.get('x-powered-by');
+    if (serverHeader) console.log('ℹ️ Response server:', serverHeader);
 
     // 5. Tratamento da Resposta
     const data = await response.json();
