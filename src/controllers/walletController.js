@@ -44,6 +44,25 @@ exports.me = async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
+    // Corrige saldos negativos que possam ter ficado por inconsistência
+    if (Number(user.balance || 0) < 0) {
+      const fixed = await prisma.user.update({
+        where: { id: req.userId },
+        data: { balance: 0 },
+        select: {
+          id: true,
+          name: true,
+          balance: true,
+          bonus: true,
+          supervisorId: true,
+          pendingSupCode: true,
+          cpf: true,
+          phone: true,
+        },
+      });
+      return res.json(fixed);
+    }
+
     return res.json(user);
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao buscar saldo.' });
