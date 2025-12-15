@@ -1,7 +1,5 @@
 const crypto = require('crypto');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 exports.handleSuitpayWebhook = async (req, res) => {
   try {
