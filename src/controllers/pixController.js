@@ -8,15 +8,6 @@ const amountSchema = z.preprocess(
   z.number({ required_error: 'Valor inválido.' }).positive('O valor deve ser maior que zero.'),
 );
 
-const suitPayApi = axios.create({
-  baseURL: process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1',
-  headers: {
-    'Content-Type': 'application/json',
-    ci: process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID,
-    cs: process.env.SUITPAY_CS || process.env.SUITPAY_CLIENT_SECRET,
-  },
-});
-
 exports.createCharge = async (req, res) => {
   const parsed = amountSchema.safeParse(req.body.amount);
   if (!parsed.success) return res.status(400).json({ error: 'Valor inválido.' });
@@ -94,11 +85,22 @@ exports.createCharge = async (req, res) => {
       },
     };
 
+    // Monta URL final da SuitPay (env curta + endpoint)
+    const baseUrl = process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1';
+    const endpoint = '/gateway/request-qrcode';
+    const finalUrl = `${baseUrl.replace(/\/$/, '')}${endpoint}`;
+
     // Debug de ambiente SuitPay
-    console.log('🔗 URL ALVO:', process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || suitPayApi.defaults.baseURL);
+    console.log('🔗 URL ALVO:', finalUrl);
     console.log('🔑 CI:', process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID ? 'Configurado' : 'Faltando');
 
-    const response = await suitPayApi.post('/gateway/request-qrcode', payload);
+    const response = await axios.post(finalUrl, payload, {
+      headers: {
+        ci: process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID,
+        cs: process.env.SUITPAY_CS || process.env.SUITPAY_CLIENT_SECRET,
+        'Content-Type': 'application/json',
+      },
+    });
 
     if (response.data.response !== 'OK') {
       console.error('Erro SuitPay:', response.data);
