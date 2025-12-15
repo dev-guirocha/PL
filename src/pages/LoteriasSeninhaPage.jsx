@@ -6,7 +6,10 @@ import { useAuth } from '../context/AuthContext';
 import PAYOUTS from '../constants/payouts.json';
 
 const QUANTIDADES = [13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35, 40];
-const DIAS_PERMITIDOS = [2, 4, 6]; // Terça, Quinta, Sábado
+const BASE_DIAS = [3, 6]; // Quarta, Sábado
+const EXTRA_DIAS = [2, 4]; // Terça, Quinta (exceções)
+const ALLOW_EXTRA_DIAS = true; // habilita exceções de Ter/Qui
+const DIAS_PERMITIDOS = ALLOW_EXTRA_DIAS ? [...BASE_DIAS, ...EXTRA_DIAS] : BASE_DIAS;
 
 const LoteriasSeninhaPage = () => {
   const navigate = useNavigate();
@@ -25,7 +28,7 @@ const LoteriasSeninhaPage = () => {
     if (d?.data) {
       const diaSemana = new Date(`${d.data}T12:00:00`).getDay();
       if (!DIAS_PERMITIDOS.includes(diaSemana)) {
-        toast.warn('A Seninha só corre às Terças, Quintas e Sábados.');
+        toast.warn('A Seninha corre às Quartas e Sábados (extras Ter/Qui quando liberado).');
         navigate('/loterias');
       }
     }
@@ -70,14 +73,14 @@ const LoteriasSeninhaPage = () => {
     updateDraft({
       ...draft,
       loteria: 'SENINHA',
-      codigoHorario: 'TER-QUI-SAB',
+      codigoHorario: 'SENINHA',
       apostas: [aposta],
       selecoes: [
         {
-          key: 'seninha-tqs',
+          key: 'seninha',
           slug: 'seninha',
           nome: 'SENINHA',
-          horario: 'TER-QUI-SAB',
+          horario: ALLOW_EXTRA_DIAS ? 'QUA/SAB + EXTRA TER/QUI' : 'QUA/SAB',
         },
       ],
     });
@@ -94,7 +97,9 @@ const LoteriasSeninhaPage = () => {
         <button onClick={() => navigate('/loterias')} className="text-emerald-700 font-bold">
           Voltar
         </button>
-        <span className="font-bold text-emerald-800">Seninha (Ter/Qui/Sab)</span>
+        <span className="font-bold text-emerald-800">
+          Seninha (Qua/Sab {ALLOW_EXTRA_DIAS ? '+ extra Ter/Qui' : ''})
+        </span>
         <div className="w-10" />
       </div>
 

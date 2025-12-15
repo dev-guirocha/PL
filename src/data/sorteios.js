@@ -77,12 +77,12 @@ export const LOTERIAS_SORTEIOS = [
   {
     nome: 'QUININHA',
     slug: 'quininha',
-    horarios: ['DIARIO'],
+    horarios: ['19:00'],
   },
   {
     nome: 'SENINHA',
     slug: 'seninha',
-    horarios: ['TER-QUI-SAB'],
+    horarios: ['QUA-SAB', 'EXTRA TER/QUI'],
   },
   {
     nome: 'SUPER 15',

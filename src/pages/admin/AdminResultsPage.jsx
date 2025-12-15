@@ -24,8 +24,8 @@ const LOTERIAS = [
   { code: 'LT SORTE', horarios: ['14HS', '18HS'] },
   { code: 'LT URUGUAI', horarios: ['15HS', '21HS'] },
   // Loterias numéricas
-  { code: 'QUININHA', horarios: ['DIARIO'] },
-  { code: 'SENINHA', horarios: ['TER-QUI-SAB'] },
+  { code: 'QUININHA', horarios: ['19:00'] },
+  { code: 'SENINHA', horarios: ['SENINHA'] },
   { code: 'SUPER 15', horarios: ['SEG-SAB'] },
 ];
 
@@ -62,7 +62,6 @@ const AdminResultsPage = () => {
   const grupoRefs = useRef([]);
   const selectedLottery = LOTERIAS.find((l) => l.code === form.loteria);
   const horariosDisponiveis = selectedLottery?.horarios || [];
-  const codigoPreview = form.loteria && form.horario ? `${form.loteria} ${form.horario}` : '';
   const [filterDate, setFilterDate] = useState(todayStr);
   const [filterLottery, setFilterLottery] = useState('');
 
@@ -161,7 +160,9 @@ const AdminResultsPage = () => {
         grupos = [form.g1, form.g2, form.g3, form.g4, form.g5, form.g6, form.g7].filter(Boolean);
       }
 
-      const fullCode = `${form.loteria} ${form.horario}`.trim();
+      const fullCode = isNumericLottery()
+        ? (form.horario || form.loteria || '').trim()
+        : `${form.loteria} ${form.horario}`.trim();
       await api.post('/admin/results', {
         loteria: form.loteria,
         dataJogo: form.data,
@@ -225,6 +226,11 @@ const AdminResultsPage = () => {
     if (name.includes('SUPER')) return 15;
     return 0;
   })();
+  const codigoPreview = numericMode
+    ? (form.horario || form.loteria || '')
+    : form.loteria && form.horario
+      ? `${form.loteria} ${form.horario}`
+      : '';
 
   return (
     <AdminLayout

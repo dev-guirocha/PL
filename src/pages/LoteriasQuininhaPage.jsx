@@ -5,6 +5,9 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
 import PAYOUTS from '../constants/payouts.json';
 
+const CUTOFF_HOUR = 18;
+const CUTOFF_MINUTE = 50; // Encerramento às 18:50 para sorteio das 19:00
+
 const LoteriasQuininhaPage = () => {
   const navigate = useNavigate();
   const { refreshUser, authError } = useAuth();
@@ -39,6 +42,15 @@ const LoteriasQuininhaPage = () => {
   };
 
   const handleFinalize = () => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (draft?.data === todayStr) {
+      const now = new Date();
+      if (now.getHours() > CUTOFF_HOUR || (now.getHours() === CUTOFF_HOUR && now.getMinutes() >= CUTOFF_MINUTE)) {
+        toast.error('Apostas para a Quininha Federal encerram às 18:50.');
+        return;
+      }
+    }
+
     if (selectedNumbers.length !== qtdeDezenas) {
       toast.error(`Selecione exatamente ${qtdeDezenas} números.`);
       return;
@@ -64,14 +76,14 @@ const LoteriasQuininhaPage = () => {
     updateDraft({
       ...draft,
       loteria: 'QUININHA',
-      codigoHorario: 'DIARIO',
+      codigoHorario: '19:00',
       apostas: [aposta],
       selecoes: [
         {
-          key: 'quininha-diario',
+          key: 'quininha-1900',
           slug: 'quininha',
           nome: 'QUININHA',
-          horario: 'DIARIO',
+          horario: '19:00',
         },
       ],
     });
@@ -88,7 +100,7 @@ const LoteriasQuininhaPage = () => {
         <button onClick={() => navigate('/loterias')} className="text-emerald-700 font-bold">
           Voltar
         </button>
-        <span className="font-bold text-emerald-800">Quininha (Seg-Sáb)</span>
+        <span className="font-bold text-emerald-800">Quininha Federal (19h)</span>
         <div className="w-10" />
       </div>
 
