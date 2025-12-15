@@ -25,6 +25,11 @@ exports.createCharge = async (req, res) => {
 
   const amount = parsed.data;
   const userId = req.userId;
+  const correlationId = `deposit-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const amountInCents = Math.round(Number(amount) * 100);
+  if (Number.isNaN(amountInCents) || amountInCents < 100) {
+    return res.status(400).json({ error: 'Valor mínimo para depósito é R$ 1,00.' });
+  }
 
   try {
     const user = await prisma.user.findUnique({
@@ -76,17 +81,19 @@ exports.createCharge = async (req, res) => {
     const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook${tokenParam}`;
 
     const payload = {
+      correlationID: correlationId,
       requestNumber: String(charge.id),
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount,
+      amount: amountInCents, // centavos, conforme APIs que exigem inteiro
       shippingAmount: 0.0,
       usernameCheckout: 'checkout',
       callbackUrl,
       client: {
-        name: user.name,
+        name: user.name || 'Cliente',
         document: cleanCpf,
         email: user.email || 'cliente@plataforma.com',
       },
+      type: 'DYNAMIC',
     };
 
     const response = await suitPayApi.post('/gateway/request-qrcode', payload);
@@ -117,8 +124,16 @@ exports.createCharge = async (req, res) => {
       couponCode: couponCode || null,
     });
   } catch (error) {
-    console.error('Erro createCharge:', error.response?.data || error.message);
-    return res.status(500).json({ error: 'Erro ao gerar PIX.' });
+    if (error.response) {
+      console.error('❌ ERRO OPENPIX STATUS:', error.response.status);
+      console.error('❌ ERRO OPENPIX DADOS:', JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error('❌ ERRO PIX:', error.message);
+    }
+    return res.status(500).json({
+      error: 'Erro ao gerar PIX.',
+      details: error.response?.data?.error || error.response?.data?.message || undefined,
+    });
   }
 };
 
