@@ -23,6 +23,10 @@ const LOTERIAS = [
   { code: 'LT MINAS NOITE', horarios: ['19HS'] },
   { code: 'LT SORTE', horarios: ['14HS', '18HS'] },
   { code: 'LT URUGUAI', horarios: ['15HS', '21HS'] },
+  // Loterias numéricas
+  { code: 'QUININHA', horarios: ['DIARIO'] },
+  { code: 'SENINHA', horarios: ['TER-QUI-SAB'] },
+  { code: 'SUPER 15', horarios: ['SEG-SAB'] },
 ];
 
 const AdminResultsPage = () => {
@@ -45,6 +49,7 @@ const AdminResultsPage = () => {
     g5: '',
     g6: '',
     g7: '',
+    dezenasList: '',
   });
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,6 +124,11 @@ const AdminResultsPage = () => {
     }
   };
 
+  const isNumericLottery = () => {
+    const name = (form.loteria || '').toUpperCase();
+    return name.includes('QUININHA') || name.includes('SENINHA') || name.includes('SUPER');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.loteria || !form.horario || !form.data) {
@@ -129,8 +139,28 @@ const AdminResultsPage = () => {
     setError('');
     try {
       const lot = LOTERIAS.find((l) => l.code === form.loteria);
-      const numeros = [form.n1, form.n2, form.n3, form.n4, form.n5, form.n6, form.n7].filter(Boolean);
-      const grupos = [form.g1, form.g2, form.g3, form.g4, form.g5, form.g6, form.g7].filter(Boolean);
+      let numeros = [];
+      let grupos = [];
+
+      if (isNumericLottery()) {
+        const list = (form.dezenasList || '')
+          .split(/[^0-9]+/)
+          .filter(Boolean)
+          .map((n) => String(n).padStart(2, '0'));
+        const lotName = (form.loteria || '').toUpperCase();
+        const needed = lotName.includes('QUININHA') ? 5 : lotName.includes('SENINHA') ? 6 : lotName.includes('SUPER') ? 15 : 0;
+        if (!needed || list.length !== needed) {
+          setError(`Informe exatamente ${needed} dezenas para ${form.loteria}.`);
+          setSaving(false);
+          return;
+        }
+        numeros = list.slice(0, needed);
+        grupos = [];
+      } else {
+        numeros = [form.n1, form.n2, form.n3, form.n4, form.n5, form.n6, form.n7].filter(Boolean);
+        grupos = [form.g1, form.g2, form.g3, form.g4, form.g5, form.g6, form.g7].filter(Boolean);
+      }
+
       const fullCode = `${form.loteria} ${form.horario}`.trim();
       await api.post('/admin/results', {
         loteria: form.loteria,
@@ -142,7 +172,7 @@ const AdminResultsPage = () => {
       setForm({
         loteria: form.loteria,
         horario: lot?.horarios?.[0] || '',
-        data: '',
+        data: form.data,
         n1: '',
         n2: '',
         n3: '',
@@ -157,6 +187,7 @@ const AdminResultsPage = () => {
         g5: '',
         g6: '',
         g7: '',
+        dezenasList: '',
       });
       fetchResults();
     } catch (err) {
@@ -185,6 +216,15 @@ const AdminResultsPage = () => {
       if (nextMilhar) nextMilhar.focus();
     }
   };
+
+  const numericMode = isNumericLottery();
+  const neededDezenas = (() => {
+    const name = (form.loteria || '').toUpperCase();
+    if (name.includes('QUININHA')) return 5;
+    if (name.includes('SENINHA')) return 6;
+    if (name.includes('SUPER')) return 15;
+    return 0;
+  })();
 
   return (
     <AdminLayout
@@ -330,36 +370,54 @@ const AdminResultsPage = () => {
             />
           </div>
 
-          {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-            <React.Fragment key={idx}>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">{`N${idx} (Milhar)`}</label>
-                <input
-                  placeholder="Ex: 1234"
-                  value={form[`n${idx}`]}
-                  onChange={(e) => handleMilharChange(idx, e.target.value)}
-                  inputMode="numeric"
-                  maxLength={idx === 7 ? 3 : 4}
-                  ref={(el) => (milharRefs.current[idx] = el)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-                  disabled={saving}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">{`Grupo ${idx}`}</label>
-                <input
-                  placeholder="Ex: 04"
-                  value={form[`g${idx}`] || ''}
-                  onChange={(e) => handleGrupoChange(idx, e.target.value)}
-                  inputMode="numeric"
-                  maxLength={2}
-                  ref={(el) => (grupoRefs.current[idx] = el)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-                  disabled={saving}
-                />
-              </div>
-            </React.Fragment>
-          ))}
+          {numericMode ? (
+            <div className="md:col-span-3">
+              <label className="block text-xs font-semibold text-slate-500 mb-1">
+                Dezenas sorteadas ({neededDezenas || '—'} números)
+              </label>
+              <input
+                placeholder="Ex: 10 25 33 40 80"
+                value={form.dezenasList}
+                onChange={(e) => setForm((prev) => ({ ...prev, dezenasList: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+                disabled={saving}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Separe com espaço, vírgula ou linha. Quininha = 5 dezenas, Seninha = 6, Super 15 = 15 dezenas.
+              </p>
+            </div>
+          ) : (
+            [1, 2, 3, 4, 5, 6, 7].map((idx) => (
+              <React.Fragment key={idx}>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{`N${idx} (Milhar)`}</label>
+                  <input
+                    placeholder="Ex: 1234"
+                    value={form[`n${idx}`]}
+                    onChange={(e) => handleMilharChange(idx, e.target.value)}
+                    inputMode="numeric"
+                    maxLength={idx === 7 ? 3 : 4}
+                    ref={(el) => (milharRefs.current[idx] = el)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{`Grupo ${idx}`}</label>
+                  <input
+                    placeholder="Ex: 04"
+                    value={form[`g${idx}`] || ''}
+                    onChange={(e) => handleGrupoChange(idx, e.target.value)}
+                    inputMode="numeric"
+                    maxLength={2}
+                    ref={(el) => (grupoRefs.current[idx] = el)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+                    disabled={saving}
+                  />
+                </div>
+              </React.Fragment>
+            ))
+          )}
 
           <div className="md:col-span-3 flex justify-end">
             <button
@@ -402,22 +460,35 @@ const AdminResultsPage = () => {
                 rawGroups = [r.g1, r.g2, r.g3, r.g4, r.g5, r.g6, r.g7].filter((g) => g !== undefined);
               }
 
-              const nums = [...rawNums];
-              const groups = [...rawGroups];
+              const lotName = (r.loteria || r.codigoHorario || r.codigo || '').toUpperCase();
+              const isNumeric = lotName.includes('QUININHA') || lotName.includes('SENINHA') || lotName.includes('SUPER 15') || rawNums.length > 7;
+
+              let nums = [...rawNums];
+              let groups = [...rawGroups];
+
+              if (isNumeric) {
+                if (nums.length > 7) {
+                  nums = [`${rawNums.join(' • ')}`];
+                }
+                groups = Array(7).fill('—');
+              }
+
               while (nums.length < 7) nums.push('—');
               while (groups.length < 7) groups.push(null);
 
-              const groupsWithFallback = groups.map((g, i) => {
-                if (g) return g;
-                const num = nums[i];
-                if (!num || num === '—') return '—';
-                const dezena = String(num).replace(/\D/g, '').slice(-2);
-                if (!dezena) return '—';
-                const val = parseInt(dezena, 10);
-                if (Number.isNaN(val)) return '—';
-                const group = val === 0 ? 25 : Math.ceil(val / 4);
-                return String(group).padStart(2, '0');
-              });
+              const groupsWithFallback = isNumeric
+                ? groups.map((g) => g || '—')
+                : groups.map((g, i) => {
+                    if (g) return g;
+                    const num = nums[i];
+                    if (!num || num === '—') return '—';
+                    const dezena = String(num).replace(/\D/g, '').slice(-2);
+                    if (!dezena) return '—';
+                    const val = parseInt(dezena, 10);
+                    if (Number.isNaN(val)) return '—';
+                    const group = val === 0 ? 25 : Math.ceil(val / 4);
+                    return String(group).padStart(2, '0');
+                  });
 
               return (
                 <AdminTableRow key={r.id || r._id}>
