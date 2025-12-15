@@ -1,12 +1,12 @@
 const { PrismaClient } = require('@prisma/client');
 
-// Singleton com configuração explícita para evitar erros de inicialização
+// Em alguns ambientes (edge/client engine) o Prisma exige engineType diferente.
+// Garantimos o uso do engine binário padrão para aceitar a config de datasource do schema.
+if (!process.env.PRISMA_CLIENT_ENGINE_TYPE) {
+  process.env.PRISMA_CLIENT_ENGINE_TYPE = 'binary';
+}
+
 const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
   log: ['error', 'warn'],
 });
 
