@@ -1,10 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const pixController = require('../controllers/pixController');
-const authMiddleware = require('../middleware/auth');
 
-router.post('/charge', authMiddleware, pixController.createPixCharge);
-// Webhook não usa auth de usuário; ajuste validação de assinatura conforme Efí
-router.post('/webhook', pixController.handleWebhook);
+// Debug: Se o servidor subir, vai mostrar no log quais funções existem no controller
+console.log('Funções do PixController:', Object.keys(pixController));
+
+// Rota de criação do PIX
+// O nome da função aqui (createPixCharge) deve ser IDÊNTICO ao exports.createPixCharge no controller
+router.post('/charge', pixController.createPixCharge);
+
+// Webhook (Caso você tenha configurado)
+// Se não tiver a função webhook no controller, comente a linha abaixo
+if (pixController.webhook) {
+  router.post('/webhook', pixController.webhook);
+}
 
 module.exports = router;
