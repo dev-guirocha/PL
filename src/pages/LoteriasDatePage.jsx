@@ -136,11 +136,11 @@ const LoteriasDatePage = () => {
           onClick={() => {
             updateDraft({ data: selectedDate, jogo: gameTitle, slug: `/loterias/${jogo}` });
             if (jogo === 'quininha') {
-              navigate('/loterias/quininha/jogar');
+              navigate('/loterias/quininha/quantidade');
               return;
             }
             if (jogo === 'seninha') {
-              navigate('/loterias/seninha/jogar');
+              navigate('/loterias/seninha/quantidade');
               return;
             }
             if (jogo === 'super15') {

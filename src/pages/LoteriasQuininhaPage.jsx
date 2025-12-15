@@ -5,8 +5,6 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
 import PAYOUTS from '../constants/payouts.json';
 
-const QUANTIDADES = [13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35, 40, 45];
-
 const LoteriasQuininhaPage = () => {
   const navigate = useNavigate();
   const { refreshUser, authError } = useAuth();
@@ -19,6 +17,7 @@ const LoteriasQuininhaPage = () => {
     refreshUser();
     const d = getDraft();
     setDraft(d);
+    if (d?.quininhaQtd) setQtdeDezenas(Number(d.quininhaQtd));
     const dayCheck = new Date(`${d?.data || ''}T12:00:00`).getDay();
     if (dayCheck === 0) {
       toast.warn('Quininha não corre aos domingos!');
@@ -100,26 +99,18 @@ const LoteriasQuininhaPage = () => {
       )}
 
       <div className="w-full max-w-lg bg-white p-4 rounded-xl shadow-sm border border-emerald-100 flex flex-col gap-4">
-        <div>
-          <label className="text-sm font-bold text-slate-600 block mb-2">Quantos números quer jogar?</label>
-          <div className="flex flex-wrap gap-2">
-            {QUANTIDADES.map((qtd) => (
-              <button
-                key={qtd}
-                onClick={() => {
-                  setQtdeDezenas(qtd);
-                  setSelectedNumbers([]);
-                }}
-                className={`px-3 py-1 rounded-lg text-sm font-bold border transition ${
-                  qtdeDezenas === qtd
-                    ? 'bg-emerald-600 text-white border-emerald-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                {qtd}
-              </button>
-            ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase">Quantidade</p>
+            <p className="text-lg font-extrabold text-emerald-700">{qtdeDezenas} números</p>
           </div>
+          <button
+            type="button"
+            className="text-sm text-emerald-700 font-bold underline"
+            onClick={() => navigate('/loterias/quininha/quantidade')}
+          >
+            Alterar
+          </button>
         </div>
 
         <div className="grid grid-cols-10 gap-1 sm:gap-2">
@@ -164,6 +155,17 @@ const LoteriasQuininhaPage = () => {
               Prêmio Estimado: <strong>R$ {premioEstimado.toFixed(2)}</strong> (Cotação {multiplicador}x)
             </div>
           )}
+          <button
+            type="button"
+            className="mt-2 w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+            onClick={() => {
+              const pool = Array.from({ length: 80 }, (_, i) => String(i + 1).padStart(2, '0'));
+              const shuffled = pool.sort(() => 0.5 - Math.random());
+              setSelectedNumbers(shuffled.slice(0, qtdeDezenas));
+            }}
+          >
+            Surpreenda-me (escolha aleatória)
+          </button>
         </div>
 
         <button onClick={handleFinalize} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 transition">

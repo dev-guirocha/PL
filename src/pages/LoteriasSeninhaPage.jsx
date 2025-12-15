@@ -20,6 +20,7 @@ const LoteriasSeninhaPage = () => {
     refreshUser();
     const d = getDraft();
     setDraft(d);
+    if (d?.seninhaQtd) setQtdeDezenas(Number(d.seninhaQtd));
 
     if (d?.data) {
       const diaSemana = new Date(`${d.data}T12:00:00`).getDay();
@@ -102,26 +103,18 @@ const LoteriasSeninhaPage = () => {
       )}
 
       <div className="w-full max-w-lg bg-white p-4 rounded-xl shadow-sm border border-emerald-100 flex flex-col gap-4">
-        <div>
-          <label className="text-sm font-bold text-slate-600 block mb-2">Quantos números?</label>
-          <div className="flex flex-wrap gap-2">
-            {QUANTIDADES.map((qtd) => (
-              <button
-                key={qtd}
-                onClick={() => {
-                  setQtdeDezenas(qtd);
-                  setSelectedNumbers([]);
-                }}
-                className={`px-3 py-1 rounded-lg text-sm font-bold border transition ${
-                  qtdeDezenas === qtd
-                    ? 'bg-emerald-600 text-white border-emerald-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                {qtd}
-              </button>
-            ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase">Quantidade</p>
+            <p className="text-lg font-extrabold text-emerald-700">{qtdeDezenas} números</p>
           </div>
+          <button
+            type="button"
+            className="text-sm text-emerald-700 font-bold underline"
+            onClick={() => navigate('/loterias/seninha/quantidade')}
+          >
+            Alterar
+          </button>
         </div>
 
         <div className="grid grid-cols-10 gap-1 sm:gap-2">
@@ -166,6 +159,17 @@ const LoteriasSeninhaPage = () => {
               Prêmio Estimado: <strong>R$ {premioEstimado.toFixed(2)}</strong> ({multiplicador}x)
             </div>
           )}
+          <button
+            type="button"
+            className="mt-2 w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+            onClick={() => {
+              const pool = Array.from({ length: 60 }, (_, i) => String(i + 1).padStart(2, '0'));
+              const shuffled = pool.sort(() => 0.5 - Math.random());
+              setSelectedNumbers(shuffled.slice(0, qtdeDezenas));
+            }}
+          >
+            Surpreenda-me (aleatório)
+          </button>
         </div>
 
         <button onClick={handleFinalize} className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 transition">

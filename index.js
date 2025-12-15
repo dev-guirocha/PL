@@ -24,6 +24,8 @@ const defaultOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
+  'https://www.pandaloterias.com',
+  'https://pandaloterias.com',
 ];
 const envOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || '')
   .split(',')

@@ -17,6 +17,8 @@ import LoteriasFinalPage from './pages/LoteriasFinalPage';
 import LoteriasQuininhaPage from './pages/LoteriasQuininhaPage';
 import LoteriasSeninhaPage from './pages/LoteriasSeninhaPage';
 import LoteriasSuper15Page from './pages/LoteriasSuper15Page';
+import LoteriasQuininhaQuantidadePage from './pages/LoteriasQuininhaQuantidadePage';
+import LoteriasSeninhaQuantidadePage from './pages/LoteriasSeninhaQuantidadePage';
 import PulesPage from './pages/PulesPage';
 import WonBetsPage from './pages/WonBetsPage';
 import ReportsPage from './pages/ReportsPage';
@@ -93,7 +95,9 @@ function App() {
           <Route path="loterias-sorteios" element={<LoteriasSorteiosPage />} />
           <Route path="loterias-final" element={<LoteriasFinalPage />} />
           <Route path="loterias/quininha/jogar" element={<LoteriasQuininhaPage />} />
+          <Route path="loterias/quininha/quantidade" element={<LoteriasQuininhaQuantidadePage />} />
           <Route path="loterias/seninha/jogar" element={<LoteriasSeninhaPage />} />
+          <Route path="loterias/seninha/quantidade" element={<LoteriasSeninhaQuantidadePage />} />
           <Route path="loterias/super15/jogar" element={<LoteriasSuper15Page />} />
           <Route path="pules" element={<PulesPage />} />
           <Route path="premiadas" element={<WonBetsPage />} />
