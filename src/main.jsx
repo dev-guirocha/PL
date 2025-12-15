@@ -5,7 +5,6 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 import 'react-toastify/dist/ReactToastify.css';
-import logo from '../icon.png';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -21,7 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       fallback={
         <div className="splash-screen">
           <div className="splash-logo">
-            <img src={logo} alt="Carregando" />
+            <img src="/icon.png" alt="Carregando" />
           </div>
           <div className="splash-spinner" />
         </div>
