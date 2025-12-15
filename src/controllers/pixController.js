@@ -3,6 +3,7 @@ const axios = require('axios');
 exports.createPixCharge = async (req, res) => {
   try {
     const { amount, cpf, nome, email } = req.body;
+    console.log('📦 DADOS QUE CHEGARAM DO SITE:', req.body);
 
     // 1. Definição da URL
     // Pega SUITPAY_BASE_URL ou SUITPAY_URL

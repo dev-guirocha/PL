@@ -93,7 +93,13 @@ const PixRechargePage = () => {
         });
       }
 
-      const res = await api.post('/pix/charge', { amount: val, coupon });
+      const res = await api.post('/pix/charge', {
+        amount: val,
+        coupon,
+        cpf: cleanCpf,
+        nome: name,
+        email,
+      });
       setCopyCode(res.data?.copyAndPaste || '');
       setQrCode(res.data?.qrCode || '');
       setAppliedBonus(res.data?.bonusAmount || 0);
