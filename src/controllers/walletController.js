@@ -1,6 +1,8 @@
 const { z } = require('zod');
 const { recordTransaction } = require('../services/financeService');
 const prisma = require('../prisma');
+const SUPERVISOR_DEPOSIT_PCT = Number(process.env.SUPERVISOR_DEPOSIT_PCT || 5);
+const SUPERVISOR_DEPOSIT_BASIS = 'deposit';
 
 const amountSchema = z.preprocess(
   (val) => Number(val),
@@ -73,18 +75,36 @@ exports.deposit = async (req, res) => {
         suppressErrors: false,
       });
 
+      let supervisorId = updated.supervisorId;
+
       // Vincula supervisor somente após primeiro depósito
-      if (!updated.supervisorId && updated.pendingSupCode) {
+      if (!supervisorId && updated.pendingSupCode) {
         const sup = await tx.supervisor.findUnique({ where: { code: updated.pendingSupCode } });
         if (sup) {
           await tx.user.update({
             where: { id: updated.id },
             data: { supervisorId: sup.id, pendingSupCode: null },
           });
+          supervisorId = sup.id;
         }
       }
 
-      return updated;
+      if (supervisorId && SUPERVISOR_DEPOSIT_PCT > 0) {
+        const commissionAmount = Number(((value * SUPERVISOR_DEPOSIT_PCT) / 100).toFixed(2));
+        if (commissionAmount > 0) {
+          await tx.supervisorCommission.create({
+            data: {
+              supervisorId,
+              userId: updated.id,
+              amount: commissionAmount,
+              basis: SUPERVISOR_DEPOSIT_BASIS,
+              status: 'pending',
+            },
+          });
+        }
+      }
+
+      return { ...updated, supervisorId };
     });
 
     return res.json({ message: 'Depósito simulado realizado.', balance: user.balance, bonus: user.bonus });
