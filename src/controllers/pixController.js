@@ -67,6 +67,13 @@ exports.createCharge = async (req, res) => {
       },
     });
 
+    // Monta URL final da SuitPay (env curta + endpoint)
+    const baseUrlEnv = process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1';
+    const endpoint = '/gateway/request-qrcode';
+    const finalUrl = baseUrlEnv.includes('request-qrcode')
+      ? baseUrlEnv
+      : `${baseUrlEnv.replace(/\/$/, '')}${endpoint}`;
+
     const backendUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL || 'http://localhost:4000';
     const tokenParam = process.env.SUITPAY_WEBHOOK_TOKEN ? `?token=${process.env.SUITPAY_WEBHOOK_TOKEN}` : '';
     const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook${tokenParam}`;
@@ -84,11 +91,6 @@ exports.createCharge = async (req, res) => {
         email: user.email || 'cliente@plataforma.com',
       },
     };
-
-    // Monta URL final da SuitPay (env curta + endpoint)
-    const baseUrl = process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1';
-    const endpoint = '/gateway/request-qrcode';
-    const finalUrl = `${baseUrl.replace(/\/$/, '')}${endpoint}`;
 
     // Debug de ambiente SuitPay
     console.log('🔗 URL ALVO:', finalUrl);
@@ -137,6 +139,7 @@ exports.createCharge = async (req, res) => {
     return res.status(500).json({
       error: 'Erro ao gerar PIX.',
       details: error.response?.data?.error || error.response?.data?.message || undefined,
+      url: error.config?.url,
     });
   }
 };
