@@ -7,6 +7,7 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -145,6 +146,10 @@ const ProfilePage = () => {
       toast.error('As senhas não conferem.');
       return;
     }
+    if (passwords.next.length < 6) {
+      toast.error('Use pelo menos 6 caracteres na nova senha.');
+      return;
+    }
     try {
       await api.put('/auth/password', {
         currentPassword: passwords.current,
@@ -152,7 +157,7 @@ const ProfilePage = () => {
       });
       toast.success('Senha alterada com sucesso.');
       setPasswords({ current: '', next: '', confirm: '' });
-      setEditing(false);
+      setChangingPassword(false);
     } catch (err) {
       toast.error('Erro ao alterar senha.');
     }
@@ -191,6 +196,14 @@ const ProfilePage = () => {
             </div>
             <button style={styles.buttonPrimary} onClick={() => setEditing(true)}>
               Editar
+            </button>
+            <button
+              style={{ ...styles.buttonGhost, marginTop: '4px' }}
+              onClick={() => {
+                setChangingPassword((prev) => !prev);
+              }}
+            >
+              {changingPassword ? 'Fechar troca de senha' : 'Alterar senha'}
             </button>
           </>
         )}
@@ -249,6 +262,11 @@ const ProfilePage = () => {
               Salvar perfil
             </button>
 
+          </>
+        )}
+
+        {!editing && changingPassword && (
+          <>
             <div style={styles.sectionTitle}>Alterar senha</div>
             <div style={styles.label}>Senha atual</div>
             <input
@@ -275,7 +293,7 @@ const ProfilePage = () => {
               placeholder="Repita a nova senha"
             />
             <button style={styles.buttonPrimary} onClick={handleChangePassword}>
-              Alterar senha
+              Salvar nova senha
             </button>
           </>
         )}
