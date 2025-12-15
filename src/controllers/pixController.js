@@ -96,7 +96,9 @@ exports.createCharge = async (req, res) => {
     console.log('🔗 URL ALVO:', finalUrl);
     console.log('🔑 CI:', process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID ? 'Configurado' : 'Faltando');
 
-    const response = await axios.post(finalUrl, payload, {
+    // Usa instância isolada do axios para evitar configs globais (ex.: baseURL antiga)
+    const api = axios.create();
+    const response = await api.post(finalUrl, payload, {
       headers: {
         ci: process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID,
         cs: process.env.SUITPAY_CS || process.env.SUITPAY_CLIENT_SECRET,
@@ -130,6 +132,11 @@ exports.createCharge = async (req, res) => {
       couponCode: couponCode || null,
     });
   } catch (error) {
+    if (error.config) {
+      console.log('🕵️‍♂️ AXIOS TENTOU ACESSAR:', error.config.url);
+      console.log('🕵️‍♂️ AXIOS BASE URL:', error.config.baseURL);
+      console.log('🕵️‍♂️ HEADERS ENVIADOS:', error.config.headers);
+    }
     if (error.response) {
       console.error('❌ ERRO SUITPAY STATUS:', error.response.status);
       console.error('❌ ERRO SUITPAY DADOS:', JSON.stringify(error.response.data, null, 2));
