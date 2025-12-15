@@ -9,11 +9,11 @@ const amountSchema = z.preprocess(
 );
 
 const suitPayApi = axios.create({
-  baseURL: process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1',
+  baseURL: process.env.SUITPAY_URL || process.env.SUITPAY_BASE_URL || 'https://ws.suitpay.app/api/v1',
   headers: {
     'Content-Type': 'application/json',
-    ci: process.env.SUITPAY_CLIENT_ID,
-    cs: process.env.SUITPAY_CLIENT_SECRET,
+    ci: process.env.SUITPAY_CI || process.env.SUITPAY_CLIENT_ID,
+    cs: process.env.SUITPAY_CS || process.env.SUITPAY_CLIENT_SECRET,
   },
 });
 
@@ -26,13 +26,9 @@ exports.createCharge = async (req, res) => {
   const amount = parsed.data;
   const userId = req.userId;
   const correlationId = `deposit-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const amountInCents = Math.round(Number(amount) * 100);
-  if (Number.isNaN(amountInCents) || amountInCents < 100) {
-    return res.status(400).json({ error: 'Valor mínimo para depósito é R$ 1,00.' });
-  }
-  const MAX_CENTS = 100000; // R$ 1.000,00 limite da conta
-  if (amountInCents > MAX_CENTS) {
-    return res.status(400).json({ error: 'O valor máximo por depósito PIX é de R$ 1.000,00.' });
+  const amountFloat = Number(amount);
+  if (Number.isNaN(amountFloat) || amountFloat <= 0) {
+    return res.status(400).json({ error: 'Valor inválido.' });
   }
 
   try {
@@ -85,71 +81,28 @@ exports.createCharge = async (req, res) => {
     const callbackUrl = `${backendUrl.replace(/\/$/, '')}/api/pix/webhook${tokenParam}`;
 
     const payload = {
-      correlationID: correlationId,
-      value: amountInCents,
-      type: 'DYNAMIC',
-      customer: {
-        name: user.name || 'Cliente',
-        taxID: {
-          taxID: cleanCpf,
-          type: 'BR:CPF',
-        },
-        email: user.email || 'cliente@plataforma.com',
-      },
-      // fallback para compatibilidade com SuitPay se ainda usar
-      requestNumber: String(charge.id),
+      requestNumber: correlationId,
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: amountInCents,
+      amount: amountFloat,
       shippingAmount: 0.0,
       usernameCheckout: 'checkout',
       callbackUrl,
+      client: {
+        name: user.name || 'Cliente',
+        document: cleanCpf,
+        email: user.email || 'cliente@plataforma.com',
+      },
     };
 
-    const apiUrl = process.env.OPENPIX_API_URL;
-    const appId = process.env.OPENPIX_APP_ID;
-    let response;
+    const response = await suitPayApi.post('/gateway/request-qrcode', payload);
 
-    if (apiUrl && appId) {
-      response = await axios.post(
-        `${apiUrl.replace(/\/$/, '')}/api/v1/charge`,
-        payload,
-        {
-          headers: {
-            Authorization: appId,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-    } else {
-      // fallback SuitPay
-      response = await suitPayApi.post('/gateway/request-qrcode', {
-        requestNumber: payload.requestNumber,
-        dueDate: payload.dueDate,
-        amount: amount,
-        shippingAmount: payload.shippingAmount,
-        usernameCheckout: payload.usernameCheckout,
-        callbackUrl: payload.callbackUrl,
-        client: {
-          name: user.name,
-          document: cleanCpf,
-          email: user.email || 'cliente@plataforma.com',
-        },
-      });
-    }
-
-    if (!apiUrl && response.data.response !== 'OK') {
+    if (response.data.response !== 'OK') {
       console.error('Erro SuitPay:', response.data);
       await prisma.pixCharge.update({ where: { id: charge.id }, data: { status: 'failed' } });
       throw new Error('Falha no gateway de pagamento.');
     }
 
-    const { idTransaction, paymentCode, paymentCodeBase64 } = apiUrl
-      ? {
-          idTransaction: response.data?.charge?.correlationID || correlationId,
-          paymentCode: response.data?.brCode || response.data?.paymentLink || '',
-          paymentCodeBase64: response.data?.qrCodeImage || response.data?.qrCodeBase64 || '',
-        }
-      : response.data;
+    const { idTransaction, paymentCode, paymentCodeBase64 } = response.data;
 
     const updated = await prisma.pixCharge.update({
       where: { id: charge.id },
@@ -170,19 +123,8 @@ exports.createCharge = async (req, res) => {
     });
   } catch (error) {
     if (error.response) {
-      console.error('❌ ERRO OPENPIX STATUS:', error.response.status);
-      console.error('❌ ERRO OPENPIX DADOS:', JSON.stringify(error.response.data, null, 2));
-
-      const data = error.response.data || {};
-      const tooHigh =
-        data.response === 'GREATER_THAN_THE_MAX_VALUE' ||
-        (data.message && data.message.toString().includes('Valor superior ao valor máximo'));
-      if (tooHigh) {
-        return res.status(400).json({
-          error: 'Limite da conta excedido',
-          message: 'O valor máximo por depósito PIX é de R$ 1.000,00.',
-        });
-      }
+      console.error('❌ ERRO SUITPAY STATUS:', error.response.status);
+      console.error('❌ ERRO SUITPAY DADOS:', JSON.stringify(error.response.data, null, 2));
     } else {
       console.error('❌ ERRO PIX:', error.message);
     }
