@@ -9,6 +9,7 @@ const PixRechargePage = () => {
   const { user, refreshUser } = useAuth();
   const [cpf, setCpf] = useState('');
   const [amount, setAmount] = useState('');
+  const [amountCents, setAmountCents] = useState(0);
   const [qrCode, setQrCode] = useState('');
   const [copyCode, setCopyCode] = useState('');
   const [coupon, setCoupon] = useState('');
@@ -41,15 +42,19 @@ const PixRechargePage = () => {
 
   const handleGenerate = async () => {
     const cleanCpf = sanitizeCpf(cpf);
-    const val = Number(amount);
+    const val = amountCents / 100;
 
     if (!cleanCpf || cleanCpf.length !== 11) {
       toast.error('CPF obrigatório (11 dígitos).');
       return;
     }
 
-    if (!amount || Number.isNaN(val) || val <= 0) {
+    if (!amountCents || Number.isNaN(val) || val <= 0) {
       toast.error('Informe um valor válido.');
+      return;
+    }
+    if (amountCents > 100000) {
+      toast.error('Valor máximo por depósito é R$ 1.000,00.');
       return;
     }
 
@@ -196,14 +201,20 @@ const PixRechargePage = () => {
         <div className="space-y-2">
           <label className="text-sm font-semibold text-slate-700">Valor a depositar (R$)</label>
           <input
-            type="number"
-            min="0"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 7); // até 9999,99
+              const cents = digits ? parseInt(digits, 10) : 0;
+              setAmountCents(cents);
+              const formatted = (cents / 100).toFixed(2).replace('.', ',');
+              setAmount(formatted);
+            }}
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            placeholder="Ex: 20.00"
+            placeholder="Ex: 20,00"
           />
+          <p className="text-xs text-slate-500">Máximo R$ 1.000,00 por transação.</p>
         </div>
 
         <button
