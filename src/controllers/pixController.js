@@ -1,12 +1,8 @@
-const axios = require('axios');
-
 exports.createPixCharge = async (req, res) => {
   try {
     const { amount, cpf, nome, email } = req.body;
-    console.log('📦 DADOS QUE CHEGARAM DO SITE:', req.body);
 
     // 1. Definição da URL
-    // Pega SUITPAY_BASE_URL ou SUITPAY_URL
     const baseUrlEnv = process.env.SUITPAY_BASE_URL || process.env.SUITPAY_URL;
     let finalUrl = baseUrlEnv;
 
@@ -15,27 +11,22 @@ exports.createPixCharge = async (req, res) => {
       finalUrl = `${finalUrl.replace(/\/$/, '')}/gateway/request-qrcode`;
     }
 
-    console.log('🚀 Iniciando Suitpay em:', finalUrl);
+    console.log('🚀 [FETCH] Disparando para:', finalUrl);
 
-    // 2. Busca Credenciais (Compatível com seus nomes no Railway)
+    // 2. Credenciais
     const clientID = process.env.SUITPAY_CLIENT_ID || process.env.SUITPAY_CI;
     const clientSecret = process.env.SUITPAY_CLIENT_SECRET || process.env.SUITPAY_CS;
 
     if (!clientID || !clientSecret) {
-      throw new Error('Credenciais (Client ID / Secret) não configuradas no Railway.');
+      throw new Error('Credenciais Suitpay não encontradas no Railway.');
     }
 
-    // 3. Preparação dos Dados
+    // 3. Validação e Tratamento
     const cleanCpf = String(cpf || '').replace(/\D/g, '');
     const valueFloat = Number(amount);
 
-    // Validação defensiva de CPF antes de chamar a Suitpay
-    console.log('🔍 CPF Processado:', cleanCpf);
     if (!cleanCpf || cleanCpf.length !== 11) {
-      return res.status(400).json({
-        error: 'CPF Inválido',
-        message: 'O CPF deve conter 11 números. Verifique o cadastro.',
-      });
+      return res.status(400).json({ error: 'CPF inválido ou não informado.' });
     }
 
     const payload = {
@@ -52,21 +43,29 @@ exports.createPixCharge = async (req, res) => {
       },
     };
 
-    // 4. Cria instância isolada do Axios
-    const api = axios.create();
+    console.log('📦 Payload:', JSON.stringify(payload));
 
-    // 5. Envia Requisição
-    const response = await api.post(finalUrl, payload, {
+    // 4. DISPARO COM FETCH (Ignora configs globais do Axios)
+    const response = await fetch(finalUrl, {
+      method: 'POST',
       headers: {
         ci: clientID,
         cs: clientSecret,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload),
     });
 
-    console.log('✅ Sucesso Suitpay:', response.data);
+    // 5. Tratamento da Resposta
+    const data = await response.json();
 
-    const data = response.data;
+    if (!response.ok) {
+      console.error('❌ ERRO API SUITPAY:', JSON.stringify(data, null, 2));
+      return res.status(response.status).json(data);
+    }
+
+    console.log('✅ SUCESSO:', data);
+
     return res.json({
       success: true,
       correlationID: data.idTransaction,
@@ -74,13 +73,7 @@ exports.createPixCharge = async (req, res) => {
       qrCodeImage: data.paymentUrl,
     });
   } catch (error) {
-    // Logs de erro detalhados
-    if (error.response) {
-      console.error('❌ ERRO SUITPAY:', JSON.stringify(error.response.data, null, 2));
-      return res.status(error.response.status).json(error.response.data);
-    }
-
-    console.error('❌ ERRO INTERNO:', error.message);
-    return res.status(500).json({ error: 'Erro interno ao processar PIX' });
+    console.error('❌ ERRO CRÍTICO:', error.message);
+    return res.status(500).json({ error: 'Erro interno ao gerar PIX' });
   }
 };
