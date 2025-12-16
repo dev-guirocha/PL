@@ -100,8 +100,9 @@ const PixRechargePage = () => {
         nome: name,
         email,
       });
-      setCopyCode(res.data?.copyAndPaste || '');
-      setQrCode(res.data?.qrCode || '');
+      // OpenPix/Woovi retornam brCode (copia e cola) e qrCodeImage (URL)
+      setCopyCode(res.data?.brCode || '');
+      setQrCode(res.data?.qrCodeImage || '');
       setAppliedBonus(res.data?.bonusAmount || 0);
       // guarda baseline para detectar crédito (saldo + bônus)
       baselineRef.current = Number(user?.balance || 0) + Number(user?.bonus || 0);
@@ -257,7 +258,8 @@ const PixRechargePage = () => {
         {qrCode ? (
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col items-center gap-2">
             <span className="text-sm font-semibold text-slate-700">QR Code</span>
-            <img src={`data:image/png;base64,${qrCode}`} alt="QR Code Pix" className="w-48 h-48 object-contain" />
+            {/* OpenPix retorna URL da imagem, usa src direto */}
+            <img src={qrCode} alt="QR Code Pix" className="w-48 h-48 object-contain" />
           </div>
         ) : null}
       </div>
