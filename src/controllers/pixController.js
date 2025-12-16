@@ -8,8 +8,9 @@ const woovi = createClient({
 
 exports.createPixCharge = async (req, res) => {
   try {
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.userId;
     if (!userId) {
+      console.warn('⚠️ Tentativa de criar Pix sem usuário autenticado.');
       return res.status(401).json({ error: 'Usuário não identificado.' });
     }
 
