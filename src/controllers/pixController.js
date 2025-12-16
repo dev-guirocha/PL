@@ -64,11 +64,13 @@ exports.createPixCharge = async (req, res) => {
     console.error('❌ Headers:', err.response?.headers);
     if (!err.response) console.error('❌ stack:', err.stack);
 
-    const errorMsg = err.response?.data?.error || err.message || JSON.stringify(err);
+    const status = err.response?.status || 500;
 
-    return res.status(500).json({
+    return res.status(status).json({
       error: 'Erro ao gerar Pix',
-      details: errorMsg,
+      status,
+      data: err.response?.data,
+      message: err.message,
     });
   }
 };
