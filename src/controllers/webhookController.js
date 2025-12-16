@@ -26,26 +26,41 @@ exports.handleOpenPixWebhook = async (req, res) => {
     console.log(`🔔 Webhook OpenPix: ${event} | Status: ${charge.status}`);
 
     if (event === 'OPENPIX:CHARGE_COMPLETED' || charge.status === 'COMPLETED') {
-      const transactionId = charge.correlationID;
+      const correlationID = charge.correlationID;
+      const identifier = charge.identifier;
+      const transactionID = charge.transactionID || charge.transactionId;
+      const pixTxId = charge.paymentMethods?.pix?.txId;
 
-      // Busca a cobrança no banco pelo correlationID salvo como txid
-      const pixCharge = await prisma.pixCharge.findUnique({
-        where: { txid: transactionId },
+      // Tenta casar pelo txid salvo (correlationID ou txId/identifier)
+      const pixCharge = await prisma.pixCharge.findFirst({
+        where: {
+          OR: [
+            { txid: correlationID },
+            identifier ? { txid: identifier } : undefined,
+            transactionID ? { txid: transactionID } : undefined,
+            pixTxId ? { txid: pixTxId } : undefined,
+          ].filter(Boolean),
+        },
         include: { user: true },
       });
 
       if (!pixCharge) {
-        console.error(`⚠️ Cobrança não encontrada no banco: ${transactionId}`);
+        console.error('⚠️ Cobrança não encontrada no banco para IDs:', {
+          correlationID,
+          identifier,
+          transactionID,
+          pixTxId,
+        });
         return res.status(200).send('OK');
       }
 
       if (pixCharge.status === 'paid' || pixCharge.credited) {
-        console.log(`ℹ️ Cobrança já processada: ${transactionId}`);
+        console.log(`ℹ️ Cobrança já processada: ${pixCharge.txid}`);
         return res.status(200).send('OK');
       }
 
       const value = Number(pixCharge.amount);
-      console.log(`💰 Processando crédito: ${transactionId} - Usuário: ${pixCharge.userId} - Valor: R$ ${value}`);
+      console.log(`💰 Processando crédito: ${pixCharge.txid} - Usuário: ${pixCharge.userId} - Valor: R$ ${value}`);
 
       // Transação atômica: marca pago, credita saldo e registra extrato
       await prisma.$transaction([
