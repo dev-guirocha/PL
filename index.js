@@ -61,6 +61,11 @@ app.use(
   }),
 ); // Deixa o Front-end falar com o Back-end
 app.use(express.json()); // Permite ler JSON no corpo da requisição
+
+// Webhook deve ficar antes do CSRF para não ser bloqueado
+app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);
+
+// Demais rotas protegidas por CSRF
 app.use(createCsrfProtection(allowedOrigins, wildcardOrigins));
 
 // Limitadores de requisição para mitigar brute force e spam
@@ -85,8 +90,6 @@ app.use('/api/pix', pixRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/bets', betRoutes);
 app.use('/api/admin', adminRoutes);
-// Endpoint alternativo direto para Webhook OpenPix (sem prefixo /pix)
-app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);
 
 // Healthcheck simples para validar deploy/back-end
 app.get('/api/health', (req, res) => {

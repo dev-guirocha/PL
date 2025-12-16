@@ -1,16 +1,15 @@
 const { createClient } = require('@woovi/node-sdk');
 const prisma = require('../utils/prismaClient');
 
-// Normaliza AppID (evita quebras de linha invisíveis)
-const appId = (process.env.OPENPIX_APP_ID || '').trim();
-console.log('[OpenPix] appId len:', appId.length);
-console.log('[OpenPix] appId head:', appId.slice(0, 8));
+// Normaliza AppID (evita quebras de linha invisíveis). Aceita WOOVI_APP_ID ou fallback OPENPIX_APP_ID.
+const appId = (process.env.WOOVI_APP_ID || process.env.OPENPIX_APP_ID || '').trim();
+console.log('[Woovi] appId len:', appId.length);
+console.log('[Woovi] appId head:', appId.slice(0, 8));
 
-// Inicializa o cliente OpenPix com AppID e base da OpenPix (Enterprise)
-// Não incluir /api/v1 no baseUrl, o SDK já adiciona o path das rotas
+// Inicializa o cliente Woovi com AppID e base oficial da Woovi
 const woovi = createClient({
   appId,
-  baseUrl: 'https://api.openpix.com.br',
+  baseUrl: 'https://api.woovi.com',
 });
 
 exports.createPixCharge = async (req, res) => {
@@ -74,6 +73,7 @@ exports.createPixCharge = async (req, res) => {
     console.error('❌ Status:', err.response?.status);
     console.error('❌ Data:', err.response?.data);
     console.error('❌ Headers:', err.response?.headers);
+    if (!err.response) console.error('❌ stack:', err.stack);
 
     const errorMsg = err.response?.data?.error || err.message || JSON.stringify(err);
 
