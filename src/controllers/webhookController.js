@@ -27,16 +27,53 @@ exports.handleOpenPixWebhook = async (req, res) => {
 
     if (event === 'OPENPIX:CHARGE_COMPLETED' || charge.status === 'COMPLETED') {
       const transactionId = charge.correlationID;
-      const value = Number(charge.value) / 100; // centavos -> reais
 
-      console.log(`💰 Pagamento Confirmado: ${transactionId} - R$ ${value}`);
+      // Busca a cobrança no banco pelo correlationID salvo como txid
+      const pixCharge = await prisma.pixCharge.findUnique({
+        where: { txid: transactionId },
+        include: { user: true },
+      });
 
-      // Exemplo de atualização de base (ajuste à sua regra de crédito):
-      // await prisma.pixCharge.update({
-      //   where: { txid: transactionId },
-      //   data: { status: 'PAID', paidAt: new Date() },
-      // });
-      // TODO: adicionar crédito ao saldo do usuário relacionado.
+      if (!pixCharge) {
+        console.error(`⚠️ Cobrança não encontrada no banco: ${transactionId}`);
+        return res.status(200).send('OK');
+      }
+
+      if (pixCharge.status === 'paid' || pixCharge.credited) {
+        console.log(`ℹ️ Cobrança já processada: ${transactionId}`);
+        return res.status(200).send('OK');
+      }
+
+      const value = Number(pixCharge.amount);
+      console.log(`💰 Processando crédito: ${transactionId} - Usuário: ${pixCharge.userId} - Valor: R$ ${value}`);
+
+      // Transação atômica: marca pago, credita saldo e registra extrato
+      await prisma.$transaction([
+        prisma.pixCharge.update({
+          where: { id: pixCharge.id },
+          data: {
+            status: 'paid',
+            paidAt: new Date(),
+            credited: true,
+          },
+        }),
+        prisma.user.update({
+          where: { id: pixCharge.userId },
+          data: {
+            balance: { increment: value },
+          },
+        }),
+        prisma.transaction.create({
+          data: {
+            userId: pixCharge.userId,
+            type: 'deposit',
+            amount: value,
+            description: `Depósito via Pix (TxID: ${transactionId})`,
+          },
+        }),
+      ]);
+
+      console.log(`✅ Saldo creditado para User ID ${pixCharge.userId}`);
     }
 
     // Sempre 200 para evitar bloqueio/reenvio

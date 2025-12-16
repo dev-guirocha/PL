@@ -1,4 +1,5 @@
 const { createClient } = require('@woovi/node-sdk');
+const prisma = require('../utils/prismaClient');
 
 // Inicializa o cliente OpenPix com o AppID configurado no ambiente (OPENPIX_APP_ID)
 const woovi = createClient({
@@ -7,6 +8,11 @@ const woovi = createClient({
 
 exports.createPixCharge = async (req, res) => {
   try {
+    const userId = req.user?.id || req.body.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Usuário não identificado.' });
+    }
+
     const { amount, cpf, nome, email } = req.body;
 
     // Validações básicas
@@ -35,6 +41,18 @@ exports.createPixCharge = async (req, res) => {
     });
 
     console.log('✅ Cobrança criada:', charge.correlationID);
+
+    // Persiste a cobrança como pendente para reconciliar no webhook
+    await prisma.pixCharge.create({
+      data: {
+        userId: Number(userId),
+        amount: valueFloat,
+        status: 'pending',
+        txid: charge.correlationID,
+        copyAndPaste: charge.brCode,
+        qrCodeImage: charge.qrCodeImage,
+      },
+    });
 
     return res.json({
       success: true,
