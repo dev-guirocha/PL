@@ -24,51 +24,49 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
     }));
   }, [prizes, setResultForm]);
 
-  // --- O PARSER INTELIGENTE V2 ---
+  // Parser orientado a linhas (excel/coluna): milhar em uma linha, grupo opcional na próxima
   const handleSmartPaste = (e) => {
     const text = e.target.value;
     setRawInput(text);
 
-    // Limpa tudo que não for número
-    const cleanData = text.replace(/\D/g, '');
-    if (!cleanData) return;
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => l.replace(/\D/g, ''));
+
+    if (!lines.length) return;
+
+    // Aviso opcional se colar tudo em uma linha longa
+    if (lines.length === 1 && lines[0].length > 10) {
+      alert('Cole em formato de coluna: uma linha por milhar (grupo opcional na linha seguinte).');
+    }
 
     const newPrizes = Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }));
-    let cursor = 0;
+    let prizeIndex = 0;
 
-    for (let i = 0; i < 7; i++) {
-      if (cursor >= cleanData.length) break;
+    for (let i = 0; i < lines.length && prizeIndex < 7; i++) {
+      const current = lines[i];
+      if (!current) continue;
 
-      // Pega 4 dígitos para o milhar
-      let numLength = 4;
-      // Se sobrar pouco no final, pega o que tem
-      if (cleanData.length - cursor < 4) numLength = cleanData.length - cursor;
+      // aceita milhar de 3+ dígitos; preenche zeros à esquerda se precisar
+      if (current.length >= 3) {
+        const numero = current.padStart(4, '0');
+        let grupo = '';
 
-      const rawNum = cleanData.substr(cursor, numLength);
-
-      if (rawNum) {
-        newPrizes[i].numero = rawNum;
-        const calculatedGroup = calculateGroup(rawNum);
-        newPrizes[i].grupo = calculatedGroup;
-
-        cursor += numLength;
-
-        // VERIFICAÇÃO INTELIGENTE DE GRUPO
-        // Olha os próximos 2 digitos. Se bater com o grupo calculado, consome eles.
-        const nextTwo = cleanData.substr(cursor, 2);
-        const nextOne = cleanData.substr(cursor, 1);
-
-        const padGroup = calculatedGroup.padStart(2, '0');
-
-        if (nextTwo === padGroup) {
-          cursor += 2; // Era o grupo, pula ele
-        } else if (nextTwo.length === 2 && nextTwo === calculatedGroup) {
-          cursor += 2;
-        } else if (nextOne === calculatedGroup) {
-          cursor += 1;
+        const next = lines[i + 1];
+        if (next && next.length <= 2) {
+          grupo = next.padStart(2, '0');
+          i++; // consome a linha do grupo
+        } else {
+          grupo = calculateGroup(numero);
         }
+
+        newPrizes[prizeIndex] = { numero, grupo };
+        prizeIndex++;
       }
     }
+
     setPrizes(newPrizes);
   };
 
