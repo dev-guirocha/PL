@@ -30,7 +30,8 @@ exports.createPixCharge = async (req, res) => {
     }
 
     const payload = {
-      requestNumber: `pix-${Date.now()}`,
+      // Usa um identificador sempre único para evitar bloqueio por reuso
+      requestNumber: `pix-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       amount: valueFloat,
       shippingAmount: 0.0,
