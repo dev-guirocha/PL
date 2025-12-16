@@ -1,15 +1,5 @@
-const { createClient } = require('@woovi/node-sdk');
 const prisma = require('../utils/prismaClient');
-
-// Normaliza AppID (evita quebras de linha invisíveis) e base URL (permite override por env)
-const appId = (process.env.WOOVI_APP_ID || '').trim();
-console.log('[Woovi] appId len:', appId.length);
-console.log('[Woovi] appId head:', appId.slice(0, 8));
-
-const woovi = createClient({
-  appId,
-  baseUrl: process.env.WOOVI_BASE_URL || 'https://api.woovi.com',
-});
+const woovi = require('../lib/wooviClient');
 
 exports.createPixCharge = async (req, res) => {
   try {
