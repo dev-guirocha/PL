@@ -1,4 +1,4 @@
-const { WooviSdk } = require('@woovi/node-sdk');
+const  WooviSdk  = require('@woovi/node-sdk');
 
 // Inicializa o SDK com o AppID configurado no ambiente (OPENPIX_APP_ID)
 const woovi = new WooviSdk({
