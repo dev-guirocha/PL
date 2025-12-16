@@ -1,7 +1,7 @@
-const  WooviSdk  = require('@woovi/node-sdk');
+const { createClient } = require('@woovi/node-sdk');
 
-// Inicializa o SDK com o AppID configurado no ambiente (OPENPIX_APP_ID)
-const woovi = new WooviSdk({
+// Inicializa o cliente OpenPix com o AppID configurado no ambiente (OPENPIX_APP_ID)
+const woovi = createClient({
   appId: process.env.OPENPIX_APP_ID,
 });
 
