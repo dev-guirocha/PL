@@ -25,7 +25,7 @@ exports.createPixCharge = async (req, res) => {
 
     console.log('🚀 [OpenPix] Criando cobrança:', correlationID, valueInCents);
 
-    const { charge } = await woovi.charge.create({
+    const created = await woovi.charge.create({
       correlationID,
       value: valueInCents,
       comment: 'Recarga Plataforma',
@@ -36,7 +36,14 @@ exports.createPixCharge = async (req, res) => {
       },
     });
 
-    console.log('✅ Cobrança criada:', charge.correlationID);
+    console.log('✅ create raw:', JSON.stringify(created, null, 2));
+
+    const charge = created?.charge ?? created?.data?.charge ?? created;
+    const brCode = charge?.brCode ?? charge?.pix?.brCode ?? null;
+    const qrCodeImage = charge?.qrCodeImage ?? charge?.pix?.qrCodeImage ?? null;
+    const paymentLinkUrl = charge?.paymentLinkUrl ?? charge?.pix?.paymentLinkUrl ?? null;
+
+    console.log('✅ Cobrança criada:', charge?.correlationID);
 
     // Persiste a cobrança como pendente para reconciliar no webhook
     await prisma.pixCharge.create({
@@ -44,17 +51,18 @@ exports.createPixCharge = async (req, res) => {
         userId: Number(userId),
         amount: valueFloat,
         status: 'pending',
-        txid: charge.correlationID,
-        copyAndPaste: charge.brCode,
-        qrCodeImage: charge.qrCodeImage,
+        txid: charge?.correlationID || correlationID,
+        copyAndPaste: brCode,
+        qrCodeImage: qrCodeImage,
       },
     });
 
     return res.json({
       success: true,
-      correlationID: charge.correlationID,
-      brCode: charge.brCode,
-      qrCodeImage: charge.qrCodeImage,
+      correlationID: charge?.correlationID ?? correlationID,
+      brCode,
+      qrCodeImage,
+      paymentLinkUrl,
     });
   } catch (err) {
     // LOG DE DEPURAÇÃO (AXIOS/SDK)
