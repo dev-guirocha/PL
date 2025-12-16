@@ -42,6 +42,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
     }
 
     const value = Number(pixCharge.amount);
+    const bonusValue = Number(pixCharge.bonusAmount ?? Number((value * 0.15).toFixed(2)));
 
     await prisma.$transaction([
       prisma.pixCharge.update({
@@ -56,6 +57,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
         where: { id: pixCharge.userId },
         data: {
           balance: { increment: value },
+          bonus: { increment: bonusValue },
         },
       }),
       prisma.transaction.create({
@@ -64,6 +66,14 @@ exports.handleOpenPixWebhook = async (req, res) => {
           type: 'PIX_DEPOSIT',
           amount: value,
           description: `Depósito Pix (${txId || correlationID})`,
+        },
+      }),
+      prisma.transaction.create({
+        data: {
+          userId: pixCharge.userId,
+          type: 'PIX_BONUS',
+          amount: bonusValue,
+          description: `Bônus 15% Pix (${txId || correlationID})`,
         },
       }),
     ]);

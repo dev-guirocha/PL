@@ -21,6 +21,7 @@ exports.createPixCharge = async (req, res) => {
 
     // OpenPix trabalha em centavos
     const valueInCents = Math.round(valueFloat * 100);
+    const bonusAmount = Number((valueFloat * 0.15).toFixed(2)); // bônus fixo de 15%
     const correlationID = `pix-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     console.log('🚀 [OpenPix] Criando cobrança:', correlationID, valueInCents);
@@ -55,6 +56,7 @@ exports.createPixCharge = async (req, res) => {
       data: {
         userId: Number(userId),
         amount: valueFloat,
+        bonusAmount,
         status: 'pending',
         txid: txid || correlationID,
         copyAndPaste: brCode,
@@ -69,6 +71,7 @@ exports.createPixCharge = async (req, res) => {
       qrCodeImage,
       paymentLinkUrl,
       identifier,
+      bonusAmount,
     });
   } catch (err) {
     // LOG DE DEPURAÇÃO (AXIOS/SDK)
