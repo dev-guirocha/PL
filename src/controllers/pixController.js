@@ -1,10 +1,14 @@
 const { createClient } = require('@woovi/node-sdk');
 const prisma = require('../utils/prismaClient');
 
-// Inicializa o cliente OpenPix com o AppID configurado no ambiente (OPENPIX_APP_ID)
-// Força a base da OpenPix (Enterprise) em vez da URL padrão da Woovi
+// Normaliza AppID (evita quebras de linha invisíveis)
+const appId = (process.env.OPENPIX_APP_ID || '').trim();
+console.log('[OpenPix] appId len:', appId.length);
+console.log('[OpenPix] appId head:', appId.slice(0, 8));
+
+// Inicializa o cliente OpenPix com AppID e base da OpenPix (Enterprise)
 const woovi = createClient({
-  appId: process.env.OPENPIX_APP_ID,
+  appId,
   baseUrl: 'https://api.openpix.com.br/api/v1',
 });
 
@@ -63,11 +67,14 @@ exports.createPixCharge = async (req, res) => {
       brCode: charge.brCode,
       qrCodeImage: charge.qrCodeImage,
     });
-  } catch (error) {
-    // LOG DE DEPURAÇÃO (BRUTO)
-    console.error('❌ ERRO REAL:', error);
+  } catch (err) {
+    // LOG DE DEPURAÇÃO (AXIOS/SDK)
+    console.error('❌ Axios/Woovi message:', err.message);
+    console.error('❌ Status:', err.response?.status);
+    console.error('❌ Data:', err.response?.data);
+    console.error('❌ Headers:', err.response?.headers);
 
-    const errorMsg = error.response?.data?.error || error.message || JSON.stringify(error);
+    const errorMsg = err.response?.data?.error || err.message || JSON.stringify(err);
 
     return res.status(500).json({
       error: 'Erro ao gerar Pix',
