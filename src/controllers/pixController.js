@@ -7,9 +7,10 @@ console.log('[OpenPix] appId len:', appId.length);
 console.log('[OpenPix] appId head:', appId.slice(0, 8));
 
 // Inicializa o cliente OpenPix com AppID e base da OpenPix (Enterprise)
+// Não incluir /api/v1 no baseUrl, o SDK já adiciona o path das rotas
 const woovi = createClient({
   appId,
-  baseUrl: 'https://api.openpix.com.br/api/v1',
+  baseUrl: 'https://api.openpix.com.br',
 });
 
 exports.createPixCharge = async (req, res) => {
