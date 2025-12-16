@@ -3,14 +3,10 @@ const router = express.Router();
 const pixController = require('../controllers/pixController');
 const webhookController = require('../controllers/webhookController');
 
-// Debug: Se o servidor subir, vai mostrar no log quais funções existem no controller
-console.log('Funções do PixController:', Object.keys(pixController));
-
-// Rota de criação do PIX
-// O nome da função aqui (createPixCharge) deve ser IDÊNTICO ao exports.createPixCharge no controller
+// Rota para criar o Pix
 router.post('/charge', pixController.createPixCharge);
 
-// Webhook SuitPay
-router.post('/webhook/suitpay', webhookController.handleSuitpayWebhook);
+// Webhook OpenPix - cadastre esta URL no painel: /api/webhook/openpix
+router.post('/webhook/openpix', webhookController.handleOpenPixWebhook);
 
 module.exports = router;

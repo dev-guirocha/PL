@@ -1,47 +1,37 @@
 const crypto = require('crypto');
-const prisma = require('../lib/prisma');
+const prisma = require('../utils/prismaClient');
 
-exports.handleSuitpayWebhook = async (req, res) => {
+// Webhook OpenPix
+exports.handleOpenPixWebhook = async (req, res) => {
   try {
-    console.log('🔔 Webhook SuitPay Recebido:', JSON.stringify(req.body));
+    const signature = req.headers['x-openpix-authorization'] || req.headers.authorization || req.headers['x-webhook-signature'];
+    // Para depuração inicial, você pode logar os headers e validar HMAC/Authorization conforme configurado no painel.
+    // console.log('Headers recebidos:', req.headers, 'Assinatura:', signature);
 
-    const { idTransaction, typeTransaction, statusTransaction, requestNumber, hash, ...otherFields } = req.body;
-
-    // 1. SEGURANÇA: Validação de IP (apenas log por enquanto)
-    const requestIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log('📡 IP de Origem:', requestIP);
-
-    // 2. SEGURANÇA: Validação do Hash (conforme documentação)
-    const clientSecret = process.env.SUITPAY_CLIENT_SECRET || process.env.SUITPAY_CS;
-
-    if (!hash || !clientSecret) {
-      console.error('⚠️ Falta Hash ou Client Secret');
-      return res.status(400).send();
+    const { event, charge } = req.body || {};
+    if (!event || !charge) {
+      return res.status(400).send('Payload inválido');
     }
 
-    const payloadSemHash = { ...req.body };
-    delete payloadSemHash.hash;
+    console.log(`🔔 Webhook OpenPix: ${event} | Status: ${charge.status}`);
 
-    const valoresConcatenados = Object.values(payloadSemHash).join('');
-    const stringParaHash = valoresConcatenados + clientSecret;
+    if (event === 'OPENPIX:CHARGE_COMPLETED' || charge.status === 'COMPLETED') {
+      const transactionId = charge.correlationID;
+      const value = Number(charge.value) / 100; // centavos -> reais
 
-    const hashCalculado = crypto.createHash('sha256').update(stringParaHash).digest('hex');
+      console.log(`💰 Pagamento Confirmado: ${transactionId} - R$ ${value}`);
 
-    if (hashCalculado !== hash) {
-      console.warn('🚨 TENTATIVA DE FRAUDE: Hash inválido no Webhook!');
-      console.warn(`Recebido: ${hash} | Calculado: ${hashCalculado}`);
-      // return res.status(403).send("Assinatura inválida");
-    }
-
-    // 3. Processar Pagamento
-    if (statusTransaction === 'PAID_OUT') {
-      console.log(`💰 Pagamento APROVADO: ${requestNumber} - Valor: ${req.body.value}`);
-      // TODO: atualizar saldo/registrar transação usando Prisma conforme sua modelagem
+      // Exemplo de atualização de base (ajuste à sua regra de crédito):
+      // await prisma.pixCharge.update({
+      //   where: { txid: transactionId },
+      //   data: { status: 'PAID', paidAt: new Date() },
+      // });
+      // TODO: adicionar crédito ao saldo do usuário relacionado.
     }
 
     return res.status(200).send('OK');
   } catch (error) {
-    console.error('❌ Erro no Webhook:', error);
+    console.error('❌ Erro no Webhook OpenPix:', error);
     return res.status(500).send('Erro interno');
   }
 };
