@@ -3,13 +3,23 @@ const prisma = require('../utils/prismaClient');
 
 // Webhook OpenPix
 exports.handleOpenPixWebhook = async (req, res) => {
+  // Log básico para depuração no deploy
+  console.log('🔔 Webhook OpenPix Recebido:', JSON.stringify(req.body));
+
   try {
+    // 1) Ping de teste do painel (não traz charge) precisa retornar 200
+    if (req.body?.evento === 'teste_webhook') {
+      console.log('✅ Evento de teste aprovado.');
+      return res.status(200).send({ message: 'Webhook configurado com sucesso' });
+    }
+
+    // 2) Assinatura (mantida para futura validação HMAC)
     const signature = req.headers['x-openpix-authorization'] || req.headers.authorization || req.headers['x-webhook-signature'];
-    // Para depuração inicial, você pode logar os headers e validar HMAC/Authorization conforme configurado no painel.
-    // console.log('Headers recebidos:', req.headers, 'Assinatura:', signature);
+    // TODO: validar HMAC/Authorization conforme configuração do painel
 
     const { event, charge } = req.body || {};
     if (!event || !charge) {
+      console.warn('⚠️ Payload incompleto recebido');
       return res.status(400).send('Payload inválido');
     }
 
@@ -29,9 +39,11 @@ exports.handleOpenPixWebhook = async (req, res) => {
       // TODO: adicionar crédito ao saldo do usuário relacionado.
     }
 
+    // Sempre 200 para evitar bloqueio/reenvio
     return res.status(200).send('OK');
   } catch (error) {
     console.error('❌ Erro no Webhook OpenPix:', error);
+    // Mesmo com erro interno, retornamos 500; se preferir não travar a fila, pode retornar 200 aqui.
     return res.status(500).send('Erro interno');
   }
 };
