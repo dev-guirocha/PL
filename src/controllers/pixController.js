@@ -36,14 +36,19 @@ exports.createPixCharge = async (req, res) => {
       },
     });
 
-    console.log('✅ create raw:', JSON.stringify(created, null, 2));
+    // Estrutura de retorno pode variar; coleta dos caminhos mais comuns
+    const charge = created?.charge || {};
+    const pix = charge?.paymentMethods?.pix || {};
 
-    const charge = created?.charge ?? created?.data?.charge ?? created;
-    const brCode = charge?.brCode ?? charge?.pix?.brCode ?? null;
-    const qrCodeImage = charge?.qrCodeImage ?? charge?.pix?.qrCodeImage ?? null;
-    const paymentLinkUrl = charge?.paymentLinkUrl ?? charge?.pix?.paymentLinkUrl ?? null;
+    const brCode = created?.brCode || charge?.brCode || pix?.brCode || null;
+    const qrCodeImage = charge?.qrCodeImage || pix?.qrCodeImage || null;
+    const paymentLinkUrl = charge?.paymentLinkUrl || null;
+    const identifier = charge?.identifier || pix?.identifier || null;
+    const txid = pix?.txId || charge?.transactionID || null;
 
-    console.log('✅ Cobrança criada:', charge?.correlationID);
+    if (!brCode || !qrCodeImage) {
+      console.warn('⚠️ Missing fields:', { brCode: !!brCode, qrCodeImage: !!qrCodeImage });
+    }
 
     // Persiste a cobrança como pendente para reconciliar no webhook
     await prisma.pixCharge.create({
@@ -51,7 +56,7 @@ exports.createPixCharge = async (req, res) => {
         userId: Number(userId),
         amount: valueFloat,
         status: 'pending',
-        txid: charge?.correlationID || correlationID,
+        txid: txid || correlationID,
         copyAndPaste: brCode,
         qrCodeImage: qrCodeImage,
       },
@@ -59,10 +64,11 @@ exports.createPixCharge = async (req, res) => {
 
     return res.json({
       success: true,
-      correlationID: charge?.correlationID ?? correlationID,
+      correlationID,
       brCode,
       qrCodeImage,
       paymentLinkUrl,
+      identifier,
     });
   } catch (err) {
     // LOG DE DEPURAÇÃO (AXIOS/SDK)
