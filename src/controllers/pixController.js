@@ -62,7 +62,14 @@ exports.createPixCharge = async (req, res) => {
       qrCodeImage: charge.qrCodeImage,
     });
   } catch (error) {
-    console.error('❌ Erro OpenPix:', error);
-    return res.status(500).json({ error: 'Erro ao gerar Pix' });
+    const errorData = error.response?.data || error.message;
+    const statusCode = error.response?.status || 500;
+
+    console.error('❌ Erro Detalhado OpenPix:', JSON.stringify(errorData, null, 2));
+
+    return res.status(statusCode).json({
+      error: 'Erro ao gerar Pix',
+      details: errorData,
+    });
   }
 };
