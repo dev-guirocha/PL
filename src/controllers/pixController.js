@@ -18,6 +18,9 @@ exports.createPixCharge = async (req, res) => {
     if (!cleanCpf || cleanCpf.length !== 11) {
       return res.status(400).json({ error: 'CPF inválido.' });
     }
+    if (!Number.isFinite(valueFloat) || valueFloat < 10) {
+      return res.status(400).json({ error: 'Depósito mínimo é R$ 10,00.' });
+    }
 
     // OpenPix trabalha em centavos
     const valueInCents = Math.round(valueFloat * 100);

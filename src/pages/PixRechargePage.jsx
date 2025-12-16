@@ -12,7 +12,7 @@ const PixRechargePage = () => {
   const [amountCents, setAmountCents] = useState(0);
   const [qrCode, setQrCode] = useState('');
   const [copyCode, setCopyCode] = useState('');
-  const [coupon, setCoupon] = useState('');
+  const [coupon] = useState('PANDA15');
   const [appliedBonus, setAppliedBonus] = useState(0);
   const [watchingDeposit, setWatchingDeposit] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
@@ -51,6 +51,10 @@ const PixRechargePage = () => {
 
     if (!amountCents || Number.isNaN(val) || val <= 0) {
       toast.error('Informe um valor válido.');
+      return;
+    }
+    if (val < 10) {
+      toast.error('Depósito mínimo é R$ 10,00.');
       return;
     }
     if (amountCents > 100000) {
@@ -95,7 +99,7 @@ const PixRechargePage = () => {
 
       const res = await api.post('/pix/charge', {
         amount: val,
-        coupon,
+        coupon, // bônus fixo de 15% (rótulo Panda15)
         cpf: cleanCpf,
         nome: name,
         email,
@@ -194,15 +198,9 @@ const PixRechargePage = () => {
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Cupom (opcional)</label>
-          <input
-            type="text"
-            value={coupon}
-            onChange={(e) => setCoupon(e.target.value.toUpperCase())}
-            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            placeholder="EX: BONUS10"
-          />
+        <div className="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3">
+          <p className="text-xs font-semibold text-emerald-800">PANDA15</p>
+          <p className="text-xs text-emerald-700">Bônus de 15% em qualquer depósito.</p>
         </div>
 
         <div className="space-y-2">
