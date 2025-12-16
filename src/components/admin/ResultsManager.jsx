@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-// Função auxiliar para calcular o grupo (bicho) com base na dezena
+// Calcula o grupo (bicho) usando a dezena
 const calculateGroup = (numberStr) => {
   if (!numberStr || numberStr.length < 2) return '';
   const number = parseInt(numberStr.slice(-2), 10);
@@ -10,60 +10,49 @@ const calculateGroup = (numberStr) => {
 };
 
 const ResultsManager = ({ resultForm, setResultForm, results, createResult }) => {
-  // Estado local para 7 prêmios com número/grupo
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
 
-  // Sincroniza com o form principal (compatível com backend atual)
   useEffect(() => {
     const numerosArray = prizes.map((p) => p.numero).filter((n) => n !== '');
     const gruposArray = prizes.map((p) => p.grupo).filter((g) => g !== '');
-
     setResultForm((prev) => ({
       ...prev,
-      numeros: numerosArray.join(','), // formato esperado pelo backend
-      grupos: gruposArray.join(','), // opcional, se backend suportar
+      numeros: numerosArray.join(','),
+      grupos: gruposArray.join(','),
     }));
   }, [prizes, setResultForm]);
 
-  // Paste inteligente: detecta colunas de números ou número/grupo intercalados
+  // Parser inteligente: lê a string inteira, consome milhar e grupo (se vier colado)
   const handlePaste = (e, startIndex) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData('text');
-    let lines = pastedData.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
-    if (lines.length === 0) return;
-
-    // Caso tenha vindo tudo em uma linha contínua (coluna copiada sem quebras), tenta fatiar
-    if (lines.length === 1) {
-      const digits = lines[0].replace(/\D/g, '');
-      // Decide tamanho dos blocos: prioriza 5 dígitos (ex.: 26902...), senão 4
-      const chunkSize = digits.length % 5 === 0 || digits.length >= 35 ? 5 : digits.length % 4 === 0 ? 4 : null;
-      if (chunkSize) {
-        const chunks = [];
-        for (let i = 0; i < digits.length; i += chunkSize) {
-          chunks.push(digits.slice(i, i + chunkSize));
-        }
-        lines = chunks;
-      }
-    }
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '');
+    if (!digits) return;
 
     const newPrizes = [...prizes];
-    let lineIndex = 0;
-    const isInterleaved = lines.length > 7;
+    let cursor = 0;
 
     for (let i = startIndex; i < 7; i++) {
-      if (lineIndex >= lines.length) break;
-      const rawNum = lines[lineIndex].replace(/\D/g, '');
-      if (rawNum) {
-        newPrizes[i].numero = rawNum;
-        if (isInterleaved && lines[lineIndex + 1]) {
-          lineIndex++;
-          const rawGroup = lines[lineIndex].replace(/\D/g, '');
-          newPrizes[i].grupo = rawGroup;
-        } else {
-          newPrizes[i].grupo = calculateGroup(rawNum);
-        }
+      if (cursor >= digits.length) break;
+
+      // Pega 4 dígitos (ou o restante se for menos de 4)
+      const remaining = digits.length - cursor;
+      const numLen = remaining >= 4 ? 4 : remaining;
+      const rawNum = digits.substr(cursor, numLen);
+      if (!rawNum) break;
+
+      const group = calculateGroup(rawNum);
+      newPrizes[i].numero = rawNum;
+      newPrizes[i].grupo = group;
+      cursor += numLen;
+
+      // Tenta consumir grupo explícito se a cola tiver intercalado numero/grupo
+      const nextTwo = digits.substr(cursor, 2);
+      const nextOne = digits.substr(cursor, 1);
+      if (nextTwo === group.padStart(2, '0') || nextTwo === group) {
+        cursor += 2;
+      } else if (nextOne === group) {
+        cursor += 1;
       }
-      lineIndex++;
     }
 
     setPrizes(newPrizes);
@@ -107,34 +96,34 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
 
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
           <p className="text-xs text-slate-500 mb-2 font-bold uppercase">
-            🚀 Dica: Copie a coluna inteira do Excel/Site e cole no 1º campo de Número.
+            🚀 Cole a coluna ou a sequência contínua (ex: 26902329...) no 1º campo.
           </p>
 
           <div className="grid grid-cols-[40px_1fr_80px] gap-2 mb-1 font-bold text-xs text-slate-600 uppercase text-center">
             <span>Pos</span>
-            <span>Milhar / Número</span>
-            <span>Grupo</span>
+            <span>Milhar</span>
+            <span>Gr</span>
           </div>
 
           {prizes.map((prize, index) => (
             <div key={index} className="grid grid-cols-[40px_1fr_80px] gap-2 mb-2 items-center">
               <span className="text-slate-500 font-bold text-center">{index + 1}º</span>
+
               <input
                 type="text"
-                placeholder={`Prêmio ${index + 1}`}
                 value={prize.numero}
                 onChange={(e) => handleChange(index, 'numero', e.target.value)}
                 onPaste={(e) => index === 0 && handlePaste(e, 0)}
                 className="p-2 border rounded text-center font-mono font-bold text-slate-800"
-                maxLength={4}
+                maxLength={6} // permite colas acidentais maiores, mas usa os 4-6 primeiros dígitos
+                placeholder="0000"
               />
+
               <input
                 type="text"
-                placeholder="Gr"
                 value={prize.grupo}
-                onChange={(e) => handleChange(index, 'grupo', e.target.value)}
-                className="p-2 border rounded text-center bg-slate-100 text-slate-600"
-                maxLength={2}
+                readOnly
+                className="p-2 border rounded text-center bg-slate-200 text-slate-600 font-bold"
                 tabIndex={-1}
               />
             </div>
