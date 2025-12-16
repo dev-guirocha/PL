@@ -2,8 +2,10 @@ const { createClient } = require('@woovi/node-sdk');
 const prisma = require('../utils/prismaClient');
 
 // Inicializa o cliente OpenPix com o AppID configurado no ambiente (OPENPIX_APP_ID)
+// Força a base da OpenPix (Enterprise) em vez da URL padrão da Woovi
 const woovi = createClient({
   appId: process.env.OPENPIX_APP_ID,
+  baseUrl: 'https://api.openpix.com.br/api/v1',
 });
 
 exports.createPixCharge = async (req, res) => {
@@ -62,14 +64,14 @@ exports.createPixCharge = async (req, res) => {
       qrCodeImage: charge.qrCodeImage,
     });
   } catch (error) {
-    const errorData = error.response?.data || error.message;
-    const statusCode = error.response?.status || 500;
+    // LOG DE DEPURAÇÃO (BRUTO)
+    console.error('❌ ERRO REAL:', error);
 
-    console.error('❌ Erro Detalhado OpenPix:', JSON.stringify(errorData, null, 2));
+    const errorMsg = error.response?.data?.error || error.message || JSON.stringify(error);
 
-    return res.status(statusCode).json({
+    return res.status(500).json({
       error: 'Erro ao gerar Pix',
-      details: errorData,
+      details: errorMsg,
     });
   }
 };
