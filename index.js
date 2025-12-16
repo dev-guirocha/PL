@@ -11,6 +11,7 @@ const pixRoutes = require('./src/routes/pixRoutes');
 const profileRoutes = require('./src/routes/profileRoutes');
 const betRoutes = require('./src/routes/betRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const webhookController = require('./src/controllers/webhookController');
 const createCsrfProtection = require('./src/middleware/csrf');
 
 const app = express();
@@ -84,6 +85,8 @@ app.use('/api/pix', pixRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/bets', betRoutes);
 app.use('/api/admin', adminRoutes);
+// Endpoint alternativo direto para Webhook OpenPix (sem prefixo /pix)
+app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);
 
 // Healthcheck simples para validar deploy/back-end
 app.get('/api/health', (req, res) => {
