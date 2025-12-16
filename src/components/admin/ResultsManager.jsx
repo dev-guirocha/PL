@@ -29,8 +29,22 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
   const handlePaste = (e, startIndex) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text');
-    const lines = pastedData.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
+    let lines = pastedData.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
     if (lines.length === 0) return;
+
+    // Caso tenha vindo tudo em uma linha contínua (coluna copiada sem quebras), tenta fatiar
+    if (lines.length === 1) {
+      const digits = lines[0].replace(/\D/g, '');
+      // Decide tamanho dos blocos: prioriza 5 dígitos (ex.: 26902...), senão 4
+      const chunkSize = digits.length % 5 === 0 || digits.length >= 35 ? 5 : digits.length % 4 === 0 ? 4 : null;
+      if (chunkSize) {
+        const chunks = [];
+        for (let i = 0; i < digits.length; i += chunkSize) {
+          chunks.push(digits.slice(i, i + chunkSize));
+        }
+        lines = chunks;
+      }
+    }
 
     const newPrizes = [...prizes];
     let lineIndex = 0;
