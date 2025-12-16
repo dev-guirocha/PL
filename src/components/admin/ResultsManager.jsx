@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 
-// Calcula o grupo (bicho) usando a dezena
+// Função auxiliar para calcular o grupo do bicho
 const calculateGroup = (numberStr) => {
   if (!numberStr || numberStr.length < 2) return '';
   const number = parseInt(numberStr.slice(-2), 10);
-  if (Number.isNaN(number)) return '';
-  if (number === 0) return '25'; // 00 é Vaca (25)
+  if (isNaN(number)) return '';
+  if (number === 0) return '25';
   return String(Math.ceil(number / 4));
 };
 
 const ResultsManager = ({ resultForm, setResultForm, results, createResult }) => {
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
+  const [rawInput, setRawInput] = useState(''); // Estado para o campo de colagem
 
   useEffect(() => {
     const numerosArray = prizes.map((p) => p.numero).filter((n) => n !== '');
     const gruposArray = prizes.map((p) => p.grupo).filter((g) => g !== '');
+
     setResultForm((prev) => ({
       ...prev,
       numeros: numerosArray.join(','),
@@ -22,39 +24,51 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
     }));
   }, [prizes, setResultForm]);
 
-  // Parser inteligente: lê a string inteira, consome milhar e grupo (se vier colado)
-  const handlePaste = (e, startIndex) => {
-    e.preventDefault();
-    const digits = e.clipboardData.getData('text').replace(/\D/g, '');
-    if (!digits) return;
+  // --- O PARSER INTELIGENTE V2 ---
+  const handleSmartPaste = (e) => {
+    const text = e.target.value;
+    setRawInput(text);
 
-    const newPrizes = [...prizes];
+    // Limpa tudo que não for número
+    const cleanData = text.replace(/\D/g, '');
+    if (!cleanData) return;
+
+    const newPrizes = Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }));
     let cursor = 0;
 
-    for (let i = startIndex; i < 7; i++) {
-      if (cursor >= digits.length) break;
+    for (let i = 0; i < 7; i++) {
+      if (cursor >= cleanData.length) break;
 
-      // Pega 4 dígitos (ou o restante se for menos de 4)
-      const remaining = digits.length - cursor;
-      const numLen = remaining >= 4 ? 4 : remaining;
-      const rawNum = digits.substr(cursor, numLen);
-      if (!rawNum) break;
+      // Pega 4 dígitos para o milhar
+      let numLength = 4;
+      // Se sobrar pouco no final, pega o que tem
+      if (cleanData.length - cursor < 4) numLength = cleanData.length - cursor;
 
-      const group = calculateGroup(rawNum);
-      newPrizes[i].numero = rawNum;
-      newPrizes[i].grupo = group;
-      cursor += numLen;
+      const rawNum = cleanData.substr(cursor, numLength);
 
-      // Tenta consumir grupo explícito se a cola tiver intercalado numero/grupo
-      const nextTwo = digits.substr(cursor, 2);
-      const nextOne = digits.substr(cursor, 1);
-      if (nextTwo === group.padStart(2, '0') || nextTwo === group) {
-        cursor += 2;
-      } else if (nextOne === group) {
-        cursor += 1;
+      if (rawNum) {
+        newPrizes[i].numero = rawNum;
+        const calculatedGroup = calculateGroup(rawNum);
+        newPrizes[i].grupo = calculatedGroup;
+
+        cursor += numLength;
+
+        // VERIFICAÇÃO INTELIGENTE DE GRUPO
+        // Olha os próximos 2 digitos. Se bater com o grupo calculado, consome eles.
+        const nextTwo = cleanData.substr(cursor, 2);
+        const nextOne = cleanData.substr(cursor, 1);
+
+        const padGroup = calculatedGroup.padStart(2, '0');
+
+        if (nextTwo === padGroup) {
+          cursor += 2; // Era o grupo, pula ele
+        } else if (nextTwo.length === 2 && nextTwo === calculatedGroup) {
+          cursor += 2;
+        } else if (nextOne === calculatedGroup) {
+          cursor += 1;
+        }
       }
     }
-
     setPrizes(newPrizes);
   };
 
@@ -94,11 +108,24 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
           />
         </div>
 
-        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
-          <p className="text-xs text-slate-500 mb-2 font-bold uppercase">
-            🚀 Cole a coluna ou a sequência contínua (ex: 26902329...) no 1º campo.
+        {/* --- ÁREA DE IMPORTAÇÃO RÁPIDA --- */}
+        <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200 mb-6">
+          <label className="block text-xs font-bold text-emerald-800 uppercase mb-2">
+            ⚡ Importação Rápida (Cole a linha inteira aqui)
+          </label>
+          <textarea
+            value={rawInput}
+            onChange={handleSmartPaste}
+            placeholder="Ex: 269023296817837619935981942431631698321..."
+            className="w-full p-3 border border-emerald-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-mono text-slate-700 h-24 resize-none"
+          />
+          <p className="text-[10px] text-emerald-600 mt-1">
+            O sistema separa automaticamente Milhar e Grupo, mesmo se estiverem tudo junto.
           </p>
+        </div>
 
+        {/* Grid de Prêmios */}
+        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
           <div className="grid grid-cols-[40px_1fr_80px] gap-2 mb-1 font-bold text-xs text-slate-600 uppercase text-center">
             <span>Pos</span>
             <span>Milhar</span>
@@ -113,9 +140,8 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
                 type="text"
                 value={prize.numero}
                 onChange={(e) => handleChange(index, 'numero', e.target.value)}
-                onPaste={(e) => index === 0 && handlePaste(e, 0)}
-                className="p-2 border rounded text-center font-mono font-bold text-slate-800"
-                maxLength={6} // permite colas acidentais maiores, mas usa os 4-6 primeiros dígitos
+                className="p-2 border rounded text-center font-mono font-bold text-slate-800 bg-white"
+                maxLength={4}
                 placeholder="0000"
               />
 
@@ -130,6 +156,7 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
           ))}
         </div>
 
+        {/* Campo oculto para validação */}
         <input
           value={resultForm.numeros || ''}
           onChange={() => {}}
@@ -146,10 +173,7 @@ const ResultsManager = ({ resultForm, setResultForm, results, createResult }) =>
       <div className="admin-list mt-6 border-t pt-4">
         <h3 className="text-sm font-bold text-slate-700 mb-2">Últimos Lançamentos</h3>
         {results.map((r) => (
-          <div
-            key={r.id}
-            className="admin-list-item flex flex-col md:flex-row justify-between items-start md:items-center p-3 border-b text-sm"
-          >
+          <div key={r.id} className="admin-list-item flex flex-col md:flex-row justify-between items-start md:items-center p-3 border-b text-sm">
             <div>
               <strong className="text-emerald-700">{r.loteria}</strong>
               <span className="mx-1 text-slate-400">|</span>
