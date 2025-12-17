@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
-import { LOTERIAS_SORTEIOS } from '../data/sorteios';
+import { getLoteriasSorteios } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -23,22 +23,23 @@ const LoteriasSorteiosPage = () => {
   }, [refreshUser]);
 
   const loteriasExibidas = useMemo(() => {
+    const loterias = getLoteriasSorteios(selectedDate);
     const jogoAtual = draft?.jogo || '';
 
     if (jogoAtual === 'Tradicional 1/10') {
-      return LOTERIAS_SORTEIOS.filter((l) => LOTERIAS_1_10_ALLOWED.includes(l.slug));
+      return loterias.filter((l) => LOTERIAS_1_10_ALLOWED.includes(l.slug));
     }
 
     if (jogoAtual === 'Lot. Uruguaia' || jogoAtual === 'Loteria Uruguaia') {
-      return LOTERIAS_SORTEIOS.filter((l) => l.slug === 'uruguaia');
+      return loterias.filter((l) => l.slug === 'uruguaia');
     }
 
     if (['Quininha', 'Seninha', 'Super15'].includes(jogoAtual)) {
-      return LOTERIAS_SORTEIOS.filter((l) => l.slug.toLowerCase() === jogoAtual.toLowerCase());
+      return loterias.filter((l) => l.slug.toLowerCase() === jogoAtual.toLowerCase());
     }
 
-    return LOTERIAS_SORTEIOS.filter((l) => !['uruguaia', 'quininha', 'seninha', 'super15'].includes(l.slug));
-  }, [draft]);
+    return loterias.filter((l) => !['uruguaia', 'quininha', 'seninha', 'super15'].includes(l.slug));
+  }, [draft, selectedDate]);
 
   const timeValue = (txt) => {
     const matches = txt.match(/\d+/g);

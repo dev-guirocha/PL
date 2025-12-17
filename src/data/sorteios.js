@@ -1,4 +1,4 @@
-export const LOTERIAS_SORTEIOS = [
+const baseLoterias = [
   {
     nome: 'RIO/FEDERAL',
     slug: 'rio-federal',
@@ -90,3 +90,32 @@ export const LOTERIAS_SORTEIOS = [
     horarios: ['SEG-SAB'],
   },
 ];
+
+const isFederalDay = (dateStr) => {
+  const baseDate = dateStr ? new Date(dateStr) : new Date();
+  const day = baseDate.getDay(); // 0=dom, 3=qua, 6=sab
+  return day === 3 || day === 6;
+};
+
+const buildHorarios = (lot, dateStr) => {
+  if (!isFederalDay(dateStr)) return lot.horarios;
+
+  if (lot.slug === 'rio-federal') {
+    return lot.horarios.map((h) => (h === 'LT PT RIO 18HS' ? 'LT FEDERAL 20HS' : h));
+  }
+
+  if (lot.slug === 'maluquinha') {
+    return lot.horarios.map((h) => (h === 'LT MALUQ RIO 18HS' ? 'LT MALUQ FEDERAL 20HS' : h));
+  }
+
+  return lot.horarios;
+};
+
+export const getLoteriasSorteios = (dateStr) =>
+  baseLoterias.map((lot) => ({
+    ...lot,
+    horarios: buildHorarios(lot, dateStr),
+  }));
+
+// Mantém export antigo para compatibilidade, usando a data de hoje
+export const LOTERIAS_SORTEIOS = getLoteriasSorteios();
