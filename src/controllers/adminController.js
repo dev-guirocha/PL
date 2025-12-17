@@ -442,33 +442,43 @@ const parseColocacao = (colocacaoStr) => {
   return [{ indices: [0], divisor: 1, stakeFactor: 1 }];
 };
 
-// --- AUXILIARES PARA COMPARAÇÃO FLEXÍVEL ---
+// --- FUNÇÕES DE LIMPEZA (BLINDADAS) ---
 const normalizeDate = (dateStr) => {
   if (!dateStr) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  if (dateStr.includes('/')) {
-    const [d, m, y] = dateStr.split('/');
-    return `${y}-${m}-${d}`;
+  let clean = String(dateStr).trim();
+  if (clean.includes('T')) clean = clean.split('T')[0];
+  if (clean.includes(' ')) clean = clean.split(' ')[0];
+  if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 3) {
+      const d = parts[0].padStart(2, '0');
+      const m = parts[1].padStart(2, '0');
+      const y = parts[2];
+      return `${y}-${m}-${d}`;
+    }
   }
-  return dateStr;
+  return clean;
 };
 
 const normalizeTime = (timeStr) => {
   if (!timeStr) return '';
-  const nums = timeStr.replace(/\D/g, '');
+  const nums = String(timeStr).replace(/\D/g, '');
   if (nums.length >= 3) return nums.slice(0, 2);
   return nums.padStart(2, '0');
 };
 
-const normalizeLottery = (name) => (name || '').toUpperCase().replace(/^LT\s+/, '').replace(/[^A-Z0-9]/g, '');
+const normalizeLottery = (name) =>
+  String(name || '').toUpperCase().replace(/^LT\s+/, '').replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
 
 const settleBetsForResult = async (resultId) => {
   const result = await prisma.result.findUnique({ where: { id: resultId } });
   if (!result) return { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
-  const resultDateNorm = normalizeDate(result.dataJogo);
-  const resultTimeNorm = normalizeTime(result.codigoHorario);
-  const resultLotteryNorm = normalizeLottery(result.loteria);
+  console.log(`🔍 Liquidando Resultado ID ${resultId}: ${result.loteria} | ${result.dataJogo} | ${result.codigoHorario}`);
+
+  const resultDate = normalizeDate(result.dataJogo);
+  const resultTime = normalizeTime(result.codigoHorario);
+  const resultLottery = normalizeLottery(result.loteria);
 
   let numeros = [];
   try {
@@ -476,9 +486,8 @@ const settleBetsForResult = async (resultId) => {
   } catch {
     numeros = [];
   }
-  const premios = numeros.map(normalizeMilhar);
+  const premios = numeros.map((n) => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'));
 
-  // Busca apostas abertas e filtra de forma flexível em JS
   const bets = await prisma.bet.findMany({
     where: { status: 'open' },
     select: {
@@ -499,15 +508,14 @@ const settleBetsForResult = async (resultId) => {
 
   for (const bet of bets) {
     try {
-      // Filtro inteligente por data/hora/loteria
-      if (bet.dataJogo) {
-        const betDateNorm = normalizeDate(bet.dataJogo);
-        if (betDateNorm !== resultDateNorm) continue;
-      }
-      const betTimeNorm = normalizeTime(bet.codigoHorario);
-      if (betTimeNorm !== resultTimeNorm) continue;
-      const betLotteryNorm = normalizeLottery(bet.loteria);
-      if (!betLotteryNorm.includes(resultLotteryNorm) && !resultLotteryNorm.includes(betLotteryNorm)) continue;
+      const betDate = normalizeDate(bet.dataJogo);
+      if (betDate !== resultDate) continue;
+
+      const betTime = normalizeTime(bet.codigoHorario);
+      if (betTime !== resultTime) continue;
+
+      const betLottery = normalizeLottery(bet.loteria);
+      if (!betLottery.includes(resultLottery) && !resultLottery.includes(betLottery)) continue;
 
       summary.matchedBetIds.push(bet.id);
       summary.totalBets += 1;
@@ -574,6 +582,7 @@ const settleBetsForResult = async (resultId) => {
     }
   }
 
+  console.log(`Resumo da Liquidação: Encontradas ${summary.matchedBetIds.length}, Processadas ${summary.processed}`);
   return summary;
 };
 
