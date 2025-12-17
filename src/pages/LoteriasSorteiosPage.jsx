@@ -159,7 +159,7 @@ const LoteriasSorteiosPage = () => {
     if (!isWedOrSat) return list;
 
     if (lot.slug === 'rio-federal') {
-      return list.map((h) => (h === 'LT PT RIO 18HS' ? 'LT FEDERAL 20HS' : h));
+      return list.map((h) => (h === 'LT PT RIO 18HS' ? 'FEDERAL 20H' : h));
     }
 
     if (lot.slug === 'maluquinha') {
