@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
-import { getLoteriasSorteios } from '../data/sorteios';
+import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -23,7 +23,7 @@ const LoteriasSorteiosPage = () => {
   }, [refreshUser]);
 
   const loteriasExibidas = useMemo(() => {
-    const loterias = getLoteriasSorteios(selectedDate);
+    const loterias = LOTERIAS_SORTEIOS;
     const jogoAtual = draft?.jogo || '';
 
     if (jogoAtual === 'Tradicional 1/10') {
@@ -39,7 +39,7 @@ const LoteriasSorteiosPage = () => {
     }
 
     return loterias.filter((l) => !['uruguaia', 'quininha', 'seninha', 'super15'].includes(l.slug));
-  }, [draft, selectedDate]);
+  }, [draft]);
 
   const timeValue = (txt) => {
     const matches = txt.match(/\d+/g);
