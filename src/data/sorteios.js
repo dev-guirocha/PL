@@ -111,11 +111,12 @@ const buildHorarios = (lot, dateStr) => {
   return lot.horarios;
 };
 
-export const getLoteriasSorteios = (dateStr) =>
-  baseLoterias.map((lot) => ({
+export function getLoteriasSorteios(dateStr) {
+  return baseLoterias.map((lot) => ({
     ...lot,
     horarios: buildHorarios(lot, dateStr),
   }));
+}
 
 // Mantém export antigo para compatibilidade, usando a data de hoje
 export const LOTERIAS_SORTEIOS = getLoteriasSorteios();
