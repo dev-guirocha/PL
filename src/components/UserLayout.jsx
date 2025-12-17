@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet, FaMobileAlt } from 'react-icons/fa';
+import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet, FaMobileAlt, FaUserShield } from 'react-icons/fa';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
@@ -143,6 +143,21 @@ const UserLayout = ({ children }) => {
             </div>
 
             <div className="flex flex-col gap-2">
+              {user?.isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => handleNav('/admin')}
+                  className="mb-2 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-left text-red-800 transition hover:bg-red-100 hover:shadow-sm"
+                >
+                  <span className="text-xl text-red-600">
+                    <FaUserShield />
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold uppercase tracking-wide">Painel Admin</span>
+                    <span className="text-[10px] font-semibold text-red-600">Acesso restrito</span>
+                  </div>
+                </button>
+              )}
               {[...navLinks, ...extraMenuLinks].map((item) => (
                 <button
                   key={item.path || item.label}
