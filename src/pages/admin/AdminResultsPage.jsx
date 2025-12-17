@@ -1,78 +1,64 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { FaPlus, FaReceipt, FaSyncAlt } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaSyncAlt, FaReceipt, FaCheck, FaEdit, FaTrash, FaArrowLeft } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
 import { getNomeBicho } from '../../utils/bichos';
 
-const LOTERIAS = [
-  { code: 'LT PT RIO', horarios: ['09HS', '11HS', '14HS', '16HS', '18HS', '21HS'] },
-  { code: 'LT MALUQ RIO', horarios: ['09HS', '11HS', '14HS', '16HS', '18HS', '21HS'] },
-  { code: 'LT NACIONAL', horarios: ['02HS', '08HS', '10HS', '12HS', '15HS', '17HS', '21HS', '23HS'] },
-  { code: 'LT LOOK', horarios: ['07HS', '09HS', '11HS', '14HS', '16HS', '18HS', '21HS', '23HS'] },
-  { code: 'LT BOASORTE', horarios: ['09HS', '11HS', '14HS', '16HS', '18HS', '21HS'] },
-  { code: 'PT SP', horarios: ['08HS', '10HS', '12HS', '13HS', '17HS', '19HS', '20HS'] },
-  { code: 'LT BAND', horarios: ['15HS'] },
-  { code: 'LT LOTEP', horarios: ['09HS', '10HS', '12HS', '15HS', '18HS', '20HS'] },
-  { code: 'LT LOTECE', horarios: ['10HS', '14HS', '16HS', '19HS'] },
-  { code: 'LT BAHIA', horarios: ['10HS', '12HS', '15HS', '19HS', '21HS'] },
-  { code: 'LT BA MALUCA', horarios: ['10HS', '12HS', '15HS', '19HS', '21HS'] },
-  { code: 'LT CAPITAL', horarios: ['10HS', '11HS', '13HS', '14HS', '16HS', '18HS', '20HS', '22HS'] },
-  { code: 'LT ALVORADA', horarios: ['12HS'] },
-  { code: 'LT MINAS DIA', horarios: ['15HS'] },
-  { code: 'LT MINAS NOITE', horarios: ['19HS'] },
-  { code: 'LT SORTE', horarios: ['14HS', '18HS'] },
-  { code: 'LT URUGUAI', horarios: ['15HS', '21HS'] },
-  // Loterias numéricas
-  { code: 'QUININHA', horarios: ['19:00'] },
-  { code: 'SENINHA', horarios: ['SENINHA'] },
-  { code: 'SUPER 15', horarios: ['SEG-SAB'] },
+// --- CONFIGURAÇÃO VISUAL DAS LOTERIAS ---
+const LOTERIAS_FIXAS = [
+  { id: 'PT-RIO', label: 'PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
+  { id: 'LOOK', label: 'LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
+  { id: 'NACIONAL', label: 'NACIONAL', color: 'bg-orange-100 hover:bg-orange-200 text-orange-800 border-orange-300' },
+  { id: 'FEDERAL', label: 'FEDERAL', color: 'bg-green-100 hover:bg-green-200 text-green-800 border-green-300' },
+  { id: 'LOTEP', label: 'LOTEP', color: 'bg-purple-100 hover:bg-purple-200 text-purple-800 border-purple-300' },
+  { id: 'BAND', label: 'BAND', color: 'bg-red-100 hover:bg-red-200 text-red-800 border-red-300' },
+  { id: 'MALUCA', label: 'MALUCA', color: 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border-yellow-300' },
+  { id: 'ALVORADA', label: 'ALVORADA', color: 'bg-cyan-100 hover:bg-cyan-200 text-cyan-800 border-cyan-300' },
+  { id: 'MINAS', label: 'MINAS', color: 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300' },
+  { id: 'OUTRA', label: 'OUTRA (DIGITAR)', color: 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300' },
 ];
+
+// Função auxiliar para calcular o grupo
+const calculateGroup = (numberStr) => {
+  if (!numberStr || numberStr.length < 2) return '';
+  const number = parseInt(numberStr.slice(-2), 10);
+  if (Number.isNaN(number)) return '';
+  if (number === 0) return '25';
+  return String(Math.ceil(number / 4));
+};
 
 const AdminResultsPage = () => {
   const todayStr = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({
-    loteria: '',
-    horario: '',
-    data: todayStr,
-    n1: '',
-    n2: '',
-    n3: '',
-    n4: '',
-    n5: '',
-    n6: '',
-    n7: '',
-    g1: '',
-    g2: '',
-    g3: '',
-    g4: '',
-    g5: '',
-    g6: '',
-    g7: '',
-    dezenasList: '',
-  });
+
+  // --- ESTADOS DE DADOS ---
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null); // ID sendo processado
   const [error, setError] = useState('');
-  const [settlingId, setSettlingId] = useState(null);
-  const [generatingId, setGeneratingId] = useState(null);
   const [success, setSuccess] = useState('');
-  const milharRefs = useRef([]);
-  const grupoRefs = useRef([]);
-  const selectedLottery = LOTERIAS.find((l) => l.code === form.loteria);
-  const horariosDisponiveis = selectedLottery?.horarios || [];
-  const [filterDate, setFilterDate] = useState(todayStr);
-  const [filterLottery, setFilterLottery] = useState('');
 
-  const fetchResults = async ({ loteria = filterLottery, date = filterDate } = {}) => {
+  // --- ESTADOS DE UI (NOVO DESIGN) ---
+  const [view, setView] = useState('dashboard'); // 'dashboard' | 'form'
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState({ title: '', text: '' });
+
+  // --- ESTADOS DO FORMULÁRIO ---
+  const [selectedLottery, setSelectedLottery] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [inputDate, setInputDate] = useState(todayStr);
+  const [inputTime, setInputTime] = useState('');
+  const [customLotteryName, setCustomLotteryName] = useState('');
+  const [rawInput, setRawInput] = useState(''); // Campo de colar rápido
+  const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
+
+  // --- FUNÇÕES DE BUSCA E AÇÃO ---
+  const fetchResults = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/admin/results', {
-        params: { page: 1, pageSize: 50, loteria, date },
-      });
+      const res = await api.get('/admin/results', { params: { page: 1, pageSize: 50 } });
       setResults(res.data?.results || res.data || []);
     } catch (err) {
       setError('Erro ao carregar resultados.');
@@ -87,460 +73,403 @@ const AdminResultsPage = () => {
 
   const settleResult = async (id) => {
     if (!id) return;
-    setSettlingId(id);
-    setError('');
-    setSuccess('');
+    setActionLoading(id);
     try {
       const res = await api.post(`/admin/results/${id}/settle`);
       const summary = res.data?.summary;
       if (summary) {
-        const matched = summary.matchedBetIds?.length ? ` | Encontradas: ${summary.matchedBetIds.join(', ')}` : '';
-        setSuccess(`Liquidação: ${summary.processed}/${summary.totalBets} processadas, ${summary.wins} premiadas.${matched}`);
+        setSuccess(`Liquidação: ${summary.processed} processadas, ${summary.wins} premiadas.`);
       }
       fetchResults();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Erro ao liquidar apostas para este resultado.';
-      setError(msg);
+      setError(err.response?.data?.error || 'Erro ao liquidar.');
     } finally {
-      setSettlingId(null);
+      setActionLoading(null);
     }
   };
 
   const generatePule = async (id) => {
     if (!id) return;
-    setGeneratingId(id);
-    setError('');
-    setSuccess('');
+    setActionLoading(id);
     try {
       const res = await api.post(`/admin/results/${id}/pule`);
-      const already = res.data?.alreadyExists;
-      setSuccess(already ? 'PULE já existia para este resultado.' : 'PULE gerado com sucesso.');
+      setSuccess(res.data?.alreadyExists ? 'PULE já existia.' : 'PULE gerado com sucesso.');
       fetchResults();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Erro ao gerar PULE.';
-      setError(msg);
+      setError(err.response?.data?.error || 'Erro ao gerar PULE.');
     } finally {
-      setGeneratingId(null);
+      setActionLoading(null);
     }
   };
 
-  const isNumericLottery = () => {
-    const name = (form.loteria || '').toUpperCase();
-    return name.includes('QUININHA') || name.includes('SENINHA') || name.includes('SUPER');
+  const handleDelete = async (id) => {
+    if (!window.confirm('Tem certeza que deseja apagar este resultado?')) return;
+    setActionLoading(id);
+    try {
+      await api.delete(`/admin/results/${id}`);
+      fetchResults();
+    } catch (err) {
+      setError('Erro ao deletar.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // --- FUNÇÕES DO NOVO FORMULÁRIO ---
+  const handleStartAdd = (lotteryId) => {
+    setSelectedLottery(lotteryId);
+    setCustomLotteryName('');
+    setEditingId(null);
+    setPrizes(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
+    setRawInput('');
+    setInputTime('');
+    setInputDate(todayStr);
+    setView('form');
+  };
+
+  const handleEdit = (r) => {
+    const nums = r.numeros || [];
+    const grps = r.grupos || [];
+    const newPrizes = Array.from({ length: 7 }, (_, i) => ({
+      numero: nums[i] ? String(nums[i]) : '',
+      grupo: grps[i] ? String(grps[i]) : '',
+    }));
+    setPrizes(newPrizes);
+
+    const knownLottery = LOTERIAS_FIXAS.find((l) => l.label === r.loteria);
+    if (knownLottery) {
+      setSelectedLottery(knownLottery.label);
+    } else {
+      setSelectedLottery('OUTRA');
+      setCustomLotteryName(r.loteria);
+    }
+
+    const dateFormatted = r.dataJogo?.includes('/') ? r.dataJogo.split('/').reverse().join('-') : r.dataJogo;
+    setInputDate(dateFormatted || todayStr);
+    setInputTime(r.codigoHorario || '');
+    setEditingId(r.id || r._id);
+    setView('form');
+  };
+
+  const handleBack = () => {
+    setView('dashboard');
+    setShowModal(false);
+  };
+
+  const handleAddAnother = () => {
+    setShowModal(false);
+    setPrizes(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
+    setRawInput('');
+    setInputTime('');
+  };
+
+  const handleSmartPaste = (e) => {
+    const text = e.target.value;
+    setRawInput(text);
+    const cleanData = text.replace(/\D/g, '');
+    if (!cleanData) return;
+
+    const newPrizes = Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }));
+    let cursor = 0;
+
+    for (let i = 0; i < 7; i++) {
+      if (cursor >= cleanData.length) break;
+      let numLength = 4;
+      if (cleanData.length - cursor < 4) numLength = cleanData.length - cursor;
+      const rawNum = cleanData.substr(cursor, numLength);
+
+      if (rawNum) {
+        newPrizes[i].numero = rawNum;
+        const calcGroup = calculateGroup(rawNum);
+        newPrizes[i].grupo = calcGroup;
+        cursor += numLength;
+
+        const nextTwo = cleanData.substr(cursor, 2);
+        const nextOne = cleanData.substr(cursor, 1);
+        const padGroup = calcGroup.padStart(2, '0');
+
+        if (nextTwo === padGroup) cursor += 2;
+        else if (nextTwo.length === 2 && nextTwo === calcGroup) cursor += 2;
+        else if (nextOne === calcGroup) cursor += 1;
+      }
+    }
+    setPrizes(newPrizes);
+  };
+
+  const handleChangePrize = (index, field, value) => {
+    const newPrizes = [...prizes];
+    newPrizes[index][field] = value;
+    if (field === 'numero') {
+      newPrizes[index].grupo = calculateGroup(value);
+    }
+    setPrizes(newPrizes);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.loteria || !form.horario || !form.data) {
-      setError('Preencha loteria, data e horário.');
+    const numeros = prizes.map((p) => p.numero).filter(Boolean);
+    const grupos = prizes.map((p) => p.grupo).filter(Boolean);
+
+    if (!numeros.length) {
+      alert('Preencha pelo menos um número.');
       return;
     }
-    setSaving(true);
-    setError('');
+
+    const finalLotteryName = selectedLottery === 'OUTRA' ? customLotteryName : selectedLottery;
+    const payload = {
+      loteria: finalLotteryName,
+      dataJogo: inputDate.split('-').reverse().join('/'),
+      codigoHorario: inputTime,
+      numeros,
+      grupos,
+    };
+
     try {
-      const lot = LOTERIAS.find((l) => l.code === form.loteria);
-      let numeros = [];
-      let grupos = [];
-
-      if (isNumericLottery()) {
-        const list = (form.dezenasList || '')
-          .split(/[^0-9]+/)
-          .filter(Boolean)
-          .map((n) => String(n).padStart(2, '0'));
-        const lotName = (form.loteria || '').toUpperCase();
-        const needed = lotName.includes('QUININHA') ? 5 : lotName.includes('SENINHA') ? 6 : lotName.includes('SUPER') ? 15 : 0;
-        if (!needed || list.length !== needed) {
-          setError(`Informe exatamente ${needed} dezenas para ${form.loteria}.`);
-          setSaving(false);
-          return;
-        }
-        numeros = list.slice(0, needed);
-        grupos = [];
+      if (editingId) {
+        await api.put(`/admin/results/${editingId}`, payload);
+        setModalMessage({ title: 'Atualizado!', text: 'Resultado editado com sucesso.' });
       } else {
-        numeros = [form.n1, form.n2, form.n3, form.n4, form.n5, form.n6, form.n7].filter(Boolean);
-        grupos = [form.g1, form.g2, form.g3, form.g4, form.g5, form.g6, form.g7].filter(Boolean);
+        await api.post('/admin/results', payload);
+        setModalMessage({ title: 'Sucesso!', text: 'Resultado cadastrado com sucesso.' });
       }
-
-      const fullCode = isNumericLottery()
-        ? (form.horario || form.loteria || '').trim()
-        : `${form.loteria} ${form.horario}`.trim();
-      await api.post('/admin/results', {
-        loteria: form.loteria,
-        dataJogo: form.data,
-        codigoHorario: fullCode,
-        numeros,
-        grupos,
-      });
-      setForm({
-        loteria: form.loteria,
-        horario: lot?.horarios?.[0] || '',
-        data: form.data,
-        n1: '',
-        n2: '',
-        n3: '',
-        n4: '',
-        n5: '',
-        n6: '',
-        n7: '',
-        g1: '',
-        g2: '',
-        g3: '',
-        g4: '',
-        g5: '',
-        g6: '',
-        g7: '',
-        dezenasList: '',
-      });
+      setShowModal(true);
       fetchResults();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Erro ao salvar resultado.';
-      setError(msg);
-    } finally {
-      setSaving(false);
+      alert(err.response?.data?.error || 'Erro ao salvar.');
     }
   };
-
-  const handleMilharChange = (idx, value) => {
-    const limit = idx === 7 ? 3 : 4; // N7 é centena (3 dígitos), demais são milhares (4)
-    const digits = value.replace(/\D/g, '').slice(0, limit);
-    setForm((prev) => ({ ...prev, [`n${idx}`]: digits }));
-    if (digits.length === limit) {
-      const target = grupoRefs.current[idx];
-      if (target) target.focus();
-    }
-  };
-
-  const handleGrupoChange = (idx, value) => {
-    const digits = value.replace(/\D/g, '').slice(0, 2);
-    setForm((prev) => ({ ...prev, [`g${idx}`]: digits }));
-    if (digits.length === 2 && idx < 7) {
-      const nextMilhar = milharRefs.current[idx + 1];
-      if (nextMilhar) nextMilhar.focus();
-    }
-  };
-
-  const numericMode = isNumericLottery();
-  const neededDezenas = (() => {
-    const name = (form.loteria || '').toUpperCase();
-    if (name.includes('QUININHA')) return 5;
-    if (name.includes('SENINHA')) return 6;
-    if (name.includes('SUPER')) return 15;
-    return 0;
-  })();
-  const codigoPreview = numericMode
-    ? (form.horario || form.loteria || '')
-    : form.loteria && form.horario
-      ? `${form.loteria} ${form.horario}`
-      : '';
 
   return (
     <AdminLayout
-      title="Resultados"
-      subtitle="Cadastro manual dos resultados diários."
+      title={view === 'dashboard' ? 'Resultados' : 'Cadastro de Resultado'}
+      subtitle={view === 'dashboard' ? 'Gerencie e liquide os resultados.' : 'Preencha os dados do sorteio.'}
       actions={
-        <button
-          onClick={fetchResults}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-semibold text-sm"
-        >
-          <FaSyncAlt className={loading ? 'animate-spin' : ''} /> Atualizar
-        </button>
+        view === 'dashboard' && (
+          <button
+            onClick={fetchResults}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-semibold text-sm"
+          >
+            <FaSyncAlt className={loading ? 'animate-spin' : ''} /> Atualizar Lista
+          </button>
+        )
       }
     >
-      {error && (
-        <div className="mb-4 bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded-r shadow-sm">
-          <p className="font-bold">Erro</p>
-          <p>{error}</p>
+      {(error || success) && (
+        <div
+          className={`mb-4 border-l-4 p-3 rounded-r shadow-sm ${
+            error ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'
+          }`}
+        >
+          <p className="font-bold">{error ? 'Erro' : 'Sucesso'}</p>
+          <p>{error || success}</p>
         </div>
       )}
-      {success && (
-        <div className="mb-4 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 p-3 rounded-r shadow-sm">
-          <p className="font-bold">Ok</p>
-          <p>{success}</p>
-        </div>
+
+      {view === 'dashboard' && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
+            {LOTERIAS_FIXAS.map((lot) => (
+              <button
+                key={lot.id}
+                onClick={() => handleStartAdd(lot.label)}
+                className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md`}
+              >
+                {lot.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">Histórico de Lançamentos</div>
+            {loading ? (
+              <div className="p-8 flex justify-center">
+                <Spinner size={32} />
+              </div>
+            ) : (
+              <AdminTable headers={['Data', 'Loteria/Hora', 'Resultados', 'Grupos', 'Ações']}>
+                {results.length === 0 ? (
+                  <AdminTableRow>
+                    <AdminTableCell colSpan={5} className="text-center py-4">
+                      Nenhum resultado.
+                    </AdminTableCell>
+                  </AdminTableRow>
+                ) : (
+                  results.map((r) => {
+                    const nums = r.numeros || [];
+                    const grps = r.grupos || [];
+                    return (
+                      <AdminTableRow key={r.id || r._id}>
+                        <AdminTableCell className="font-semibold">{r.dataJogo}</AdminTableCell>
+                        <AdminTableCell>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-emerald-700">{r.loteria}</span>
+                            <span className="text-xs text-slate-500">{r.codigoHorario}</span>
+                          </div>
+                        </AdminTableCell>
+                        <AdminTableCell>
+                          <div className="flex flex-wrap gap-1 max-w-xs font-mono text-xs">{nums.join(' - ')}</div>
+                        </AdminTableCell>
+                        <AdminTableCell>
+                          <div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div>
+                        </AdminTableCell>
+                        <AdminTableCell>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => settleResult(r.id || r._id)}
+                              disabled={actionLoading === (r.id || r._id)}
+                              title="Liquidar Apostas"
+                              className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"
+                            >
+                              <FaCheck />
+                            </button>
+                            <button
+                              onClick={() => generatePule(r.id || r._id)}
+                              disabled={actionLoading === (r.id || r._id)}
+                              title="Gerar PDF Pule"
+                              className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              <FaReceipt />
+                            </button>
+                            <button
+                              onClick={() => handleEdit(r)}
+                              title="Editar"
+                              className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r.id || r._id)}
+                              title="Excluir"
+                              className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </AdminTableCell>
+                      </AdminTableRow>
+                    );
+                  })
+                )}
+              </AdminTable>
+            )}
+          </div>
+        </>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-sm font-bold text-emerald-700">Filtrar resultados</p>
-            <p className="text-xs text-slate-500">Escolha a data e a loteria para listar apenas os resultados daquele dia.</p>
-          </div>
-          <button
-            onClick={() => fetchResults({ loteria: filterLottery, date: filterDate })}
-            className="px-3 py-2 text-sm font-semibold rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition"
-            disabled={loading}
-          >
-            Buscar
-          </button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => {
-                const date = e.target.value;
-                setFilterDate(date);
-              }}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo de loteria</label>
-            <select
-              value={filterLottery}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFilterLottery(val);
-                // Se já tem data selecionada, busca imediatamente ao escolher loteria
-                if (filterDate || val) {
-                  fetchResults({ loteria: val, date: filterDate });
-                }
-              }}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-            >
-              <option value="">Todas</option>
-              {LOTERIAS.map((lot) => (
-                <option key={lot.code} value={lot.code}>
-                  {lot.code}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-2 mb-3 text-slate-800 font-semibold">
-          <FaPlus /> Registrar resultado
-        </div>
-        <form className="grid grid-cols-1 md:grid-cols-3 gap-3" onSubmit={handleSubmit}>
-          <div className="md:col-span-1">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Loteria</label>
-            <select
-              value={form.loteria}
-              onChange={(e) => {
-                const code = e.target.value;
-                const lot = LOTERIAS.find((l) => l.code === code);
-                setForm((prev) => ({
-                  ...prev,
-                  loteria: code,
-                  horario: lot?.horarios?.[0] || '',
-                }));
-              }}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              required
-            >
-              <option value="">Selecione</option>
-              {LOTERIAS.map((lot) => (
-                <option key={lot.code} value={lot.code}>
-                  {lot.code}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-1">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Data</label>
-            <input
-              type="date"
-              value={form.data}
-              onChange={(e) => setForm({ ...form, data: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              required
-            />
-          </div>
-          <div className="md:col-span-1">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Horário</label>
-            <select
-              value={form.horario}
-              onChange={(e) => setForm({ ...form, horario: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              required
-              disabled={!form.loteria}
-            >
-              <option value="">Selecione</option>
-              {horariosDisponiveis.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Código / Loteria / Horário</label>
-            <input
-              value={codigoPreview}
-              readOnly
-              placeholder="Selecione loteria e horário"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-slate-50 text-slate-700"
-            />
+      {view === 'form' && (
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-emerald-700 text-white p-4 flex justify-between items-center">
+            <button onClick={handleBack} className="flex items-center gap-2 font-bold hover:text-emerald-200">
+              <FaArrowLeft /> Voltar
+            </button>
+            <h2 className="text-xl font-black uppercase">
+              {selectedLottery === 'OUTRA' ? customLotteryName || 'Nova Loteria' : selectedLottery}
+            </h2>
+            <div className="w-16" />
           </div>
 
-          {numericMode ? (
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                Dezenas sorteadas ({neededDezenas || '—'} números)
-              </label>
-              <input
-                placeholder="Ex: 10 25 33 40 80"
-                value={form.dezenasList}
-                onChange={(e) => setForm((prev) => ({ ...prev, dezenasList: e.target.value }))}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-                disabled={saving}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Separe com espaço, vírgula ou linha. Quininha = 5 dezenas, Seninha = 6, Super 15 = 15 dezenas.
-              </p>
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
+                <input
+                  type="date"
+                  value={inputDate}
+                  onChange={(e) => setInputDate(e.target.value)}
+                  className="w-full p-3 border rounded-xl"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
+                <input
+                  type="text"
+                  value={inputTime}
+                  onChange={(e) => setInputTime(e.target.value)}
+                  placeholder="Ex: 11:00"
+                  className="w-full p-3 border rounded-xl"
+                  required
+                />
+              </div>
             </div>
-          ) : (
-            [1, 2, 3, 4, 5, 6, 7].map((idx) => (
-              <React.Fragment key={idx}>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">{`N${idx} (Milhar)`}</label>
-                  <input
-                    placeholder="Ex: 1234"
-                    value={form[`n${idx}`]}
-                    onChange={(e) => handleMilharChange(idx, e.target.value)}
-                    inputMode="numeric"
-                    maxLength={idx === 7 ? 3 : 4}
-                    ref={(el) => (milharRefs.current[idx] = el)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-                    disabled={saving}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">{`Grupo ${idx}`}</label>
-                  <input
-                    placeholder="Ex: 04"
-                    value={form[`g${idx}`] || ''}
-                    onChange={(e) => handleGrupoChange(idx, e.target.value)}
-                    inputMode="numeric"
-                    maxLength={2}
-                    ref={(el) => (grupoRefs.current[idx] = el)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-                    disabled={saving}
-                  />
-                </div>
-              </React.Fragment>
-            ))
-          )}
 
-          <div className="md:col-span-3 flex justify-end">
+            {selectedLottery === 'OUTRA' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Loteria</label>
+                <input
+                  type="text"
+                  value={customLotteryName}
+                  onChange={(e) => setCustomLotteryName(e.target.value)}
+                  className="w-full p-3 border rounded-xl"
+                  placeholder="Digite o nome..."
+                  required
+                />
+              </div>
+            )}
+
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+              <label className="block text-xs font-bold text-emerald-800 uppercase mb-2">⚡ Colagem Rápida</label>
+              <textarea
+                value={rawInput}
+                onChange={handleSmartPaste}
+                placeholder="Cole a linha inteira aqui (Ex: 2690 1480...)"
+                className="w-full p-3 border border-emerald-300 rounded-lg font-mono text-sm h-20"
+              />
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-2 font-black text-xs text-slate-500 uppercase text-center">
+                <span>#</span>
+                <span>Milhar</span>
+                <span>Grupo</span>
+              </div>
+              {prizes.map((prize, idx) => (
+                <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-3 items-center">
+                  <span className="text-center font-bold text-slate-400">{idx + 1}º</span>
+                  <input
+                    value={prize.numero}
+                    onChange={(e) => handleChangePrize(idx, 'numero', e.target.value)}
+                    className="p-3 border-2 border-slate-200 rounded-lg text-center font-mono text-lg font-bold"
+                    maxLength={4}
+                    placeholder="0000"
+                  />
+                  <input
+                    value={prize.grupo}
+                    onChange={(e) => handleChangePrize(idx, 'grupo', e.target.value)}
+                    className="p-3 border-2 border-slate-200 rounded-lg text-center font-bold text-lg bg-slate-200"
+                    maxLength={2}
+                    placeholder="Gr"
+                  />
+                </div>
+              ))}
+            </div>
+
             <button
               type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg shadow hover:bg-emerald-700 transition disabled:opacity-60"
+              className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition"
             >
-              {saving ? 'Salvando...' : 'Registrar'}
+              {editingId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR RESULTADO'}
             </button>
-          </div>
-        </form>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <Spinner size={40} />
+          </form>
         </div>
-      ) : (
-        <AdminTable headers={['Data', 'Código/Horário', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'Grupos', 'Ação']}>
-          {results.length === 0 ? (
-            <AdminTableRow>
-              <AdminTableCell className="text-center text-slate-500" colSpan={11}>
-                Nenhum resultado cadastrado.
-              </AdminTableCell>
-            </AdminTableRow>
-          ) : (
-            results.map((r) => {
-              const rawNums = (r.numeros || r.n || []).length
-                ? r.numeros || r.n
-                : [r.n1, r.n2, r.n3, r.n4, r.n5, r.n6, r.n7].filter((n) => n !== undefined);
-              let rawGroups = r.grupos || r.g || [];
-              if (typeof rawGroups === 'string') {
-                try {
-                  rawGroups = JSON.parse(rawGroups);
-                } catch {
-                  rawGroups = [];
-                }
-              }
-              if (!rawGroups.length) {
-                rawGroups = [r.g1, r.g2, r.g3, r.g4, r.g5, r.g6, r.g7].filter((g) => g !== undefined);
-              }
+      )}
 
-              const lotName = (r.loteria || r.codigoHorario || r.codigo || '').toUpperCase();
-              const isNumeric = lotName.includes('QUININHA') || lotName.includes('SENINHA') || lotName.includes('SUPER 15') || rawNums.length > 7;
-
-              let nums = [...rawNums];
-              let groups = [...rawGroups];
-
-              if (isNumeric) {
-                if (nums.length > 7) {
-                  nums = [`${rawNums.join(' • ')}`];
-                }
-                groups = Array(7).fill('—');
-              }
-
-              while (nums.length < 7) nums.push('—');
-              while (groups.length < 7) groups.push(null);
-
-              const groupsWithFallback = isNumeric
-                ? groups.map((g) => g || '—')
-                : groups.map((g, i) => {
-                    if (g) return g;
-                    const num = nums[i];
-                    if (!num || num === '—') return '—';
-                    const dezena = String(num).replace(/\D/g, '').slice(-2);
-                    if (!dezena) return '—';
-                    const val = parseInt(dezena, 10);
-                    if (Number.isNaN(val)) return '—';
-                    const group = val === 0 ? 25 : Math.ceil(val / 4);
-                    return String(group).padStart(2, '0');
-                  });
-
-              return (
-                <AdminTableRow key={r.id || r._id}>
-                  <AdminTableCell className="font-semibold">{r.data || r.dataJogo || '—'}</AdminTableCell>
-                  <AdminTableCell>{r.codigoHorario || r.codigo || r.loteria || '—'}</AdminTableCell>
-                  {nums.slice(0, 7).map((num, i) => (
-                    <AdminTableCell key={`${r.id || r._id}-n-${i}`}>
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{num || '—'}</span>
-                        <span className="text-xs text-slate-500">
-                          Grupo: {groupsWithFallback[i] || '—'}{' '}
-                          {groupsWithFallback[i] ? `(${getNomeBicho(groupsWithFallback[i]) || ''})` : ''}
-                        </span>
-                      </div>
-                    </AdminTableCell>
-                  ))}
-                  <AdminTableCell className="text-sm text-slate-700">
-                    {groupsWithFallback.slice(0, 7).join(' • ') || '—'}
-                  </AdminTableCell>
-                  <AdminTableCell>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        onClick={() => settleResult(r.id || r._id)}
-                        disabled={settlingId === (r.id || r._id)}
-                        className="px-3 py-1 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-60"
-                      >
-                        {settlingId === (r.id || r._id) ? 'Liquidando...' : 'Liquidar'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => generatePule(r.id || r._id)}
-                        disabled={generatingId === (r.id || r._id)}
-                        className="px-3 py-1 rounded-md border border-emerald-200 text-emerald-700 text-sm font-semibold hover:bg-emerald-50 transition disabled:opacity-60 flex items-center gap-2"
-                      >
-                        <FaReceipt />
-                        {generatingId === (r.id || r._id) ? 'Gerando...' : 'Gerar PULE'}
-                      </button>
-                    </div>
-                  </AdminTableCell>
-                </AdminTableRow>
-              );
-            })
-          )}
-        </AdminTable>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-bounce-in">
+            <div className="text-4xl mb-4">✅</div>
+            <h2 className="text-2xl font-black text-slate-800">{modalMessage.title}</h2>
+            <p className="text-slate-500 mb-8">{modalMessage.text}</p>
+            <div className="space-y-3">
+              <button onClick={handleAddAnother} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">
+                ADICIONAR OUTRO
+              </button>
+              <button onClick={handleBack} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">
+                VOLTAR AO INÍCIO
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
