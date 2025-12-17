@@ -23,6 +23,8 @@ router.delete('/supervisors/:id', adminController.deleteSupervisor);
 // Resultados
 router.post('/results', adminController.createResult);
 router.get('/results', adminController.listResults);
+router.put('/results/:id', adminController.updateResult);
+router.delete('/results/:id', adminController.deleteResult);
 router.post('/results/:id/settle', adminController.settleResult);
 router.get('/results/:id/settle', adminController.settleResult); // fallback para chamadas GET
 router.post('/results/:id/pule', adminController.generateResultPule);

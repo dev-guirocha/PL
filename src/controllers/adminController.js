@@ -786,6 +786,78 @@ exports.createResult = async (req, res) => {
   }
 };
 
+exports.updateResult = async (req, res) => {
+  const id = Number(req.params.id);
+  const { loteria, codigoHorario, dataJogo, numeros, grupos } = req.body || {};
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+  if (!loteria || !numeros || !Array.isArray(numeros) || numeros.length === 0) {
+    return res.status(400).json({ error: 'Informe loteria e lista de números/resultados.' });
+  }
+
+  try {
+    const existing = await prisma.result.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Resultado não encontrado.' });
+
+    const normalizer = getNormalizerForGame(loteria);
+    const numerosNorm = numeros.map((n) => normalizer(n));
+    let gruposFinal = [];
+    const isLoteriaNumerica = (loteria || '').toUpperCase().match(/QUININHA|SENINHA|SUPER/);
+
+    if (!isLoteriaNumerica) {
+      try {
+        gruposFinal = Array.isArray(grupos) ? grupos : JSON.parse(grupos || '[]');
+      } catch {
+        gruposFinal = [];
+      }
+      if (!gruposFinal.length || gruposFinal.length < numerosNorm.length) {
+        gruposFinal = numerosNorm.map((n, idx) => {
+          const provided = gruposFinal[idx];
+          if (provided) return provided;
+          const g = getGrupo(n);
+          return g ? String(g).padStart(2, '0') : null;
+        });
+      }
+    } else {
+      gruposFinal = [];
+    }
+
+    const updated = await prisma.result.update({
+      where: { id },
+      data: {
+        loteria,
+        codigoHorario: codigoHorario || null,
+        dataJogo: dataJogo || null,
+        numeros: JSON.stringify(numerosNorm),
+        grupos: gruposFinal.length ? JSON.stringify(gruposFinal) : null,
+      },
+    });
+
+    return res.json({ result: updated });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao atualizar resultado.' });
+  }
+};
+
+exports.deleteResult = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
+
+  try {
+    const existing = await prisma.result.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Resultado não encontrado.' });
+
+    await prisma.$transaction([
+      prisma.bet.updateMany({ where: { resultId: id }, data: { resultId: null } }),
+      prisma.resultPule.deleteMany({ where: { resultId: id } }),
+      prisma.result.delete({ where: { id } }),
+    ]);
+
+    return res.json({ message: 'Resultado removido.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao excluir resultado.' });
+  }
+};
+
 exports.settleResult = async (req, res) => {
   const id = Number(req.params.id);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
