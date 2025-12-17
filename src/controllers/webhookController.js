@@ -27,6 +27,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
     const correlationID = charge.correlationID;
     const txId = pix.txId;
 
+    // Busca cobrança e usuário (para supervisor)
     const pixCharge = await prisma.pixCharge.findFirst({
       where: {
         OR: [
@@ -34,6 +35,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
           correlationID ? { txid: correlationID } : undefined,
         ].filter(Boolean),
       },
+      include: { user: true },
     });
 
     if (!pixCharge || pixCharge.credited) {
@@ -44,7 +46,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
     const value = Number(pixCharge.amount);
     const bonusValue = Number(pixCharge.bonusAmount ?? Number((value * 0.15).toFixed(2)));
 
-    await prisma.$transaction([
+    const txs = [
       prisma.pixCharge.update({
         where: { id: pixCharge.id },
         data: {
@@ -68,15 +70,40 @@ exports.handleOpenPixWebhook = async (req, res) => {
           description: `Depósito Pix (${txId || correlationID})`,
         },
       }),
-      prisma.transaction.create({
-        data: {
-          userId: pixCharge.userId,
-          type: 'PIX_BONUS',
-          amount: bonusValue,
-          description: `Bônus 15% Pix (${txId || correlationID})`,
-        },
-      }),
-    ]);
+    ];
+
+    if (bonusValue > 0) {
+      txs.push(
+        prisma.transaction.create({
+          data: {
+            userId: pixCharge.userId,
+            type: 'PIX_BONUS',
+            amount: bonusValue,
+            description: `Bônus 15% Pix (${txId || correlationID})`,
+          },
+        }),
+      );
+    }
+
+    // Comissão supervisor 5%
+    if (pixCharge.user?.supervisorId) {
+      const supCommission = Number((value * 0.05).toFixed(2));
+      if (supCommission > 0) {
+        txs.push(
+          prisma.supervisorCommission.create({
+            data: {
+              supervisorId: pixCharge.user.supervisorId,
+              userId: pixCharge.userId,
+              amount: supCommission,
+              basis: 'deposit',
+              status: 'pending',
+            },
+          }),
+        );
+      }
+    }
+
+    await prisma.$transaction(txs);
 
     console.log('✅ Pix creditado com sucesso');
     return res.status(200).send('OK');

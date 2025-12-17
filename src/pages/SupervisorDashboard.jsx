@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FaArrowLeft, FaCopy, FaSyncAlt } from 'react-icons/fa';
 import Spinner from '../components/Spinner';
+import api from '../utils/api';
 
 const StatCard = ({ title, value, subtext, color = 'emerald' }) => {
   const colors = {
@@ -27,28 +28,31 @@ const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace(
 const SupervisorDashboard = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const supCode = params.get('sup') || '—';
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({
+    code: params.get('sup') || '—',
     users: 0,
     volume: 0,
+    commission: 0,
   });
 
-  const commission = useMemo(() => (Number(stats.volume) || 0) * 0.05, [stats.volume]); // placeholder: 5% do primeiro depósito
   const inviteLink = useMemo(() => {
     if (typeof window === 'undefined') return '';
-    return `${window.location.origin}/?sup=${supCode}`;
-  }, [supCode]);
+    return `${window.location.origin}/?sup=${stats.code}`;
+  }, [stats.code]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Quando houver endpoint, substituir pelos dados reais.
-      // Placeholder para manter visual enquanto o backend não expõe stats do supervisor.
-      setStats((prev) => ({
-        users: prev.users || 0,
-        volume: prev.volume || 0,
-      }));
+      const res = await api.get('/supervisor/stats');
+      setStats({
+        code: res.data?.supCode || stats.code,
+        users: Number(res.data?.users || 0),
+        volume: Number(res.data?.volume || 0),
+        commission: Number(res.data?.commission || 0),
+      });
+    } catch (err) {
+      console.error('Erro ao buscar dados do supervisor:', err);
     } finally {
       setLoading(false);
     }
@@ -72,7 +76,7 @@ const SupervisorDashboard = () => {
           </button>
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">Painel do Supervisor</p>
-            <h1 className="text-lg font-bold text-emerald-800">Código: {supCode}</h1>
+            <h1 className="text-lg font-bold text-emerald-800">Código: {stats.code}</h1>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -96,15 +100,17 @@ const SupervisorDashboard = () => {
       <main className="max-w-5xl mx-auto px-4 py-6">
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard title="Usuários cadastrados" value={stats.users} subtext="Via seu link" color="blue" />
-          <StatCard title="Volume gerado" value={formatCurrency(stats.volume)} subtext="Total apostado" color="emerald" />
-          <StatCard title="Comissão estimada" value={formatCurrency(commission)} subtext="5% do primeiro depósito de cada usuário" color="amber" />
+          <StatCard title="Volume de Depósitos" value={formatCurrency(stats.volume)} subtext="Total depositado pela rede" color="emerald" />
+          <StatCard title="Sua Comissão" value={formatCurrency(stats.commission)} subtext="5% sobre todos os depósitos" color="amber" />
         </section>
 
         <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
           <h2 className="text-lg font-bold text-slate-800 mb-2">Resumo</h2>
           <p className="text-sm text-slate-600">
-            Este painel mostrará o desempenho do supervisor. Quando os dados de API estiverem disponíveis, exibiremos os usuários cadastrados pelo código
-            <span className="font-semibold text-emerald-700"> {supCode}</span> e o volume movimentado.
+            Este painel mostra o desempenho em tempo real. Você está ganhando
+            <span className="font-semibold text-emerald-700"> 5% de comissão </span>
+            sobre <strong className="uppercase text-emerald-700">TODOS</strong> os depósitos realizados pelos usuários cadastrados com seu código
+            <span className="font-semibold text-emerald-700"> {stats.code}</span>.
           </p>
           {loading && (
             <div className="flex justify-center items-center py-6">

@@ -77,3 +77,39 @@ exports.listResultPules = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao listar pules de resultados.' });
   }
 };
+
+// Estatísticas para o painel do supervisor
+exports.getSupervisorStats = async (req, res) => {
+  try {
+    const phoneClean = (req.user.phone || '').replace(/\D/g, '');
+    const supervisor = await prisma.supervisor.findFirst({
+      where: {
+        OR: [{ phone: phoneClean }, { name: req.user.name }],
+      },
+    });
+
+    if (!supervisor) {
+      return res.status(404).json({ error: 'Você não é supervisor.' });
+    }
+
+    const usersCount = await prisma.user.count({ where: { supervisorId: supervisor.id } });
+    const deposits = await prisma.pixCharge.aggregate({
+      where: { user: { supervisorId: supervisor.id }, status: 'paid' },
+      _sum: { amount: true },
+    });
+    const commissions = await prisma.supervisorCommission.aggregate({
+      where: { supervisorId: supervisor.id },
+      _sum: { amount: true },
+    });
+
+    return res.json({
+      supCode: supervisor.code,
+      users: usersCount,
+      volume: Number(deposits._sum.amount || 0),
+      commission: Number(commissions._sum.amount || 0),
+    });
+  } catch (error) {
+    console.error('Erro stats supervisor:', error);
+    return res.status(500).json({ error: 'Erro ao buscar estatísticas.' });
+  }
+};
