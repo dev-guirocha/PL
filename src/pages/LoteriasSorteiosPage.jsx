@@ -140,11 +140,33 @@ const LoteriasSorteiosPage = () => {
   const isToday = selectedDate === todayIso;
   const currentHour = new Date().getHours();
 
+  const selectedDay = useMemo(() => {
+    const base = selectedDate ? new Date(selectedDate) : new Date();
+    const day = base.getDay();
+    return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
+  }, [selectedDate]);
+
   const isPastHorario = (h) => {
     if (!isToday) return false;
     const hour = timeValue(h);
     if (Number.isNaN(hour)) return false;
     return hour <= currentHour;
+  };
+
+  const adjustHorarios = (lot) => {
+    const list = Array.isArray(lot.horarios) ? lot.horarios : [];
+    const isWedOrSat = selectedDay === 3 || selectedDay === 6;
+    if (!isWedOrSat) return list;
+
+    if (lot.slug === 'rio-federal') {
+      return list.map((h) => (h === 'LT PT RIO 18HS' ? 'LT FEDERAL 20HS' : h));
+    }
+
+    if (lot.slug === 'maluquinha') {
+      return list.map((h) => (h === 'LT MALUQ RIO 18HS' ? 'LT MALUQ FEDERAL 20HS' : h));
+    }
+
+    return list;
   };
 
   const toggleSelection = (slug, nome, horario) => {
@@ -226,7 +248,7 @@ const LoteriasSorteiosPage = () => {
               <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
               {expanded === lot.slug && (
                 <div style={styles.horarios}>
-                  {lot.horarios
+                  {adjustHorarios(lot)
                     .slice()
                     .sort((a, b) => timeValue(a) - timeValue(b))
                     .map((h, idx) => {
