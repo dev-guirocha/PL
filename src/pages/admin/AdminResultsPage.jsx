@@ -383,10 +383,9 @@ const AdminResultsPage = () => {
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
                 <input
-                  type="text"
+                  type="time"
                   value={inputTime}
                   onChange={(e) => setInputTime(e.target.value)}
-                  placeholder="Ex: 11:00"
                   className="w-full p-3 border rounded-xl"
                   required
                 />

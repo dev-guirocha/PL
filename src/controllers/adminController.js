@@ -442,40 +442,76 @@ const parseColocacao = (colocacaoStr) => {
   return [{ indices: [0], divisor: 1, stakeFactor: 1 }];
 };
 
+// --- AUXILIARES PARA COMPARAÇÃO FLEXÍVEL ---
+const normalizeDate = (dateStr) => {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  if (dateStr.includes('/')) {
+    const [d, m, y] = dateStr.split('/');
+    return `${y}-${m}-${d}`;
+  }
+  return dateStr;
+};
+
+const normalizeTime = (timeStr) => {
+  if (!timeStr) return '';
+  const nums = timeStr.replace(/\D/g, '');
+  if (nums.length >= 3) return nums.slice(0, 2);
+  return nums.padStart(2, '0');
+};
+
+const normalizeLottery = (name) => (name || '').toUpperCase().replace(/^LT\s+/, '').replace(/[^A-Z0-9]/g, '');
+
 const settleBetsForResult = async (resultId) => {
   const result = await prisma.result.findUnique({ where: { id: resultId } });
   if (!result) return { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
+  const resultDateNorm = normalizeDate(result.dataJogo);
+  const resultTimeNorm = normalizeTime(result.codigoHorario);
+  const resultLotteryNorm = normalizeLottery(result.loteria);
+
   let numeros = [];
-  let grupos = [];
   try {
     numeros = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros || '[]');
   } catch {
     numeros = [];
   }
-  try {
-    grupos = result.grupos ? (Array.isArray(result.grupos) ? result.grupos : JSON.parse(result.grupos || '[]')) : [];
-  } catch {
-    grupos = [];
-  }
-  const premios = numeros.map(normalizeMilhar); // posições 0..n, 0 = 1º prêmio
+  const premios = numeros.map(normalizeMilhar);
 
+  // Busca apostas abertas e filtra de forma flexível em JS
   const bets = await prisma.bet.findMany({
-    where: {
-      status: 'open',
-      OR: [
-        { loteria: result.loteria, codigoHorario: result.codigoHorario },
-        { codigoHorario: result.codigoHorario },
-        { loteria: result.loteria },
-      ],
+    where: { status: 'open' },
+    select: {
+      id: true,
+      userId: true,
+      palpites: true,
+      modalidade: true,
+      colocacao: true,
+      total: true,
+      resultId: true,
+      dataJogo: true,
+      codigoHorario: true,
+      loteria: true,
     },
-    select: { id: true, userId: true, palpites: true, modalidade: true, colocacao: true, total: true, resultId: true, dataJogo: true },
   });
 
-  const summary = { totalBets: bets.length, processed: 0, wins: 0, errors: [], matchedBetIds: bets.map((b) => b.id) };
+  const summary = { totalBets: 0, processed: 0, wins: 0, errors: [], matchedBetIds: [] };
 
   for (const bet of bets) {
     try {
+      // Filtro inteligente por data/hora/loteria
+      if (bet.dataJogo) {
+        const betDateNorm = normalizeDate(bet.dataJogo);
+        if (betDateNorm !== resultDateNorm) continue;
+      }
+      const betTimeNorm = normalizeTime(bet.codigoHorario);
+      if (betTimeNorm !== resultTimeNorm) continue;
+      const betLotteryNorm = normalizeLottery(bet.loteria);
+      if (!betLotteryNorm.includes(resultLotteryNorm) && !resultLotteryNorm.includes(betLotteryNorm)) continue;
+
+      summary.matchedBetIds.push(bet.id);
+      summary.totalBets += 1;
+
       const apostas = parseApostasFromBet(bet);
       if (!apostas.length) {
         await prisma.bet.update({ where: { id: bet.id }, data: { status: 'nao premiado', settledAt: new Date(), resultId } });
