@@ -1,23 +1,23 @@
 // src/data/sorteios.js
 
 // 1. Funções de Apoio (DEVEM VIR PRIMEIRO)
-const getDayOfWeek = () => {
-  const now = new Date();
+const getDayOfWeek = (dateStr) => {
+  const base = dateStr ? new Date(dateStr) : new Date();
   // Retorna 0 (Dom) a 6 (Sáb)
-  return now.getDay();
+  return base.getDay();
 };
 
-const isFederalDay = () => {
-  const day = getDayOfWeek();
+const isFederalDay = (dateStr) => {
+  const day = getDayOfWeek(dateStr);
   // Retorna TRUE se for Quarta (3) ou Sábado (6)
   return day === 3 || day === 6;
 };
 
 // 2. Funções Geradoras de Horários (DEVEM VIR NO MEIO)
-const getHorariosRio = () => {
+const getHorariosRio = (dateStr) => {
   const base = ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'LT PT RIO 18HS', 'LT PT RIO 21HS'];
 
-  if (isFederalDay()) {
+  if (isFederalDay(dateStr)) {
     // Dias de Federal: Remove 18HS e adiciona FEDERAL 20H
     return ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'FEDERAL 20H', 'LT PT RIO 21HS'];
   }
@@ -25,10 +25,10 @@ const getHorariosRio = () => {
   return base;
 };
 
-const getHorariosMaluquinha = () => {
+const getHorariosMaluquinha = (dateStr) => {
   const base = ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ RIO 18HS', 'LT MALUQ RIO 21HS'];
 
-  if (isFederalDay()) {
+  if (isFederalDay(dateStr)) {
     // Dias de Federal: Remove 18HS e adiciona FEDERAL 20HS
     return ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ FEDERAL 20HS', 'LT MALUQ RIO 21HS'];
   }
@@ -36,18 +36,17 @@ const getHorariosMaluquinha = () => {
   return base;
 };
 
-// 3. Exportação Principal (DEVE VIR POR ÚLTIMO)
-// O sistema usa as funções acima para preencher os arrays
-export const LOTERIAS_SORTEIOS = [
+// 3. Dados base
+const BASE_LOTERIAS = [
   {
     nome: 'RIO/FEDERAL',
     slug: 'rio-federal',
-    horarios: getHorariosRio(),
+    horarios: getHorariosRio,
   },
   {
     nome: 'MALUQUINHA',
     slug: 'maluquinha',
-    horarios: getHorariosMaluquinha(),
+    horarios: getHorariosMaluquinha,
   },
   {
     nome: 'NACIONAL',
@@ -130,3 +129,18 @@ export const LOTERIAS_SORTEIOS = [
     horarios: ['SEG-SAB'],
   },
 ];
+
+// Função para gerar a lista com base na data (opcional)
+export function getLoteriasSorteios(dateStr) {
+  return BASE_LOTERIAS.map((lot) => {
+    const horarios =
+      typeof lot.horarios === 'function'
+        ? lot.horarios(dateStr)
+        : lot.horarios;
+    return { ...lot, horarios };
+  });
+}
+
+// 4. Exportação Principal (DEVE VIR POR ÚLTIMO)
+// Mantém a exportação esperada usando a data atual
+export const LOTERIAS_SORTEIOS = getLoteriasSorteios();
