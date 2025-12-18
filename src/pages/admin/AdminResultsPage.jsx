@@ -4,10 +4,8 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
-// Importa a lista OFICIAL (mesma do usuário)
 import { LOTERIAS_SORTEIOS } from '../../data/sorteios'; 
 
-// Mapeamento visual para os botões do Admin
 const LOTERIAS_FIXAS = [
   { id: 'PT-RIO', label: 'LT PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
   { id: 'LOOK', label: 'LT LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
@@ -32,48 +30,37 @@ const calculateGroup = (numberStr) => {
 
 const AdminResultsPage = () => {
   const todayStr = new Date().toISOString().slice(0, 10);
-
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
   const [view, setView] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState({ title: '', text: '' });
 
-  // Estados do Formulário
   const [selectedLottery, setSelectedLottery] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [inputDate, setInputDate] = useState(todayStr);
-  const [inputTime, setInputTime] = useState(''); // Vai armazenar a string completa ex: "LT PT RIO 18HS"
+  const [inputTime, setInputTime] = useState('');
   const [customLotteryName, setCustomLotteryName] = useState('');
   const [rawInput, setRawInput] = useState('');
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
 
-  // --- LÓGICA CORRIGIDA: Buscar Horários COMPLETOS ---
   const availableTimes = useMemo(() => {
     if (!selectedLottery || selectedLottery === 'OUTRA') return [];
-    
     let foundTimes = [];
     const listaOficial = Array.isArray(LOTERIAS_SORTEIOS) ? LOTERIAS_SORTEIOS : [];
-    
     listaOficial.forEach(grupo => {
       if (Array.isArray(grupo.horarios)) {
         grupo.horarios.forEach(fullString => {
-          if (fullString.includes(selectedLottery)) {
-             foundTimes.push(fullString); // Guarda a string COMPLETA
-          } else if (selectedLottery === 'FEDERAL' && fullString.includes('FEDERAL')) {
-             foundTimes.push(fullString);
-          } else if (selectedLottery === 'LT MALUQ RIO' && fullString.includes('MALUQ')) {
-             foundTimes.push(fullString);
-          }
+          if (fullString.includes(selectedLottery)) foundTimes.push(fullString);
+          else if (selectedLottery === 'FEDERAL' && fullString.includes('FEDERAL')) foundTimes.push(fullString);
+          else if (selectedLottery === 'LT MALUQ RIO' && fullString.includes('MALUQ')) foundTimes.push(fullString);
         });
       }
     });
-
-    return [...new Set(foundTimes)];
+    return [...new Set(foundTimes)].sort();
   }, [selectedLottery]);
 
   const fetchResults = async () => {
@@ -89,9 +76,7 @@ const AdminResultsPage = () => {
     }
   };
 
-  useEffect(() => {
-    fetchResults();
-  }, []);
+  useEffect(() => { fetchResults(); }, []);
 
   const settleResult = async (id) => {
     if (!id) return;
@@ -149,8 +134,15 @@ const AdminResultsPage = () => {
   };
 
   const handleEdit = (r) => {
-    const nums = r.numeros || [];
-    const grps = r.grupos || [];
+    // --- CORREÇÃO DE SEGURANÇA NA LEITURA ---
+    let nums = r.numeros;
+    if (typeof nums === 'string') { try { nums = JSON.parse(nums) } catch { nums = [] } }
+    if (!Array.isArray(nums)) nums = [];
+
+    let grps = r.grupos;
+    if (typeof grps === 'string') { try { grps = JSON.parse(grps) } catch { grps = [] } }
+    if (!Array.isArray(grps)) grps = [];
+    // ----------------------------------------
     
     const newPrizes = Array.from({ length: 7 }, (_, i) => ({
       numero: nums[i] ? String(nums[i]) : '',
@@ -158,7 +150,6 @@ const AdminResultsPage = () => {
     }));
     
     setPrizes(newPrizes);
-    
     const knownLottery = LOTERIAS_FIXAS.find(l => l.label === r.loteria);
     if (knownLottery) {
       setSelectedLottery(knownLottery.label);
@@ -166,7 +157,6 @@ const AdminResultsPage = () => {
       setSelectedLottery('OUTRA');
       setCustomLotteryName(r.loteria);
     }
-
     const dateFormatted = r.dataJogo.includes('/') ? r.dataJogo.split('/').reverse().join('-') : r.dataJogo;
     setInputDate(dateFormatted);
     setInputTime(r.codigoHorario || '');
@@ -174,44 +164,29 @@ const AdminResultsPage = () => {
     setView('form');
   };
 
-  const handleBack = () => {
-    setView('dashboard');
-    setShowModal(false);
-  };
-
-  const handleAddAnother = () => {
-    setShowModal(false);
-    setPrizes(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
-    setRawInput('');
-    setInputTime('');
-  };
+  const handleBack = () => { setView('dashboard'); setShowModal(false); };
+  const handleAddAnother = () => { setShowModal(false); setPrizes(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }))); setRawInput(''); setInputTime(''); };
 
   const handleSmartPaste = (e) => {
     const text = e.target.value;
     setRawInput(text);
     const cleanData = text.replace(/\D/g, '');
     if (!cleanData) return;
-
     const newPrizes = Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }));
     let cursor = 0;
-
     for (let i = 0; i < 7; i++) {
       if (cursor >= cleanData.length) break;
       let numLength = 4;
       if (cleanData.length - cursor < 4) numLength = cleanData.length - cursor;
       const rawNum = cleanData.substr(cursor, numLength);
-
       if (rawNum) {
         newPrizes[i].numero = rawNum;
-        const calcGroup = calculateGroup(rawNum);
-        newPrizes[i].grupo = calcGroup;
+        newPrizes[i].grupo = calculateGroup(rawNum);
         cursor += numLength;
         const nextTwo = cleanData.substr(cursor, 2);
         const nextOne = cleanData.substr(cursor, 1);
-        const padGroup = calcGroup.padStart(2, '0');
-        if (nextTwo === padGroup) cursor += 2;
-        else if (nextTwo.length === 2 && nextTwo === calcGroup) cursor += 2;
-        else if (nextOne === calcGroup) cursor += 1;
+        if (nextTwo === newPrizes[i].grupo.padStart(2,'0') || (nextTwo.length===2 && nextTwo === newPrizes[i].grupo)) cursor += 2;
+        else if (nextOne === newPrizes[i].grupo) cursor += 1;
       }
     }
     setPrizes(newPrizes);
@@ -220,9 +195,7 @@ const AdminResultsPage = () => {
   const handleChangePrize = (index, field, value) => {
     const newPrizes = [...prizes];
     newPrizes[index][field] = value;
-    if (field === 'numero') {
-      newPrizes[index].grupo = calculateGroup(value);
-    }
+    if (field === 'numero') newPrizes[index].grupo = calculateGroup(value);
     setPrizes(newPrizes);
   };
 
@@ -230,22 +203,9 @@ const AdminResultsPage = () => {
     e.preventDefault();
     const numeros = prizes.map(p => p.numero).filter(Boolean);
     const grupos = prizes.map(p => p.grupo).filter(Boolean);
-
-    if (!numeros.length) {
-      alert('Preencha pelo menos um número.');
-      return;
-    }
-
+    if (!numeros.length) return alert('Preencha pelo menos um número.');
     const finalLotteryName = selectedLottery === 'OUTRA' ? customLotteryName : selectedLottery;
-    
-    const payload = {
-      loteria: finalLotteryName.trim(), 
-      dataJogo: inputDate.split('-').reverse().join('/'),
-      codigoHorario: inputTime,
-      numeros,
-      grupos
-    };
-
+    const payload = { loteria: finalLotteryName.trim(), dataJogo: inputDate.split('-').reverse().join('/'), codigoHorario: inputTime, numeros, grupos };
     try {
       if (editingId) {
         await api.put(`/admin/results/${editingId}`, payload);
@@ -256,111 +216,45 @@ const AdminResultsPage = () => {
       }
       setShowModal(true);
       fetchResults();
-    } catch (err) {
-      alert(err.response?.data?.error || 'Erro ao salvar.');
-    }
+    } catch (err) { alert(err.response?.data?.error || 'Erro ao salvar.'); }
   };
 
   return (
-    <AdminLayout
-      title={view === 'dashboard' ? 'Resultados' : 'Cadastro de Resultado'}
-      subtitle={view === 'dashboard' ? 'Gerencie e liquide os resultados.' : 'Preencha os dados do sorteio.'}
-      actions={
-        view === 'dashboard' && (
-          <button
-            onClick={fetchResults}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-semibold text-sm"
-          >
-            <FaSyncAlt className={loading ? 'animate-spin' : ''} /> Atualizar Lista
-          </button>
-        )
-      }
-    >
-      {(error || success) && (
-        <div className={`mb-4 border-l-4 p-3 rounded-r shadow-sm ${error ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'}`}>
-          <p className="font-bold">{error ? 'Erro' : 'Sucesso'}</p>
-          <p>{error || success}</p>
-        </div>
-      )}
-
+    <AdminLayout title={view === 'dashboard' ? 'Resultados' : 'Cadastro de Resultado'} subtitle="Gerencie e liquide os resultados." actions={view === 'dashboard' && (<button onClick={fetchResults} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-semibold text-sm"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Atualizar Lista</button>)}>
+      {(error || success) && (<div className={`mb-4 border-l-4 p-3 rounded-r shadow-sm ${error ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'}`}><p className="font-bold">{error ? 'Erro' : 'Sucesso'}</p><p>{error || success}</p></div>)}
       {view === 'dashboard' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
-            {LOTERIAS_FIXAS.map((lot) => (
-              <button
-                key={lot.id}
-                onClick={() => handleStartAdd(lot.label)}
-                className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md text-center px-1`}
-              >
-                {lot.label}
-              </button>
-            ))}
+            {LOTERIAS_FIXAS.map((lot) => (<button key={lot.id} onClick={() => handleStartAdd(lot.label)} className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md text-center px-1`}>{lot.label}</button>))}
           </div>
-
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">
-              Histórico de Lançamentos
-            </div>
-            {loading ? (
-              <div className="p-8 flex justify-center"><Spinner size={32} /></div>
-            ) : (
+            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">Histórico de Lançamentos</div>
+            {loading ? (<div className="p-8 flex justify-center"><Spinner size={32} /></div>) : (
               <AdminTable headers={['Data', 'Loteria/Hora', 'Resultados', 'Grupos', 'Ações']}>
-                {results.length === 0 ? (
-                  <AdminTableRow><AdminTableCell colSpan={5} className="text-center py-4">Nenhum resultado.</AdminTableCell></AdminTableRow>
-                ) : results.map(r => {
-                  const nums = r.numeros || [];
-                  const grps = r.grupos || [];
+                {results.length === 0 ? (<AdminTableRow><AdminTableCell colSpan={5} className="text-center py-4">Nenhum resultado.</AdminTableCell></AdminTableRow>) : results.map(r => {
+                  // --- AQUI ESTAVA O ERRO DO JOIN ---
+                  // Tratamento para garantir que é array antes do .join
+                  let nums = r.numeros;
+                  if (typeof nums === 'string') { try { nums = JSON.parse(nums) } catch { nums = [] } }
+                  if (!Array.isArray(nums)) nums = [];
+
+                  let grps = r.grupos;
+                  if (typeof grps === 'string') { try { grps = JSON.parse(grps) } catch { grps = [] } }
+                  if (!Array.isArray(grps)) grps = [];
+                  // ----------------------------------
+
                   return (
                     <AdminTableRow key={r.id || r._id}>
                       <AdminTableCell className="font-semibold">{r.dataJogo}</AdminTableCell>
-                      <AdminTableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-emerald-700">{r.loteria}</span>
-                          <span className="text-xs text-slate-500">{r.codigoHorario}</span>
-                        </div>
-                      </AdminTableCell>
-                      <AdminTableCell>
-                        <div className="flex flex-wrap gap-1 max-w-xs font-mono text-xs">
-                           {nums.join(' - ')}
-                        </div>
-                      </AdminTableCell>
-                      <AdminTableCell>
-                        <div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div>
-                      </AdminTableCell>
-                      <AdminTableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => settleResult(r.id || r._id)}
-                            disabled={actionLoading === (r.id || r._id)}
-                            title="Liquidar Apostas"
-                            className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"
-                          >
-                             <FaCheck />
-                          </button>
-                          <button
-                            onClick={() => generatePule(r.id || r._id)}
-                            disabled={actionLoading === (r.id || r._id)}
-                            title="Gerar PDF Pule"
-                            className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                          >
-                             <FaReceipt />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(r)}
-                            title="Editar"
-                            className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-                          >
-                             <FaEdit />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(r.id || r._id)}
-                            title="Excluir"
-                            className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                          >
-                             <FaTrash />
-                          </button>
-                        </div>
-                      </AdminTableCell>
+                      <AdminTableCell><div className="flex flex-col"><span className="font-bold text-emerald-700">{r.loteria}</span><span className="text-xs text-slate-500">{r.codigoHorario}</span></div></AdminTableCell>
+                      <AdminTableCell><div className="flex flex-wrap gap-1 max-w-xs font-mono text-xs">{nums.join(' - ')}</div></AdminTableCell>
+                      <AdminTableCell><div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div></AdminTableCell>
+                      <AdminTableCell><div className="flex flex-wrap gap-2">
+                          <button onClick={() => settleResult(r.id || r._id)} disabled={actionLoading === (r.id || r._id)} title="Liquidar" className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"><FaCheck /></button>
+                          <button onClick={() => generatePule(r.id || r._id)} disabled={actionLoading === (r.id || r._id)} title="Pule" className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"><FaReceipt /></button>
+                          <button onClick={() => handleEdit(r)} title="Editar" className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"><FaEdit /></button>
+                          <button onClick={() => handleDelete(r.id || r._id)} title="Excluir" className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><FaTrash /></button>
+                        </div></AdminTableCell>
                     </AdminTableRow>
                   );
                 })}
@@ -369,116 +263,26 @@ const AdminResultsPage = () => {
           </div>
         </>
       )}
-
       {view === 'form' && (
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-          <div className="bg-emerald-700 text-white p-4 flex justify-between items-center">
-             <button onClick={handleBack} className="flex items-center gap-2 font-bold hover:text-emerald-200"><FaArrowLeft /> Voltar</button>
-             <h2 className="text-xl font-black uppercase">{selectedLottery === 'OUTRA' ? (customLotteryName || 'Nova Loteria') : selectedLottery}</h2>
-             <div className="w-16"></div>
-          </div>
-          
+          <div className="bg-emerald-700 text-white p-4 flex justify-between items-center"><button onClick={handleBack} className="flex items-center gap-2 font-bold hover:text-emerald-200"><FaArrowLeft /> Voltar</button><h2 className="text-xl font-black uppercase">{selectedLottery === 'OUTRA' ? (customLotteryName || 'Nova Loteria') : selectedLottery}</h2><div className="w-16"></div></div>
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4">
-               <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
-                 <input type="date" value={inputDate} onChange={e => setInputDate(e.target.value)} className="w-full p-3 border rounded-xl" required />
-               </div>
-               
-               <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário (Lista Oficial)</label>
-                 {availableTimes.length > 0 ? (
-                   <select 
-                     value={inputTime} 
-                     onChange={e => setInputTime(e.target.value)} 
-                     className="w-full p-3 border rounded-xl bg-white font-bold text-emerald-800"
-                     required
-                   >
-                     <option value="">Selecione o Horário...</option>
-                     {availableTimes.map((time) => (
-                       <option key={time} value={time}>{time}</option>
-                     ))}
-                   </select>
-                 ) : (
-                   <input 
-                     type="text" 
-                     value={inputTime} 
-                     onChange={e => setInputTime(e.target.value)} 
-                     placeholder="Ex: 11:00" 
-                     className="w-full p-3 border rounded-xl" 
-                     required 
-                   />
-                 )}
-                 <p className="text-[10px] text-slate-400 mt-1">
-                   *Selecionando aqui, o horário salvo será exatamente igual ao da aposta do usuário.
-                 </p>
-               </div>
+               <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label><input type="date" value={inputDate} onChange={e => setInputDate(e.target.value)} className="w-full p-3 border rounded-xl" required /></div>
+               <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário (Lista Oficial)</label>{availableTimes.length > 0 ? (<select value={inputTime} onChange={e => setInputTime(e.target.value)} className="w-full p-3 border rounded-xl bg-white font-bold text-emerald-800" required><option value="">Selecione...</option>{availableTimes.map((time) => (<option key={time} value={time}>{time}</option>))}</select>) : (<input type="text" value={inputTime} onChange={e => setInputTime(e.target.value)} placeholder="Ex: 11:00" className="w-full p-3 border rounded-xl" required />)}</div>
             </div>
-
-            {selectedLottery === 'OUTRA' && (
-               <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Loteria</label>
-                 <input type="text" value={customLotteryName} onChange={e => setCustomLotteryName(e.target.value)} className="w-full p-3 border rounded-xl" placeholder="Ex: LT PT RIO..." required />
-               </div>
-            )}
-
-            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-               <label className="block text-xs font-bold text-emerald-800 uppercase mb-2">⚡ Colagem Rápida</label>
-               <textarea 
-                  value={rawInput} 
-                  onChange={handleSmartPaste} 
-                  placeholder="Cole a linha inteira aqui (Ex: 2690 1480...)" 
-                  className="w-full p-3 border border-emerald-300 rounded-lg font-mono text-sm h-20" 
-               />
-            </div>
-
+            {selectedLottery === 'OUTRA' && (<div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Loteria</label><input type="text" value={customLotteryName} onChange={e => setCustomLotteryName(e.target.value)} className="w-full p-3 border rounded-xl" placeholder="Ex: LT PT RIO..." required /></div>)}
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200"><label className="block text-xs font-bold text-emerald-800 uppercase mb-2">⚡ Colagem Rápida</label><textarea value={rawInput} onChange={handleSmartPaste} placeholder="Cole a linha inteira aqui (Ex: 2690 1480...)" className="w-full p-3 border border-emerald-300 rounded-lg font-mono text-sm h-20" /></div>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-               <div className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-2 font-black text-xs text-slate-500 uppercase text-center">
-                  <span>#</span><span>Milhar</span><span>Grupo</span>
-               </div>
-               {prizes.map((prize, idx) => (
-                  <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-3 items-center">
-                     <span className="text-center font-bold text-slate-400">{idx + 1}º</span>
-                     <input 
-                       value={prize.numero} 
-                       onChange={e => handleChangePrize(idx, 'numero', e.target.value)} 
-                       className="p-3 border-2 border-slate-200 rounded-lg text-center font-mono text-lg font-bold" 
-                       maxLength={4} 
-                       placeholder="0000" 
-                     />
-                     <input 
-                       value={prize.grupo} 
-                       onChange={e => handleChangePrize(idx, 'grupo', e.target.value)} 
-                       className="p-3 border-2 border-slate-200 rounded-lg text-center font-bold text-lg bg-slate-200" 
-                       maxLength={2} 
-                       placeholder="Gr" 
-                     />
-                  </div>
-               ))}
+               <div className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-2 font-black text-xs text-slate-500 uppercase text-center"><span>#</span><span>Milhar</span><span>Grupo</span></div>
+               {prizes.map((prize, idx) => (<div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-3 items-center"><span className="text-center font-bold text-slate-400">{idx + 1}º</span><input value={prize.numero} onChange={e => handleChangePrize(idx, 'numero', e.target.value)} className="p-3 border-2 border-slate-200 rounded-lg text-center font-mono text-lg font-bold" maxLength={4} placeholder="0000" /><input value={prize.grupo} onChange={e => handleChangePrize(idx, 'grupo', e.target.value)} className="p-3 border-2 border-slate-200 rounded-lg text-center font-bold text-lg bg-slate-200" maxLength={2} placeholder="Gr" /></div>))}
             </div>
-
-            <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition">
-               {editingId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR RESULTADO'}
-            </button>
+            <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition">{editingId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR RESULTADO'}</button>
           </form>
         </div>
       )}
-
-      {showModal && (
-         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-bounce-in">
-               <div className="text-4xl mb-4">✅</div>
-               <h2 className="text-2xl font-black text-slate-800">{modalMessage.title}</h2>
-               <p className="text-slate-500 mb-8">{modalMessage.text}</p>
-               <div className="space-y-3">
-                  <button onClick={handleAddAnother} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">ADICIONAR OUTRO</button>
-                  <button onClick={handleBack} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">VOLTAR AO INÍCIO</button>
-               </div>
-            </div>
-         </div>
-      )}
+      {showModal && (<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-bounce-in"><div className="text-4xl mb-4">✅</div><h2 className="text-2xl font-black text-slate-800">{modalMessage.title}</h2><p className="text-slate-500 mb-8">{modalMessage.text}</p><div className="space-y-3"><button onClick={handleAddAnother} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">ADICIONAR OUTRO</button><button onClick={handleBack} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">VOLTAR AO INÍCIO</button></div></div></div>)}
     </AdminLayout>
   );
 };
-
 export default AdminResultsPage;

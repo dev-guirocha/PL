@@ -144,6 +144,22 @@ exports.listUsers = async (req, res) => {
   }
 };
 
+// --- FUNÇÃO FALTANTE: LISTAR SUPERVISORES ---
+const listSupervisors = async (req, res) => {
+  try {
+    try {
+      const sups = await prisma.supervisor.findMany();
+      return res.json(sups);
+    } catch {
+      return res.json([]);
+    }
+  } catch (error) {
+    console.error('Erro listSupervisors:', error);
+    return res.json([]);
+  }
+};
+exports.listSupervisors = listSupervisors;
+
 // --- STUBS LEGADOS (para rotas existentes não implementadas nesta versão) ---
 const notImplemented = (feature) => async (req, res) => res.status(501).json({ error: `${feature} não implementado neste build.` });
 
@@ -151,7 +167,6 @@ exports.listBets = notImplemented('listBets');
 exports.updateUserRoles = notImplemented('updateUserRoles');
 exports.deleteUser = notImplemented('deleteUser');
 exports.createSupervisor = notImplemented('createSupervisor');
-exports.listSupervisors = notImplemented('listSupervisors');
 exports.updateSupervisor = notImplemented('updateSupervisor');
 exports.deleteSupervisor = notImplemented('deleteSupervisor');
 exports.generateResultPule = notImplemented('generateResultPule');
@@ -342,3 +357,35 @@ function checkVictory({ modal, palpites, premios }) {
   }
   return { factor };
 }
+
+module.exports = {
+  getDashboardStats,
+  stats: getDashboardStats,
+  getStats: getDashboardStats,
+  getDashboard: getDashboardStats,
+  toggleUserBlock,
+  createResult,
+  listResults,
+  getResults: listResults,
+  updateResult,
+  deleteResult,
+  settleBetsForResult,
+  settleResult: exports.settleResult,
+  listUsers,
+  getUsers: listUsers,
+  listSupervisors,
+  getSupervisors: listSupervisors,
+  listBets,
+  updateUserRoles,
+  deleteUser,
+  createSupervisor,
+  updateSupervisor,
+  deleteSupervisor,
+  generateResultPule,
+  listWithdrawals,
+  updateWithdrawalStatus,
+  createCoupon,
+  listCoupons,
+  updateCoupon,
+  manualCreditPix,
+};
