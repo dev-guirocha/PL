@@ -78,17 +78,49 @@ function checkVictory({ modal, palpites, premios }) {
 // 1. DASHBOARD
 exports.getDashboardStats = async (req, res) => {
   try {
+    const [usersAgg, betsAgg, withdrawalsAgg, betsCount] = await Promise.all([
+      prisma.user.aggregate({ _sum: { balance: true, bonus: true } }),
+      prisma.bet.aggregate({ _sum: { total: true } }),
+      prisma.withdrawalRequest.aggregate({
+        where: { status: { in: ['pending', 'approved'] } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      prisma.bet.count(),
+    ]);
+
     const totalUsers = await prisma.user.count();
-    const totalBets = await prisma.bet.count();
-    let totalBalance = 0;
-    try {
-        const ag = await prisma.user.aggregate({ _sum: { balance: true } });
-        totalBalance = ag._sum.balance || 0;
-    } catch(e) {}
-    res.json({ totalUsers, totalBets, totalBalance, netProfit: 0 });
+    const totalBalance = Number(usersAgg._sum.balance || 0);
+    const totalBonus = Number(usersAgg._sum.bonus || 0);
+    const totalBetsVolume = Number(betsAgg._sum.total || 0);
+
+    const pendingWithdrawals = {
+      amount: Number(withdrawalsAgg._sum.amount || 0),
+      count: withdrawalsAgg._count?._all || 0,
+    };
+
+    res.json({
+      totalUsers,
+      betsCount,
+      platformFunds: totalBetsVolume,
+      moneyOut: { bets: totalBetsVolume },
+      wallets: {
+        saldo: totalBalance,
+        bonus: totalBonus,
+        total: totalBalance + totalBonus,
+      },
+      pendingWithdrawals,
+    });
   } catch (error) {
     console.error('Erro dashboard:', error);
-    res.json({ totalUsers: 0, totalBets: 0, totalBalance: 0 });
+    res.json({
+      totalUsers: 0,
+      betsCount: 0,
+      platformFunds: 0,
+      moneyOut: { bets: 0 },
+      wallets: { saldo: 0, bonus: 0, total: 0 },
+      pendingWithdrawals: { amount: 0, count: 0 },
+    });
   }
 };
 
