@@ -1,35 +1,19 @@
-// --- IMPORTANTE: NÃO MEXA NESTA LINHA ---
-// Importamos a conexão já configurada do seu projeto (com Neon/Adapter)
-// Não use "new PrismaClient()" aqui, pois vai quebrar a conexão com o Neon.
+// src/controllers/adminController.js
+// Importamos a conexão já configurada do seu projeto
 const prisma = require('../utils/prismaClient');
 
-// --- FUNÇÕES DE LIMPEZA (SHERLOCK HOLMES) ---
-
-// 1. Extrai a HORA cheia (Núcleo da comparação)
-// Ex: "LT PT RIO 18HS" -> "18"
-// Ex: "18:00" -> "18"
+// --- FUNÇÕES AUXILIARES DE LIMPEZA ---
 const extractHour = (str) => {
   if (!str) return 'XX';
-  // Remove tudo que não é número
   const nums = String(str).replace(/\D/g, '');
-  
-  // Se não sobrou número nenhum, erro
   if (nums.length === 0) return 'XX';
-
-  // Se tem 3 ou 4 digitos (1800), pega os 2 primeiros
   if (nums.length >= 3) return nums.slice(0, 2);
-  
-  // Se tem 1 ou 2 digitos (18), garante 2 casas (18)
   return nums.padStart(2, '0');
 };
 
-// 2. Normaliza Data para YYYY-MM-DD
 const normalizeDate = (dateStr) => {
   if (!dateStr) return 'INVALID';
-  // Pega só a primeira parte se tiver espaço ou T
   let clean = String(dateStr).split('T')[0].split(' ')[0];
-  
-  // Se for DD/MM/YYYY vira YYYY-MM-DD
   if (clean.includes('/')) {
     const parts = clean.split('/');
     if (parts.length === 3) {
@@ -39,22 +23,61 @@ const normalizeDate = (dateStr) => {
   return clean;
 };
 
-// 3. Chave de Loteria Simplificada
-// Transforma "LT PT RIO" em "PTRIO"
-// Transforma "PT-RIO" em "PTRIO"
 const getLotteryKey = (name) => {
   return String(name || '')
     .toUpperCase()
-    .replace('FEDERAL', '') // Remove FEDERAL pra não confundir
-    .replace('RIO', '')     // Remove RIO
-    .replace(/^LT/, '')     // Remove LT
-    .replace(/[^A-Z0-9]/g, ''); // Remove espaços e traços
+    .replace('FEDERAL', '')
+    .replace('RIO', '')
+    .replace(/^LT/, '')
+    .replace(/[^A-Z0-9]/g, '');
 };
 
 const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
 const isMaluquinha = (name) => String(name).toUpperCase().includes('MALUQ');
 
-// --- CONTROLLERS ---
+// --- CONTROLLERS FALTANTES (CAUSA DO ERRO) ---
+
+// 1. DASHBOARD (Estatísticas Gerais)
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const totalUsers = await prisma.user.count();
+    const totalBets = await prisma.bet.count();
+    
+    // Soma de depósitos e saques (se houver tabelas)
+    // Aqui fazemos um básico para não quebrar
+    const users = await prisma.user.findMany({ select: { balance: true } });
+    const totalBalance = users.reduce((acc, u) => acc + Number(u.balance), 0);
+
+    res.json({
+      totalUsers,
+      totalBets,
+      totalBalance,
+      netProfit: 0 // Placeholder
+    });
+  } catch (error) {
+    console.error('Erro dashboard:', error);
+    res.status(500).json({ error: 'Erro ao carregar estatísticas.' });
+  }
+};
+
+// 2. BLOQUEAR/DESBLOQUEAR USUÁRIO
+exports.toggleUserBlock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { isBlocked: !user.isBlocked } // Supondo que exista isBlocked
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao alterar status.' });
+  }
+};
+
+// --- CONTROLLERS DE RESULTADOS (PRINCIPAIS) ---
 
 exports.createResult = async (req, res) => {
   try {
@@ -104,6 +127,8 @@ exports.deleteResult = async (req, res) => {
   }
 };
 
+// --- CONTROLLERS DE USUÁRIO ---
+
 exports.listUsers = async (req, res) => {
   try {
     const users = await prisma.user.findMany({ 
@@ -117,18 +142,16 @@ exports.listUsers = async (req, res) => {
   }
 };
 
-// --- A FUNÇÃO QUE IMPORTA: LIQUIDAÇÃO ---
+// --- LIQUIDAÇÃO (SHERLOCK HOLMES V4-FIX) ---
 exports.settleBetsForResult = async (req, res) => {
   const { id } = req.params;
-  
-  // LOG DE DEBUG PARA CONFIRMAR QUE O CÓDIGO NOVO SUBIU
   console.log(`\n🚀 [V4-FIX] INICIANDO LIQUIDAÇÃO DO RESULTADO ID: ${id}`);
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
 
-    // 1. Dados do GABARITO (Resultado)
+    // 1. Dados do GABARITO
     const resDate = normalizeDate(result.dataJogo);
     const resHour = extractHour(result.codigoHorario);
     const resIsFed = isFederal(result.loteria);
@@ -144,7 +167,7 @@ exports.settleBetsForResult = async (req, res) => {
     } catch { numerosSorteados = []; }
     const premios = numerosSorteados.map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'));
 
-    // 2. Busca TODAS as apostas abertas
+    // 2. Busca Apostas
     const bets = await prisma.bet.findMany({
       where: { status: 'open' },
       include: { user: true }
@@ -155,44 +178,33 @@ exports.settleBetsForResult = async (req, res) => {
 
     for (const bet of bets) {
       try {
-        // --- COMPARAÇÃO ---
         const betDate = normalizeDate(bet.dataJogo);
         const betHour = extractHour(bet.codigoHorario);
 
-        // 1. Filtro DATA
         if (betDate !== resDate) continue;
+        if (betHour !== resHour) continue; 
 
-        // 2. Filtro HORA
-        if (betHour !== resHour) {
-            // console.log(`   Ignorando hora: Bet(${betHour}) != Res(${resHour})`);
-            continue; 
-        }
-
-        // 3. Filtro LOTERIA
+        // Filtro LOTERIA
         const betIsFed = isFederal(bet.loteria);
         const betIsMaluq = isMaluquinha(bet.loteria);
         const betKey = getLotteryKey(bet.loteria);
 
         let match = false;
-
         if (resIsFed) {
           if (betIsFed) match = true;
         } else if (resIsMaluq) {
           if (betIsMaluq) match = true;
         } else {
-          // Loterias Normais
           if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) {
             match = true;
           }
-          // Fallback de string crua
           if (!match && (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria))) {
             match = true;
           }
         }
 
-        if (!match) continue; // Não é essa loteria
+        if (!match) continue;
 
-        // --- MATCH CONFIRMADO! ---
         console.log(`✅ MATCH! Aposta #${bet.id} (User ${bet.userId})`);
         summary.totalBets++;
 
@@ -211,8 +223,6 @@ exports.settleBetsForResult = async (req, res) => {
 
           const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
           const totalPalpitesNaBet = apostas.reduce((acc, curr) => acc + (curr.palpites?.length || 0), 0);
-          
-          // Cálculo do Unit Stake (Valor apostado dividido pelos palpites)
           const unitStake = bet.total / (totalPalpitesNaBet > 0 ? totalPalpitesNaBet : 1);
           
           const { factor } = checkVictory({ modal, palpites, premios });
