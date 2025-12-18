@@ -4,11 +4,10 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
-// IMPORTANTE: Importamos a mesma lista que o usuário vê para garantir igualdade
+// Importa a lista OFICIAL (mesma do usuário)
 import { LOTERIAS_SORTEIOS } from '../../data/sorteios'; 
 
-// --- CONFIGURAÇÃO VISUAL DAS LOTERIAS ---
-// As labels aqui devem bater com o texto contido no sorteios.js (ex: "LT PT RIO")
+// Mapeamento visual para os botões do Admin
 const LOTERIAS_FIXAS = [
   { id: 'PT-RIO', label: 'LT PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
   { id: 'LOOK', label: 'LT LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
@@ -44,60 +43,37 @@ const AdminResultsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState({ title: '', text: '' });
 
-  // --- ESTADOS DO FORMULÁRIO ---
+  // Estados do Formulário
   const [selectedLottery, setSelectedLottery] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [inputDate, setInputDate] = useState(todayStr);
-  
-  // inputTime agora pode ser preenchido automaticamente
-  const [inputTime, setInputTime] = useState('');
+  const [inputTime, setInputTime] = useState(''); // Vai armazenar a string completa ex: "LT PT RIO 18HS"
   const [customLotteryName, setCustomLotteryName] = useState('');
   const [rawInput, setRawInput] = useState('');
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
 
-  // --- LÓGICA DE HORÁRIOS FIXOS ---
-  // Analisa o arquivo sorteios.js e extrai os horários compatíveis com a loteria selecionada
+  // --- LÓGICA CORRIGIDA: Buscar Horários COMPLETOS ---
   const availableTimes = useMemo(() => {
     if (!selectedLottery || selectedLottery === 'OUTRA') return [];
     
-    // Procura em todos os grupos de sorteios
     let foundTimes = [];
-    
-    // Varre a lista oficial (LOTERIAS_SORTEIOS)
     const listaOficial = Array.isArray(LOTERIAS_SORTEIOS) ? LOTERIAS_SORTEIOS : [];
     
     listaOficial.forEach(grupo => {
       if (Array.isArray(grupo.horarios)) {
         grupo.horarios.forEach(fullString => {
-          // Verifica se o nome da loteria selecionada está dentro da string do horário
-          // Ex: selectedLottery="LT PT RIO" e fullString="LT PT RIO 11HS" -> Match!
           if (fullString.includes(selectedLottery)) {
-             // Extrai apenas a parte do horário para exibir no dropdown?
-             // OU usa a string inteira? 
-             // Vamos usar a string inteira no valor para garantir match perfeito,
-             // mas podemos limpar visualmente se quiser.
-             // Aqui extraímos a parte que NÃO é o nome da loteria para ficar limpo:
-             const timePart = fullString.replace(selectedLottery, '').trim();
-             if (timePart) foundTimes.push(timePart);
+             foundTimes.push(fullString); // Guarda a string COMPLETA
+          } else if (selectedLottery === 'FEDERAL' && fullString.includes('FEDERAL')) {
+             foundTimes.push(fullString);
+          } else if (selectedLottery === 'LT MALUQ RIO' && fullString.includes('MALUQ')) {
+             foundTimes.push(fullString);
           }
         });
       }
     });
 
-    // Caso especial: Se selecionou FEDERAL, buscar itens que contenham FEDERAL
-    if (selectedLottery === 'FEDERAL') {
-       listaOficial.forEach(grupo => {
-         grupo.horarios?.forEach(h => {
-            if (h.includes('FEDERAL')) {
-               const timePart = h.replace('FEDERAL', '').trim(); // ex "20H" ou "19HS"
-               if (timePart) foundTimes.push(timePart);
-            }
-         });
-       });
-    }
-
-    // Remove duplicatas e ordena
-    return [...new Set(foundTimes)].sort();
+    return [...new Set(foundTimes)];
   }, [selectedLottery]);
 
   const fetchResults = async () => {
@@ -265,7 +241,7 @@ const AdminResultsPage = () => {
     const payload = {
       loteria: finalLotteryName.trim(), 
       dataJogo: inputDate.split('-').reverse().join('/'),
-      codigoHorario: inputTime, // Agora envia exatamente o que estava no dropdown
+      codigoHorario: inputTime,
       numeros,
       grupos
     };
@@ -409,9 +385,8 @@ const AdminResultsPage = () => {
                  <input type="date" value={inputDate} onChange={e => setInputDate(e.target.value)} className="w-full p-3 border rounded-xl" required />
                </div>
                
-               {/* --- AQUI ESTÁ A MUDANÇA: DROPDOWN INTELIGENTE --- */}
                <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário (Lista Oficial)</label>
                  {availableTimes.length > 0 ? (
                    <select 
                      value={inputTime} 
@@ -419,7 +394,7 @@ const AdminResultsPage = () => {
                      className="w-full p-3 border rounded-xl bg-white font-bold text-emerald-800"
                      required
                    >
-                     <option value="">Selecione...</option>
+                     <option value="">Selecione o Horário...</option>
                      {availableTimes.map((time) => (
                        <option key={time} value={time}>{time}</option>
                      ))}
@@ -434,6 +409,9 @@ const AdminResultsPage = () => {
                      required 
                    />
                  )}
+                 <p className="text-[10px] text-slate-400 mt-1">
+                   *Selecionando aqui, o horário salvo será exatamente igual ao da aposta do usuário.
+                 </p>
                </div>
             </div>
 

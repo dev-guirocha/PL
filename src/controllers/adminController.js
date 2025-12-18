@@ -687,15 +687,14 @@ exports.listUsers = async (req, res) => {
   }
 };
 
-const generateSupervisorCode = (name, preferred = '') => {
-  const base = preferred ? String(preferred).trim().toUpperCase() : '';
-  const namePart = String(name || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 6);
-  const suffix = Math.floor(100 + Math.random() * 900);
-  const sanitized = base.replace(/^99/, '') || namePart || 'SUP';
-  return `99${sanitized}${suffix}`;
+const generateSupervisorCode = (phone, preferred = '') => {
+  const base = preferred ? String(preferred).trim().toUpperCase().replace(/[^A-Z0-9]/g, '') : '';
+  if (base) return base.startsWith('99') ? base : `99${base}`;
+
+  const digits = String(phone || '').replace(/\D/g, '');
+  const lastThree = digits.slice(-3) || String(Math.floor(100 + Math.random() * 900));
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `99${lastThree}${suffix}`;
 };
 
 exports.deleteUser = async (req, res) => {
@@ -734,7 +733,7 @@ exports.createSupervisor = async (req, res) => {
     return res.status(400).json({ error: 'Informe o nome do supervisor.' });
   }
   try {
-    const finalCode = generateSupervisorCode(name, code);
+    const finalCode = generateSupervisorCode(phone, code);
 
     const supervisor = await prisma.supervisor.create({
       data: { name, phone: phone || null, code: finalCode },
@@ -1228,7 +1227,7 @@ exports.updateUserRoles = async (req, res) => {
           data: {
             name: user.name || `Supervisor ${user.id}`,
             phone: phoneClean || null,
-            code: generateSupervisorCode(user.name),
+            code: generateSupervisorCode(user.phone),
           },
         }));
     }
