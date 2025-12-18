@@ -156,14 +156,19 @@ exports.listWithdrawals = async (req, res) => {
 // 5. SUPERVISORES (RESTAURADO)
 exports.listSupervisors = async (req, res) => {
   try {
-    const sups = await prisma.user.findMany({
-      take: 50,
+    const page = Number(req.query.page) || 1;
+    const pageSize = 50;
+    const supervisors = await prisma.supervisor.findMany({
+      take: pageSize,
+      skip: (page - 1) * pageSize,
       orderBy: { createdAt: 'desc' },
+      include: { users: { select: { id: true, name: true, phone: true } } },
     });
-    res.json(sups); 
+    const total = await prisma.supervisor.count();
+    res.json({ supervisors, total, page });
   } catch (error) {
     console.error('Erro listSupervisors:', error);
-    res.json([]);
+    res.json({ supervisors: [], total: 0, page: 1 });
   }
 };
 
