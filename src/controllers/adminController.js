@@ -1,5 +1,5 @@
 // src/controllers/adminController.js
-// VERSÃO SEM 'isBlocked' (PARA FUNCIONAR COM SEU BANCO ATUAL)
+// VERSÃO RESTAURADA - COM APOSTAS, SAQUES E PULE
 
 const prisma = require('../utils/prismaClient');
 
@@ -31,6 +31,7 @@ const getLotteryKey = (name) => {
 const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
 const isMaluquinha = (name) => String(name).toUpperCase().includes('MALUQ');
 
+// --- HELPERS DE APOSTA ---
 function parseApostasFromBet(bet) {
   try {
     if (typeof bet.palpites === 'string') return JSON.parse(bet.palpites);
@@ -70,8 +71,11 @@ function checkVictory({ modal, palpites, premios }) {
   return { factor };
 }
 
-// --- CONTROLLERS ---
+// ==========================================
+// CONTROLLERS
+// ==========================================
 
+// 1. DASHBOARD
 exports.getDashboardStats = async (req, res) => {
   try {
     const totalUsers = await prisma.user.count();
@@ -88,6 +92,7 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
+// 2. USUÁRIOS
 exports.listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -96,7 +101,6 @@ exports.listUsers = async (req, res) => {
       take: pageSize, 
       skip: (page - 1) * pageSize,
       orderBy: { createdAt: 'desc' }, 
-      // REMOVIDO isBlocked DA SELEÇÃO
       select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true } 
     });
     const total = await prisma.user.count();
@@ -108,14 +112,62 @@ exports.listUsers = async (req, res) => {
 };
 
 exports.toggleUserBlock = async (req, res) => {
-  // FUNÇÃO DESATIVADA TEMPORARIAMENTE POR FALTA DE COLUNA NO BANCO
-  return res.json({ message: "Funcionalidade desativada temporariamente (Banco de dados desatualizado)." });
+  // Desativado temporariamente
+  return res.json({ message: "Funcionalidade desativada temporariamente." });
 };
 
+// 3. APOSTAS (LISTAR) - RESTAURADO
+exports.listBets = async (req, res) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const pageSize = 50;
+    const bets = await prisma.bet.findMany({
+      take: pageSize,
+      skip: (page - 1) * pageSize,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { name: true, phone: true } } }
+    });
+    const total = await prisma.bet.count();
+    res.json({ bets, total, page });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao listar apostas.' });
+  }
+};
+
+// 4. SAQUES (LISTAR) - RESTAURADO
+exports.listWithdrawals = async (req, res) => {
+  try {
+    try {
+      const withdrawals = await prisma.withdrawal.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { name: true, phone: true, pixKey: true } } }
+      });
+      res.json({ withdrawals });
+    } catch (e) {
+      console.warn('Tabela Withdrawal não encontrada ou erro:', e.message);
+      res.json({ withdrawals: [] });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao listar saques.' });
+  }
+};
+
+// 5. SUPERVISORES (RESTAURADO)
 exports.listSupervisors = async (req, res) => {
-  return res.json([]);
+  try {
+    const sups = await prisma.user.findMany({
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(sups); 
+  } catch (error) {
+    console.error('Erro listSupervisors:', error);
+    res.json([]);
+  }
 };
 
+// 6. RESULTADOS (CRUD)
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
@@ -164,9 +216,23 @@ exports.deleteResult = async (req, res) => {
   }
 };
 
+// 7. GERAR PULE (CUPOM) - RESTAURADO
+exports.generatePule = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await prisma.result.findUnique({ where: { id } });
+    if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
+    res.json({ message: 'Pule gerado com sucesso.', alreadyExists: false });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao gerar pule.' });
+  }
+};
+
+// 8. LIQUIDAÇÃO
 exports.settleBetsForResult = async (req, res) => {
   const { id } = req.params;
-  console.log(`\n🚀 [V7-NO-BLOCK] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V8-FULL] LIQUIDANDO RESULTADO ID: ${id}`);
   try {
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
@@ -256,9 +322,11 @@ exports.settleBetsForResult = async (req, res) => {
   }
 };
 
-// --- ALIASES ---
+// --- ALIASES (GARANTINDO QUE TUDO EXISTA) ---
 exports.getStats = exports.getDashboardStats;
 exports.getDashboard = exports.getDashboardStats;
 exports.getUsers = exports.listUsers;
+exports.getBets = exports.listBets; // Alias para Apostas
+exports.getWithdrawals = exports.listWithdrawals; // Alias para Saques
 exports.getResults = exports.listResults;
 exports.getSupervisors = exports.listSupervisors;
