@@ -57,8 +57,8 @@ const PixRechargePage = () => {
       toast.error('Depósito mínimo é R$ 10,00.');
       return;
     }
-    if (amountCents > 100000) {
-      toast.error('Valor máximo por depósito é R$ 1.000,00.');
+    if (amountCents > 300000) {
+      toast.error('Valor máximo por depósito é R$ 3.000,00.');
       return;
     }
 
@@ -219,7 +219,7 @@ const PixRechargePage = () => {
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             placeholder="Ex: 20,00"
           />
-          <p className="text-xs text-slate-500">Máximo R$ 1.000,00 por transação.</p>
+          <p className="text-xs text-slate-500">Máximo R$ 3.000,00 por transação.</p>
         </div>
 
         <button
