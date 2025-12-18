@@ -154,7 +154,6 @@ exports.createSupervisor = notImplemented('createSupervisor');
 exports.listSupervisors = notImplemented('listSupervisors');
 exports.updateSupervisor = notImplemented('updateSupervisor');
 exports.deleteSupervisor = notImplemented('deleteSupervisor');
-exports.settleResult = exports.settleBetsForResult;
 exports.generateResultPule = notImplemented('generateResultPule');
 exports.listWithdrawals = notImplemented('listWithdrawals');
 exports.updateWithdrawalStatus = notImplemented('updateWithdrawalStatus');
@@ -306,6 +305,9 @@ function parseApostasFromBet(bet) {
     return []; 
   } catch { return []; }
 }
+
+// Alias que depende da definição de settleBetsForResult
+exports.settleResult = exports.settleBetsForResult;
 
 function resolvePayout(modalidade) {
   const table = {
