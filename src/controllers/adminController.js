@@ -1,5 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+// Prisma 7 exige options não-vazios; usamos conexão padrão via env
+const prisma = new PrismaClient({
+  log: ['error', 'warn'],
+});
 
 // --- FUNÇÕES DE LIMPEZA (EXTREMAS) ---
 
