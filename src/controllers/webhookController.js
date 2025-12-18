@@ -27,6 +27,17 @@ exports.handleOpenPixWebhook = async (req, res) => {
     const correlationID = charge.correlationID;
     const txId = pix.txId;
 
+    // --- LÓGICA DE CPF NOVA ---
+    const rawCpf =
+      charge.customer?.taxID?.taxID ||
+      charge.customer?.taxID ||
+      charge.payer?.taxID?.taxID ||
+      charge.payer?.taxID ||
+      '';
+    const cpfClean = String(rawCpf || '').replace(/\D/g, '');
+    const cpfFinal = cpfClean.length === 11 ? cpfClean : undefined;
+    // --------------------------
+
     // Busca cobrança e usuário (para supervisor)
     const pixCharge = await prisma.pixCharge.findFirst({
       where: {
@@ -45,9 +56,8 @@ exports.handleOpenPixWebhook = async (req, res) => {
 
     const value = Number(pixCharge.amount);
     const bonusValue = Number(pixCharge.bonusAmount ?? Number((value * 0.15).toFixed(2)));
-    const rawCpf = charge.payer?.taxID?.taxID || charge.payer?.taxID || '';
-    const cpfClean = rawCpf ? String(rawCpf).replace(/\D/g, '') : '';
 
+    // Atualiza tudo numa transação só
     const txs = [
       prisma.pixCharge.update({
         where: { id: pixCharge.id },
@@ -62,7 +72,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
         data: {
           balance: { increment: value },
           bonus: { increment: bonusValue },
-          cpf: cpfClean.length === 11 ? cpfClean : undefined,
+          ...(cpfFinal ? { cpf: cpfFinal } : {}),
         },
       }),
       prisma.transaction.create({
@@ -108,7 +118,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
 
     await prisma.$transaction(txs);
 
-    console.log('✅ Pix creditado com sucesso');
+    console.log('✅ Pix creditado e CPF salvo (se disponível).');
     return res.status(200).send('OK');
   } catch (error) {
     console.error('❌ Erro no Webhook Woovi:', error);

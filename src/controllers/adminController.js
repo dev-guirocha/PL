@@ -659,6 +659,7 @@ exports.listUsers = async (req, res) => {
           bonus: true,
           createdAt: true,
           isAdmin: true,
+          cpf: true,
         },
       }),
       prisma.user.count(),

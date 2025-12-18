@@ -164,24 +164,28 @@ exports.requestPasswordReset = async (req, res) => {
       data: { resetCode: code, resetExpires: expires },
     });
 
+    // Log de contingência (plano B) para o Admin ver nos logs do servidor
+    console.log(`🔑 RECUPERAÇÃO DE SENHA | User: ${cleanPhone} | Código: ${code}`);
+
+    // Tenta enviar via WhatsApp
     const sendResult = await sendRecoveryCode(cleanPhone, code);
 
-    // Se falhar o envio, ainda expomos o código para não travar o usuário
-    const exposeCode = sendResetCodeInResponse || !sendResult?.success;
-    const payload = { message: 'Código enviado para seu WhatsApp.' };
-    if (exposeCode) payload.code = code;
+    // Se o envio falhar, ou se estivermos fora de produção, retornamos o código para não travar o usuário
+    const shouldExposeCode = !sendResult?.success || process.env.NODE_ENV !== 'production' || sendResetCodeInResponse;
 
-    if (sendResult?.success) {
-      return res.json(payload);
+    const payload = {
+      message: sendResult?.success ? 'Código enviado para seu WhatsApp.' : 'Não foi possível enviar SMS automaticamente.',
+    };
+
+    if (shouldExposeCode) {
+      payload.detail = 'Use este código provisoriamente (Z-API indisponível ou ambiente de testes).';
+      payload.code = code;
     }
 
-    const fallback = exposeCode
-      ? { ...payload, message: 'Não foi possível enviar via WhatsApp. Segue o código para uso manual.', detail: sendResult?.detail }
-      : { error: 'Erro ao enviar mensagem. Tente novamente.', detail: sendResult?.detail };
-
-    return res.status(exposeCode ? 200 : 500).json(fallback);
+    return res.status(200).json(payload);
   } catch (error) {
-    return res.status(500).json({ error: 'Erro ao solicitar redefinição.' });
+    console.error('Erro reset senha:', error);
+    return res.status(500).json({ error: 'Erro ao processar solicitação.' });
   }
 };
 
