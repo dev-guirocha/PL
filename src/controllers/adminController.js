@@ -1,9 +1,7 @@
 // src/controllers/adminController.js
-// VERSÃO BLINDADA - EXPORTAÇÃO DIRETA
-
 const prisma = require('../utils/prismaClient');
 
-// --- FUNÇÕES AUXILIARES (PRIVADAS) ---
+// --- FUNÇÕES AUXILIARES ---
 const extractHour = (str) => {
   if (!str) return 'XX';
   const nums = String(str).replace(/\D/g, '');
@@ -25,12 +23,7 @@ const normalizeDate = (dateStr) => {
 };
 
 const getLotteryKey = (name) => {
-  return String(name || '')
-    .toUpperCase()
-    .replace('FEDERAL', '')
-    .replace('RIO', '')
-    .replace(/^LT/, '')
-    .replace(/[^A-Z0-9]/g, '');
+  return String(name || '').toUpperCase().replace('FEDERAL', '').replace('RIO', '').replace(/^LT/, '').replace(/[^A-Z0-9]/g, '');
 };
 
 const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
@@ -59,15 +52,12 @@ function checkVictory({ modal, palpites, premios }) {
   let factor = 0;
   const m = String(modal).toUpperCase();
   const cleanPalpites = palpites.map(p => String(p).replace(/\D/g, ''));
-
   if (m.includes('MILHAR')) {
     if (cleanPalpites.includes(premios[0])) factor += 1;
-  }
-  else if (m.includes('CENTENA')) {
+  } else if (m.includes('CENTENA')) {
     const centenasPremios = premios.map(p => p.slice(-3));
     if (cleanPalpites.includes(centenasPremios[0])) factor += 1;
-  }
-  else if (m.includes('GRUPO')) {
+  } else if (m.includes('GRUPO')) {
     const getGrp = (n) => {
       const d = parseInt(n.slice(-2));
       if (d === 0) return '25';
@@ -79,13 +69,9 @@ function checkVictory({ modal, palpites, premios }) {
   return { factor };
 }
 
+// --- CONTROLLERS ---
 
-// ==========================================
-// CONTROLLERS (EXPORTAÇÃO DIRETA)
-// ==========================================
-
-// 1. DASHBOARD
-exports.getDashboardStats = async (req, res) => {
+const getDashboardStats = async (req, res) => {
   try {
     const totalUsers = await prisma.user.count();
     const totalBets = await prisma.bet.count();
@@ -94,7 +80,6 @@ exports.getDashboardStats = async (req, res) => {
         const ag = await prisma.user.aggregate({ _sum: { balance: true } });
         totalBalance = ag._sum.balance || 0;
     } catch(e) {}
-
     res.json({ totalUsers, totalBets, totalBalance, netProfit: 0 });
   } catch (error) {
     console.error('Erro dashboard:', error);
@@ -102,8 +87,7 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// 2. USUÁRIOS
-exports.listUsers = async (req, res) => {
+const listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = 50;
@@ -121,12 +105,11 @@ exports.listUsers = async (req, res) => {
   }
 };
 
-exports.toggleUserBlock = async (req, res) => {
+const toggleUserBlock = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-
     const updated = await prisma.user.update({
       where: { id },
       data: { isBlocked: !user.isBlocked }
@@ -137,13 +120,11 @@ exports.toggleUserBlock = async (req, res) => {
   }
 };
 
-// 3. SUPERVISORES
-exports.listSupervisors = async (req, res) => {
-  return res.json([]); // Retorno vazio seguro
+const listSupervisors = async (req, res) => {
+  return res.json([]);
 };
 
-// 4. RESULTADOS (CRUD)
-exports.createResult = async (req, res) => {
+const createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
     const result = await prisma.result.create({
@@ -156,7 +137,7 @@ exports.createResult = async (req, res) => {
   }
 };
 
-exports.listResults = async (req, res) => {
+const listResults = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 20;
@@ -172,7 +153,7 @@ exports.listResults = async (req, res) => {
   }
 };
 
-exports.updateResult = async (req, res) => {
+const updateResult = async (req, res) => {
   try {
     const { id } = req.params;
     const updated = await prisma.result.update({ where: { id }, data: req.body });
@@ -182,7 +163,7 @@ exports.updateResult = async (req, res) => {
   }
 };
 
-exports.deleteResult = async (req, res) => {
+const deleteResult = async (req, res) => {
   try {
     await prisma.result.delete({ where: { id: req.params.id } });
     res.json({ message: 'Resultado deletado.' });
@@ -191,11 +172,9 @@ exports.deleteResult = async (req, res) => {
   }
 };
 
-// 5. LIQUIDAÇÃO (SHERLOCK V5)
-exports.settleBetsForResult = async (req, res) => {
+const settleBetsForResult = async (req, res) => {
   const { id } = req.params;
-  console.log(`\n🚀 [V6-DIRECT] LIQUIDANDO RESULTADO ID: ${id}`);
-
+  console.log(`\n🚀 [V7-FINAL] LIQUIDANDO RESULTADO ID: ${id}`);
   try {
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
@@ -214,11 +193,7 @@ exports.settleBetsForResult = async (req, res) => {
     } catch { numerosSorteados = []; }
     const premios = numerosSorteados.map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'));
 
-    const bets = await prisma.bet.findMany({
-      where: { status: 'open' },
-      include: { user: true }
-    });
-
+    const bets = await prisma.bet.findMany({ where: { status: 'open' }, include: { user: true } });
     console.log(`🔎 Analisando ${bets.length} apostas abertas...`);
     const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
@@ -226,30 +201,22 @@ exports.settleBetsForResult = async (req, res) => {
       try {
         const betDate = normalizeDate(bet.dataJogo);
         const betHour = extractHour(bet.codigoHorario);
-
         if (betDate !== resDate) continue;
         if (betHour !== resHour) continue; 
 
         const betIsFed = isFederal(bet.loteria);
         const betIsMaluq = isMaluquinha(bet.loteria);
         const betKey = getLotteryKey(bet.loteria);
-
         let match = false;
-        if (resIsFed) {
-          if (betIsFed) match = true;
-        } else if (resIsMaluq) {
-          if (betIsMaluq) match = true;
-        } else {
-          if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) {
-            match = true;
-          }
-          if (!match && (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria))) {
-            match = true;
-          }
+
+        if (resIsFed) { if (betIsFed) match = true; } 
+        else if (resIsMaluq) { if (betIsMaluq) match = true; } 
+        else {
+          if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
+          if (!match && (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria))) match = true;
         }
 
         if (!match) continue;
-
         console.log(`✅ MATCH! Aposta #${bet.id}`);
         summary.totalBets++;
 
@@ -264,51 +231,32 @@ exports.settleBetsForResult = async (req, res) => {
         apostas.forEach((aposta) => {
           const modal = aposta.modalidade || bet.modalidade;
           const payout = resolvePayout(modal);
-          if (!payout) return;
-
-          const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-          const totalPalpitesNaBet = apostas.reduce((acc, curr) => acc + (curr.palpites?.length || 0), 0);
-          const unitStake = bet.total / (totalPalpitesNaBet > 0 ? totalPalpitesNaBet : 1);
-          
-          const { factor } = checkVictory({ modal, palpites, premios });
-
-          if (factor > 0) prize += unitStake * payout * factor;
+          if (payout > 0) {
+              const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
+              const totalPalpitesNaBet = apostas.reduce((acc, curr) => acc + (curr.palpites?.length || 0), 0);
+              const unitStake = bet.total / (totalPalpitesNaBet > 0 ? totalPalpitesNaBet : 1);
+              const { factor } = checkVictory({ modal, palpites, premios });
+              if (factor > 0) prize += unitStake * payout * factor;
+          }
         });
 
         const finalPrize = Number(prize.toFixed(2));
         const status = finalPrize > 0 ? 'won' : 'nao premiado';
 
         await prisma.$transaction(async (tx) => {
-          await tx.bet.update({
-            where: { id: bet.id },
-            data: { status, prize: finalPrize, settledAt: new Date(), resultId: id },
-          });
-
+          await tx.bet.update({ where: { id: bet.id }, data: { status, prize: finalPrize, settledAt: new Date(), resultId: id } });
           if (finalPrize > 0) {
-            await tx.user.update({
-              where: { id: bet.userId },
-              data: { balance: { increment: finalPrize } },
-            });
-            await tx.transaction.create({
-              data: {
-                userId: bet.userId,
-                type: 'prize',
-                amount: finalPrize,
-                description: `Prêmio ${bet.modalidade} (${bet.id})`,
-              },
-            });
+            await tx.user.update({ where: { id: bet.userId }, data: { balance: { increment: finalPrize } } });
+            await tx.transaction.create({ data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio ${bet.modalidade} (${bet.id})` } });
           }
         });
 
         summary.processed++;
         if (finalPrize > 0) summary.wins++;
-
       } catch (innerErr) {
-        console.error(`❌ Erro Bet ${bet.id}:`, innerErr);
         summary.errors.push({ id: bet.id, msg: innerErr.message });
       }
     }
-
     res.json({ message: 'Processamento concluído', summary });
   } catch (err) {
     console.error('Erro fatal:', err);
@@ -316,13 +264,21 @@ exports.settleBetsForResult = async (req, res) => {
   }
 };
 
-// ==========================================
-// ALIASES (APELIDOS)
-// Isso resolve o erro "handler must be a function" nas rotas
-// ==========================================
-
-exports.getStats = exports.getDashboardStats;
-exports.getDashboard = exports.getDashboardStats;
-exports.getUsers = exports.listUsers;
-exports.getResults = exports.listResults;
-exports.getSupervisors = exports.listSupervisors;
+// --- EXPORTAÇÃO UNIFICADA (AQUI É O SEGREDO) ---
+module.exports = {
+  getDashboardStats,
+  listUsers,
+  toggleUserBlock,
+  listSupervisors,
+  createResult,
+  listResults,
+  updateResult,
+  deleteResult,
+  settleBetsForResult,
+  // Aliases para evitar erros de rota
+  getStats: getDashboardStats,
+  getDashboard: getDashboardStats,
+  getUsers: listUsers,
+  getResults: listResults,
+  getSupervisors: listSupervisors
+};

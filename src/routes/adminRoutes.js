@@ -1,44 +1,25 @@
+// src/routes/adminRoutes.js
 const express = require('express');
-const adminController = require('../controllers/adminController');
-const authMiddleware = require('../middleware/auth');
-const adminOnly = require('../middleware/adminOnly');
-
 const router = express.Router();
+const adminController = require('../controllers/adminController');
+const { protect, admin } = require('../middleware/authMiddleware');
 
-router.use(authMiddleware, adminOnly);
+// Rotas de Dashboard
+router.get('/dashboard', protect, admin, adminController.getDashboardStats);
+router.get('/stats', protect, admin, adminController.getDashboardStats); // Rota alternativa
 
-router.get('/stats', adminController.stats);
-router.get('/bets', adminController.listBets);
-router.get('/users', adminController.listUsers);
-router.patch('/users/:id/roles', adminController.updateUserRoles);
-router.delete('/users/:id', adminController.deleteUser);
-router.delete('/users', adminController.deleteUser);
+// Rotas de Usuários
+router.get('/users', protect, admin, adminController.listUsers);
+router.put('/users/:id/block', protect, admin, adminController.toggleUserBlock);
+router.get('/supervisors', protect, admin, adminController.listSupervisors); // Evita erro 501
 
-// Supervisores
-router.post('/supervisors', adminController.createSupervisor);
-router.get('/supervisors', adminController.listSupervisors);
-router.patch('/supervisors/:id', adminController.updateSupervisor);
-router.delete('/supervisors/:id', adminController.deleteSupervisor);
+// Rotas de Resultados
+router.get('/results', protect, admin, adminController.listResults);
+router.post('/results', protect, admin, adminController.createResult);
+router.put('/results/:id', protect, admin, adminController.updateResult);
+router.delete('/results/:id', protect, admin, adminController.deleteResult);
 
-// Resultados
-router.post('/results', adminController.createResult);
-router.get('/results', adminController.listResults);
-router.put('/results/:id', adminController.updateResult);
-router.delete('/results/:id', adminController.deleteResult);
-router.post('/results/:id/settle', adminController.settleResult);
-router.get('/results/:id/settle', adminController.settleResult); // fallback para chamadas GET
-router.post('/results/:id/pule', adminController.generateResultPule);
-
-// Saques
-router.get('/withdrawals', adminController.listWithdrawals);
-router.patch('/withdrawals/:id/status', adminController.updateWithdrawalStatus);
-
-// Cupons
-router.post('/coupons', adminController.createCoupon);
-router.get('/coupons', adminController.listCoupons);
-router.put('/coupons/:id', adminController.updateCoupon);
-
-// Pix manual (fallback)
-router.post('/pix/credit', adminController.manualCreditPix);
+// Rota de Liquidação (O Foguete 🚀)
+router.post('/results/:id/settle', protect, admin, adminController.settleBetsForResult);
 
 module.exports = router;
