@@ -54,7 +54,7 @@ const LoteriasRepetirValorPage = () => {
   const handleContinue = () => {
     if (!parsedValor || parsedValor <= 0) return;
     applyValue();
-    navigate('/loterias-sorteios');
+    navigate('/loterias/repetir/data');
   };
 
   return (

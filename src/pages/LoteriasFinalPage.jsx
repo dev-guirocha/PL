@@ -199,34 +199,57 @@ const LoteriasFinalPage = () => {
               {draft?.codigoHorario && <span>Horário: {draft.codigoHorario}</span>}
             </>
           )}
-          {draft?.apostas?.map((ap, idx) => (
-            <div key={idx} style={{ borderTop: '1px dashed #9ed8b6', paddingTop: '8px' }}>
-              <div style={styles.totalRow}>
-                <span>{ap.jogo}</span>
-                <span>{formatDateBR(ap.data)}</span>
-              </div>
-              {ap.modalidade && <span>Modalidade: {ap.modalidade}</span>}
-              {ap.colocacao && <span>Prêmio: {ap.colocacao}</span>}
-              <span>Qtd palpites: {ap.palpites?.length || 0}</span>
-              {ap?.palpites?.length ? (
-                <div style={styles.chipRow}>
-                  {ap.palpites.map((p, i) => (
-                    <span key={`${p}-${i}`} style={styles.chip}>
-                      {p}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <div style={styles.totalRow}>
-                <span>Valor por número:</span>
-                <span>R$ {(ap.valorPorNumero || 0).toFixed(2).replace('.', ',')}</span>
-              </div>
-              <div style={styles.totalRow}>
-                <span>Valor da aposta:</span>
-                <span>R$ {(ap.total || 0).toFixed(2).replace('.', ',')}</span>
-              </div>
+        {draft?.apostas?.map((ap, idx) => (
+          <div key={idx} style={{ borderTop: '1px dashed #9ed8b6', paddingTop: '8px' }}>
+            <div style={styles.totalRow}>
+              <span>{ap.jogo}</span>
+              <span>{formatDateBR(ap.data)}</span>
             </div>
-          ))}
+            {ap.modalidade && <span>Modalidade: {ap.modalidade}</span>}
+            {ap.colocacao && <span>Prêmio: {ap.colocacao}</span>}
+            <span>Qtd palpites: {ap.palpites?.length || 0}</span>
+            {ap?.palpites?.length ? (
+              <div style={styles.chipRow}>
+                {ap.palpites.map((p, i) => (
+                  <span key={`${p}-${i}`} style={styles.chip}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div style={styles.totalRow}>
+              <span>Valor por número:</span>
+              <span>R$ {(ap.valorPorNumero || 0).toFixed(2).replace('.', ',')}</span>
+            </div>
+            <div style={styles.totalRow}>
+              <span>Valor da aposta:</span>
+              <span>R$ {(ap.total || 0).toFixed(2).replace('.', ',')}</span>
+            </div>
+            <div style={{ marginTop: '6px', textAlign: 'right' }}>
+              <button
+                type="button"
+                style={{
+                  border: '1px solid #fecdd3',
+                  background: '#fff1f2',
+                  color: '#b91c1c',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  const updated = (draft?.apostas || []).filter((_, i) => i !== idx);
+                  const next = { ...draft, apostas: updated };
+                  setDraft(next);
+                  updateDraft(next);
+                }}
+              >
+                Apagar aposta
+              </button>
+            </div>
+          </div>
+        ))}
           <div style={styles.totalRow}>
             <span>Valor total a pagar:</span>
             <span>R$ {total.toFixed(2).replace('.', ',')}</span>

@@ -48,6 +48,66 @@ const PulesPage = () => {
     return { total, valorPorNumero };
   };
 
+  const handleSharePdf = (pule) => {
+    const win = window.open('', '_blank', 'noopener,noreferrer,width=700,height=900');
+    if (!win) return;
+    const title = `PULE ${pule.betRef || `${pule.userId || ''}-${pule.id}`}`;
+    const rows = (pule.apostas || [])
+      .map((ap, idx) => {
+        const { total: apTotal, valorPorNumero } = deriveTotals(ap);
+        const palpites = Array.isArray(ap.palpites) ? ap.palpites.join(', ') : '';
+        return `
+          <tr>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${idx + 1}</td>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${ap.modalidade || ap.jogo || ''}</td>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${ap.colocacao || ''}</td>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${palpites}</td>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${formatCurrency(valorPorNumero)}</td>
+            <td style="padding:6px 8px;border:1px solid #e5e7eb;">${formatCurrency(apTotal)}</td>
+          </tr>`;
+      })
+      .join('');
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #0f172a; padding: 16px; }
+            h1 { font-size: 18px; margin: 0 0 6px; color: #065f46; }
+            h2 { font-size: 14px; margin: 0 0 8px; color: #0f172a; }
+            table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+            th { background: #ecfdf3; border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+            td { padding: 6px 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>${pule.loteria || 'Loteria'}</h1>
+          <h2>Horário: ${pule.codigoHorario || '—'} | Data: ${pule.dataJogo ? formatDateBR(pule.dataJogo) : '—'}</h2>
+          <div style="font-size:12px;margin-bottom:8px;">Ref: ${pule.betRef || `${pule.userId || ''}-${pule.id}`}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Modalidade</th>
+                <th>Prêmio</th>
+                <th>Palpites</th>
+                <th>Valor por número</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+          <div style="margin-top:10px;font-weight:bold;">Total apostado: ${formatCurrency(pule.total)}</div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-sky-50 to-amber-50 px-4 py-6">
       <div className="mx-auto flex max-w-5xl items-center justify-end">
@@ -129,6 +189,15 @@ const PulesPage = () => {
             <div className="flex items-center justify-between text-sm font-bold">
               <span>Total:</span>
               <span>{formatCurrency(pule.total)}</span>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+                onClick={() => handleSharePdf(pule)}
+              >
+                Compartilhar / PDF
+              </button>
             </div>
           </div>
         ))}

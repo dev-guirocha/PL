@@ -33,14 +33,13 @@ const LoteriasPalpitesPage = () => {
   useEffect(() => {
     const d = getDraft();
     setDraft(d);
-    const shouldKeepPalpites = d?.currentSaved === true;
-    if (Array.isArray(d?.palpites) && shouldKeepPalpites) {
+    const signature = `${d?.jogo || ''}|${d?.data || ''}|${d?.modalidade || ''}|${d?.colocacao || ''}`;
+    const storedSig = d?.palpitesSignature;
+    if (Array.isArray(d?.palpites) && d.palpites.length && storedSig === signature) {
       setPalpites(d.palpites);
     } else {
-      if (Array.isArray(d?.palpites) && d.palpites.length) {
-        updateDraft({ palpites: [] });
-      }
       setPalpites([]);
+      updateDraft({ palpites: [], palpitesSignature: signature });
     }
     refreshUser();
   }, [refreshUser]);
@@ -131,6 +130,8 @@ const LoteriasPalpitesPage = () => {
     setPalpiteError('');
     const updated = [...palpites, clean];
     setPalpites(updated);
+    const signature = `${draft?.jogo || ''}|${draft?.data || ''}|${draft?.modalidade || ''}|${draft?.colocacao || ''}`;
+    updateDraft({ palpites: updated, palpitesSignature: signature });
     setPalpite('');
     prevLength.current = 0;
   };
