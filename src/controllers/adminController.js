@@ -59,6 +59,8 @@ exports.getDashboardStats = async (req, res) => {
     res.status(500).json({ error: 'Erro ao carregar estatísticas.' });
   }
 };
+// Alias para rotas antigas
+exports.stats = exports.getDashboardStats;
 
 // 2. BLOQUEAR/DESBLOQUEAR USUÁRIO
 exports.toggleUserBlock = async (req, res) => {
@@ -141,6 +143,25 @@ exports.listUsers = async (req, res) => {
     res.status(500).json({error: 'Erro list users'}); 
   }
 };
+
+// --- STUBS LEGADOS (para rotas existentes não implementadas nesta versão) ---
+const notImplemented = (feature) => async (req, res) => res.status(501).json({ error: `${feature} não implementado neste build.` });
+
+exports.listBets = notImplemented('listBets');
+exports.updateUserRoles = notImplemented('updateUserRoles');
+exports.deleteUser = notImplemented('deleteUser');
+exports.createSupervisor = notImplemented('createSupervisor');
+exports.listSupervisors = notImplemented('listSupervisors');
+exports.updateSupervisor = notImplemented('updateSupervisor');
+exports.deleteSupervisor = notImplemented('deleteSupervisor');
+exports.settleResult = exports.settleBetsForResult;
+exports.generateResultPule = notImplemented('generateResultPule');
+exports.listWithdrawals = notImplemented('listWithdrawals');
+exports.updateWithdrawalStatus = notImplemented('updateWithdrawalStatus');
+exports.createCoupon = notImplemented('createCoupon');
+exports.listCoupons = notImplemented('listCoupons');
+exports.updateCoupon = notImplemented('updateCoupon');
+exports.manualCreditPix = notImplemented('manualCreditPix');
 
 // --- LIQUIDAÇÃO (SHERLOCK HOLMES V4-FIX) ---
 exports.settleBetsForResult = async (req, res) => {
