@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { getDraft, clearDraft, appendToHistory } from '../utils/receipt';
+import { getDraft, clearDraft, appendToHistory, updateDraft } from '../utils/receipt';
 import PAYOUTS from '../constants/payouts.json';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR } from '../utils/date';
