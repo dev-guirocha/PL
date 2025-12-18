@@ -113,6 +113,14 @@ const extractPalpitesFromAposta = (ap) => {
   return [];
 };
 
+const formatPalpite = (val) => {
+  if (val && typeof val === 'object') {
+    const joined = Object.values(val || {}).join(' ').trim();
+    return joined || JSON.stringify(val);
+  }
+  return String(val ?? '');
+};
+
 const formatModalitiesWithNumbers = (bet) => {
   const parts = [];
   (bet.apostas || []).forEach((ap) => {
@@ -257,11 +265,14 @@ const AdminBetsPage = () => {
                       <div key={`${betId}-group-${gIdx}`}>
                         <div className="text-[11px] font-semibold text-slate-600 uppercase mb-1">{g.label}</div>
                         <div className="flex flex-wrap gap-2">
-                          {(g.numeros || []).map((n, idx) => (
-                            <span key={`${betId}-g${gIdx}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-                              {n}
-                            </span>
-                          ))}
+                          {(g.numeros || []).map((n, idx) => {
+                            const display = formatPalpite(n);
+                            return (
+                              <span key={`${betId}-g${gIdx}-palp-${idx}`} className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                                {display}
+                              </span>
+                            );
+                          })}
                           {(!g.numeros || g.numeros.length === 0) && <span className="text-slate-500 text-xs">—</span>}
                         </div>
                       </div>
