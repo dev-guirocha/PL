@@ -45,6 +45,8 @@ exports.handleOpenPixWebhook = async (req, res) => {
 
     const value = Number(pixCharge.amount);
     const bonusValue = Number(pixCharge.bonusAmount ?? Number((value * 0.15).toFixed(2)));
+    const rawCpf = charge.payer?.taxID?.taxID || charge.payer?.taxID || '';
+    const cpfClean = rawCpf ? String(rawCpf).replace(/\D/g, '') : '';
 
     const txs = [
       prisma.pixCharge.update({
@@ -60,6 +62,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
         data: {
           balance: { increment: value },
           bonus: { increment: bonusValue },
+          cpf: cpfClean.length === 11 ? cpfClean : undefined,
         },
       }),
       prisma.transaction.create({

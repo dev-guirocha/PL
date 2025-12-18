@@ -278,10 +278,14 @@ const LoteriasFinalPage = () => {
             Voltar às apostas
           </button>
           <button
-            style={{ ...styles.actionBtn, ...styles.primary }}
+            style={{
+              ...styles.actionBtn,
+              ...styles.primary,
+              ...(submitting ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
+            }}
             disabled={submitting}
             onClick={async () => {
-              if (submitting) return;
+              if (submitting) return; // trava duplo clique
               if (!isAuthenticated) {
                 setMessage('Faça login para finalizar.');
                 return;
@@ -296,14 +300,11 @@ const LoteriasFinalPage = () => {
                 let totalDebited = 0;
                 const betsCreated = [];
                 for (const sel of selecoes) {
-                  const res = await api.post(
-                    '/bets',
-                    {
-                      loteria: sel.nome || draft?.loteria,
-                      codigoHorario: sel.horario,
-                      apostas: draft?.apostas || [],
-                    },
-                  );
+                  const res = await api.post('/bets', {
+                    loteria: sel.nome || draft?.loteria,
+                    codigoHorario: sel.horario,
+                    apostas: draft?.apostas || [],
+                  });
                   const debited = res.data?.debited ?? 0;
                   totalDebited += debited;
                   if (res.data?.bet?.id) {
