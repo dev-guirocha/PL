@@ -1,4 +1,6 @@
 // src/controllers/adminController.js
+// VERSÃO SEM 'isBlocked' (PARA FUNCIONAR COM SEU BANCO ATUAL)
+
 const prisma = require('../utils/prismaClient');
 
 // --- FUNÇÕES AUXILIARES ---
@@ -29,7 +31,6 @@ const getLotteryKey = (name) => {
 const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
 const isMaluquinha = (name) => String(name).toUpperCase().includes('MALUQ');
 
-// --- HELPERS DE APOSTA ---
 function parseApostasFromBet(bet) {
   try {
     if (typeof bet.palpites === 'string') return JSON.parse(bet.palpites);
@@ -71,7 +72,7 @@ function checkVictory({ modal, palpites, premios }) {
 
 // --- CONTROLLERS ---
 
-const getDashboardStats = async (req, res) => {
+exports.getDashboardStats = async (req, res) => {
   try {
     const totalUsers = await prisma.user.count();
     const totalBets = await prisma.bet.count();
@@ -87,7 +88,7 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-const listUsers = async (req, res) => {
+exports.listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = 50;
@@ -95,7 +96,8 @@ const listUsers = async (req, res) => {
       take: pageSize, 
       skip: (page - 1) * pageSize,
       orderBy: { createdAt: 'desc' }, 
-      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, isBlocked: true, email: true } 
+      // REMOVIDO isBlocked DA SELEÇÃO
+      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true } 
     });
     const total = await prisma.user.count();
     res.json({ users, total, page });
@@ -105,26 +107,16 @@ const listUsers = async (req, res) => {
   }
 };
 
-const toggleUserBlock = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { isBlocked: !user.isBlocked }
-    });
-    res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao alterar status.' });
-  }
+exports.toggleUserBlock = async (req, res) => {
+  // FUNÇÃO DESATIVADA TEMPORARIAMENTE POR FALTA DE COLUNA NO BANCO
+  return res.json({ message: "Funcionalidade desativada temporariamente (Banco de dados desatualizado)." });
 };
 
-const listSupervisors = async (req, res) => {
+exports.listSupervisors = async (req, res) => {
   return res.json([]);
 };
 
-const createResult = async (req, res) => {
+exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
     const result = await prisma.result.create({
@@ -137,7 +129,7 @@ const createResult = async (req, res) => {
   }
 };
 
-const listResults = async (req, res) => {
+exports.listResults = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 20;
@@ -153,7 +145,7 @@ const listResults = async (req, res) => {
   }
 };
 
-const updateResult = async (req, res) => {
+exports.updateResult = async (req, res) => {
   try {
     const { id } = req.params;
     const updated = await prisma.result.update({ where: { id }, data: req.body });
@@ -163,7 +155,7 @@ const updateResult = async (req, res) => {
   }
 };
 
-const deleteResult = async (req, res) => {
+exports.deleteResult = async (req, res) => {
   try {
     await prisma.result.delete({ where: { id: req.params.id } });
     res.json({ message: 'Resultado deletado.' });
@@ -172,9 +164,9 @@ const deleteResult = async (req, res) => {
   }
 };
 
-const settleBetsForResult = async (req, res) => {
+exports.settleBetsForResult = async (req, res) => {
   const { id } = req.params;
-  console.log(`\n🚀 [V7-FINAL] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V7-NO-BLOCK] LIQUIDANDO RESULTADO ID: ${id}`);
   try {
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
@@ -264,21 +256,9 @@ const settleBetsForResult = async (req, res) => {
   }
 };
 
-// --- EXPORTAÇÃO UNIFICADA (AQUI É O SEGREDO) ---
-module.exports = {
-  getDashboardStats,
-  listUsers,
-  toggleUserBlock,
-  listSupervisors,
-  createResult,
-  listResults,
-  updateResult,
-  deleteResult,
-  settleBetsForResult,
-  // Aliases para evitar erros de rota
-  getStats: getDashboardStats,
-  getDashboard: getDashboardStats,
-  getUsers: listUsers,
-  getResults: listResults,
-  getSupervisors: listSupervisors
-};
+// --- ALIASES ---
+exports.getStats = exports.getDashboardStats;
+exports.getDashboard = exports.getDashboardStats;
+exports.getUsers = exports.listUsers;
+exports.getResults = exports.listResults;
+exports.getSupervisors = exports.listSupervisors;
