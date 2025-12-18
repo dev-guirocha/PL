@@ -1,7 +1,36 @@
 // src/data/sorteios.js
 
-// --- A LISTA PRINCIPAL ---
-// O sistema agora consegue ler isso mesmo que as funções estejam lá embaixo
+// --- FUNÇÕES DE LÓGICA (Definidas antes) ---
+function getDayOfWeek() {
+  const now = new Date();
+  return now.getDay(); // 0 = Dom, 3 = Qua, 6 = Sáb
+}
+
+function isFederalDay() {
+  const day = getDayOfWeek();
+  return day === 3 || day === 6; // Quarta ou Sábado
+}
+
+function getHorariosRio() {
+  const base = ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'LT PT RIO 18HS', 'LT PT RIO 21HS'];
+  if (isFederalDay()) {
+    const filtrado = base.filter(h => h !== 'LT PT RIO 18HS');
+    filtrado.push('FEDERAL 20H');
+    // Retorna ordenado visualmente (colocando Federal no lugar das 18h/20h)
+    return ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'FEDERAL 20H', 'LT PT RIO 21HS'];
+  }
+  return base;
+}
+
+function getHorariosMaluquinha() {
+  const base = ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ RIO 18HS', 'LT MALUQ RIO 21HS'];
+  if (isFederalDay()) {
+    return ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ FEDERAL 20HS', 'LT MALUQ RIO 21HS'];
+  }
+  return base;
+}
+
+// --- A LISTA PRINCIPAL (Exportada com const e function para garantir compatibilidade) ---
 export const LOTERIAS_SORTEIOS = [
   {
     nome: 'RIO/FEDERAL',
@@ -22,20 +51,8 @@ export const LOTERIAS_SORTEIOS = [
     nome: 'LOOK/GOIAS',
     slug: 'look-goias',
     horarios: [
-      'LT LOOK 07HS',
-      'LT LOOK 09HS',
-      'LT LOOK 11HS',
-      'LT LOOK 14HS',
-      'LT LOOK 16HS',
-      'LT LOOK 18HS',
-      'LT LOOK 21HS',
-      'LT LOOK 23HS',
-      'LT BOA SORTE 09HS',
-      'LT BOA SORTE 11HS',
-      'LT BOA SORTE 14HS',
-      'LT BOA SORTE 16HS',
-      'LT BOA SORTE 18HS',
-      'LT BOA SORTE 21HS',
+      'LT LOOK 07HS', 'LT LOOK 09HS', 'LT LOOK 11HS', 'LT LOOK 14HS', 'LT LOOK 16HS', 'LT LOOK 18HS', 'LT LOOK 21HS', 'LT LOOK 23HS',
+      'LT BOA SORTE 09HS', 'LT BOA SORTE 11HS', 'LT BOA SORTE 14HS', 'LT BOA SORTE 16HS', 'LT BOA SORTE 18HS', 'LT BOA SORTE 21HS',
     ],
   },
   {
@@ -95,47 +112,7 @@ export const LOTERIAS_SORTEIOS = [
   },
 ];
 
-// Helper para compatibilidade
+// Função helper para compatibilidade extra
 export function getLoteriasSorteios() {
   return LOTERIAS_SORTEIOS;
-}
-
-// --- FUNÇÕES DE LÓGICA (HOISTED) ---
-// Usando 'function', elas funcionam mesmo declaradas aqui embaixo
-
-function getDayOfWeek() {
-  const now = new Date();
-  return now.getDay(); // 0 = Dom, 3 = Qua, 6 = Sáb
-}
-
-function isFederalDay() {
-  const day = getDayOfWeek();
-  // Retorna TRUE se for Quarta (3) ou Sábado (6)
-  return day === 3 || day === 6;
-}
-
-function getHorariosRio() {
-  const base = ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'LT PT RIO 18HS', 'LT PT RIO 21HS'];
-
-  if (isFederalDay()) {
-    // Remove 18HS e bota FEDERAL 20H
-    const filtrado = base.filter((h) => h !== 'LT PT RIO 18HS');
-    filtrado.push('FEDERAL 20H');
-
-    // Retorna ordenado visualmente
-    return ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'FEDERAL 20H', 'LT PT RIO 21HS'];
-  }
-
-  return base;
-}
-
-function getHorariosMaluquinha() {
-  const base = ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ RIO 18HS', 'LT MALUQ RIO 21HS'];
-
-  if (isFederalDay()) {
-    // Remove 18HS e bota MALUQ FEDERAL 20HS
-    return ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ FEDERAL 20HS', 'LT MALUQ RIO 21HS'];
-  }
-
-  return base;
 }
