@@ -1,33 +1,35 @@
-const { PrismaClient } = require('@prisma/client');
-// Prisma 7 exige options não-vazios; usamos conexão padrão via env
-const prisma = new PrismaClient({
-  log: ['error', 'warn'],
-});
+// --- IMPORTANTE: NÃO MEXA NESTA LINHA ---
+// Importamos a conexão já configurada do seu projeto (com Neon/Adapter)
+// Não use "new PrismaClient()" aqui, pois vai quebrar a conexão com o Neon.
+const prisma = require('../utils/prismaClient');
 
-// --- FUNÇÕES DE LIMPEZA (EXTREMAS) ---
+// --- FUNÇÕES DE LIMPEZA (SHERLOCK HOLMES) ---
 
-// 1. Extrai a HORA cheia de qualquer string (ex: "LT PT RIO 18HS" -> "18")
+// 1. Extrai a HORA cheia (Núcleo da comparação)
+// Ex: "LT PT RIO 18HS" -> "18"
+// Ex: "18:00" -> "18"
 const extractHour = (str) => {
   if (!str) return 'XX';
   // Remove tudo que não é número
   const nums = String(str).replace(/\D/g, '');
-  // Se tiver muitos números (ex: 202412181800), tenta ser inteligente, mas foca no simples:
-  // Se string for pequena (ex: 18, 09, 1800), pega os 2 primeiros
-  if (nums.length >= 1) {
-    return nums.slice(0, 2).padStart(2, '0');
-  }
-  return 'XX'; // Não achou hora
+  
+  // Se não sobrou número nenhum, erro
+  if (nums.length === 0) return 'XX';
+
+  // Se tem 3 ou 4 digitos (1800), pega os 2 primeiros
+  if (nums.length >= 3) return nums.slice(0, 2);
+  
+  // Se tem 1 ou 2 digitos (18), garante 2 casas (18)
+  return nums.padStart(2, '0');
 };
 
 // 2. Normaliza Data para YYYY-MM-DD
 const normalizeDate = (dateStr) => {
   if (!dateStr) return 'INVALID';
-  let clean = String(dateStr).trim();
-  // Remove hora se vier junto (ISO)
-  if (clean.includes('T')) clean = clean.split('T')[0];
-  if (clean.includes(' ')) clean = clean.split(' ')[0];
+  // Pega só a primeira parte se tiver espaço ou T
+  let clean = String(dateStr).split('T')[0].split(' ')[0];
   
-  // Se for DD/MM/YYYY
+  // Se for DD/MM/YYYY vira YYYY-MM-DD
   if (clean.includes('/')) {
     const parts = clean.split('/');
     if (parts.length === 3) {
@@ -37,20 +39,20 @@ const normalizeDate = (dateStr) => {
   return clean;
 };
 
-// 3. Normaliza Loteria (Remove LT, espaços, traços)
-const normalizeLottery = (name) => {
+// 3. Chave de Loteria Simplificada
+// Transforma "LT PT RIO" em "PTRIO"
+// Transforma "PT-RIO" em "PTRIO"
+const getLotteryKey = (name) => {
   return String(name || '')
     .toUpperCase()
-    .replace('FEDERAL', '') // Remove FEDERAL temporariamente para evitar conflito RIO/FEDERAL
-    .replace('RIO', '')     // Remove RIO para focar no núcleo (PT, MALUQ, LOOK)
-    .replace(/^LT/, '')     // Remove LT do começo
-    .replace(/[^A-Z0-9]/g, ''); // Remove tudo que não é letra/número
+    .replace('FEDERAL', '') // Remove FEDERAL pra não confundir
+    .replace('RIO', '')     // Remove RIO
+    .replace(/^LT/, '')     // Remove LT
+    .replace(/[^A-Z0-9]/g, ''); // Remove espaços e traços
 };
 
-// 4. Verifica se é Federal (Caso Especial)
-const isFederal = (name) => {
-  return String(name).toUpperCase().includes('FEDERAL');
-};
+const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
+const isMaluquinha = (name) => String(name).toUpperCase().includes('MALUQ');
 
 // --- CONTROLLERS ---
 
@@ -102,129 +104,133 @@ exports.deleteResult = async (req, res) => {
   }
 };
 
-// --- FUNÇÃO DE LIQUIDAÇÃO (A MÁGICA) ---
+exports.listUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({ 
+      take: 50, 
+      orderBy: { createdAt: 'desc' }, 
+      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true } 
+    });
+    res.json({ users, total: users.length });
+  } catch(e) { 
+    res.status(500).json({error: 'Erro list users'}); 
+  }
+};
+
+// --- A FUNÇÃO QUE IMPORTA: LIQUIDAÇÃO ---
 exports.settleBetsForResult = async (req, res) => {
   const { id } = req.params;
-  console.log(`\n🚀 INICIANDO LIQUIDAÇÃO DO RESULTADO ID: ${id}`);
+  
+  // LOG DE DEBUG PARA CONFIRMAR QUE O CÓDIGO NOVO SUBIU
+  console.log(`\n🚀 [V4-FIX] INICIANDO LIQUIDAÇÃO DO RESULTADO ID: ${id}`);
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
 
-    // 1. Prepara dados do Gabarito
+    // 1. Dados do GABARITO (Resultado)
     const resDate = normalizeDate(result.dataJogo);
     const resHour = extractHour(result.codigoHorario);
     const resIsFed = isFederal(result.loteria);
-    // Para loteria, usamos uma chave simplificada (ex: "PT" ou "LOOK")
-    // Se for federal, a chave é FEDERAL
-    const resKey = resIsFed ? 'FEDERAL' : normalizeLottery(result.loteria);
+    const resIsMaluq = isMaluquinha(result.loteria);
+    const resKey = getLotteryKey(result.loteria); 
 
-    console.log(`📊 GABARITO: Data=[${resDate}] Hora=[${resHour}] Chave=[${resKey}] Original=[${result.loteria}]`);
+    console.log(`📊 GABARITO: Data=[${resDate}] Hora=[${resHour}] Tipo=[${resIsFed ? 'FED' : resIsMaluq ? 'MALUQ' : resKey}] String=[${result.loteria}]`);
 
-    // Prepara os números sorteados
+    // Prepara números
     let numerosSorteados = [];
     try {
       numerosSorteados = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros);
     } catch { numerosSorteados = []; }
-    
-    // Normaliza para strings de 4 dígitos
     const premios = numerosSorteados.map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'));
 
-    // 2. Busca TODAS as apostas em aberto
-    // Trazemos tudo para filtrar no código, pois o banco é burro para strings diferentes
+    // 2. Busca TODAS as apostas abertas
     const bets = await prisma.bet.findMany({
       where: { status: 'open' },
-      include: { user: true } // Precisamos do user para pagar
+      include: { user: true }
     });
 
-    console.log(`🔎 Analisando ${bets.length} apostas em aberto...`);
-
+    console.log(`🔎 Analisando ${bets.length} apostas abertas...`);
     const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
     for (const bet of bets) {
       try {
-        // --- COMPARAÇÃO (DEBUG LIGADO) ---
+        // --- COMPARAÇÃO ---
         const betDate = normalizeDate(bet.dataJogo);
         const betHour = extractHour(bet.codigoHorario);
-        const betIsFed = isFederal(bet.loteria) || (bet.loteria && bet.loteria.includes('FEDERAL'));
-        const betKey = betIsFed ? 'FEDERAL' : normalizeLottery(bet.loteria);
 
-        // 1. Checa Data
-        if (betDate !== resDate) continue; // Data diferente, ignora silenciosamente
+        // 1. Filtro DATA
+        if (betDate !== resDate) continue;
 
-        // 2. Checa Hora
-        if (betHour !== resHour) continue; // Hora diferente, ignora
-
-        // 3. Checa Loteria (Parte mais difícil)
-        // Se ambos são federal -> Match
-        // Se não, verifica se a chave simplificada está contida
-        let matchLottery = false;
-        if (resIsFed && betIsFed) {
-            matchLottery = true;
-        } else if (!resIsFed && !betIsFed) {
-            // Ex: PTRIO contem PT ou vice versa
-            if (betKey.includes(resKey) || resKey.includes(betKey)) matchLottery = true;
-            // Fallback: Verifica string original
-            if (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria)) matchLottery = true;
+        // 2. Filtro HORA
+        if (betHour !== resHour) {
+            // console.log(`   Ignorando hora: Bet(${betHour}) != Res(${resHour})`);
+            continue; 
         }
 
-        if (!matchLottery) continue; // Loteria diferente
+        // 3. Filtro LOTERIA
+        const betIsFed = isFederal(bet.loteria);
+        const betIsMaluq = isMaluquinha(bet.loteria);
+        const betKey = getLotteryKey(bet.loteria);
 
-        // --- SE CHEGOU AQUI, É A APOSTA CERTA! ---
-        console.log(`✅ MATCH ENCONTRADO! Aposta ID: ${bet.id} do User ${bet.userId}`);
-        
-        summary.totalBets++; // Contabiliza como processada para este sorteio
+        let match = false;
 
-        const apostas = parseApostasFromBet(bet); // Função auxiliar abaixo
-        let prize = 0;
+        if (resIsFed) {
+          if (betIsFed) match = true;
+        } else if (resIsMaluq) {
+          if (betIsMaluq) match = true;
+        } else {
+          // Loterias Normais
+          if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) {
+            match = true;
+          }
+          // Fallback de string crua
+          if (!match && (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria))) {
+            match = true;
+          }
+        }
 
+        if (!match) continue; // Não é essa loteria
+
+        // --- MATCH CONFIRMADO! ---
+        console.log(`✅ MATCH! Aposta #${bet.id} (User ${bet.userId})`);
+        summary.totalBets++;
+
+        const apostas = parseApostasFromBet(bet);
         if (!apostas || !apostas.length) {
-           console.warn('   Aposta sem palpites válidos.');
-           // Marca como nao premiado para limpar
            await prisma.bet.update({ where: { id: bet.id }, data: { status: 'nao premiado', settledAt: new Date(), resultId: id } });
            summary.processed++;
            continue;
         }
 
+        let prize = 0;
         apostas.forEach((aposta) => {
           const modal = aposta.modalidade || bet.modalidade;
-          const payout = resolvePayout(modal); // Função auxiliar
+          const payout = resolvePayout(modal);
           if (!payout) return;
 
           const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-          // Calcula valor por palpite
-          const unitStake = (bet.total / apostas.length) / (palpites.length > 0 ? 1 : 1); 
-          // Ajuste fino: sua lógica de unitStake pode variar, simplifiquei aqui:
-          // O ideal é: (Valor da ApostaItem) / (Qtd Palpites no Item)
+          const totalPalpitesNaBet = apostas.reduce((acc, curr) => acc + (curr.palpites?.length || 0), 0);
           
-          // Como sua estrutura varia, vamos assumir que bet.total é o total do bilhete
-          // E precisamos saber quanto vale esse palpite específico.
-          // Se sua estrutura de 'aposta' já tem o valor individual, use-o.
-          // Vou usar uma lógica genérica segura:
-          const realUnitStake = resolveUnitStake(aposta, apostas.length, bet.total);
-
+          // Cálculo do Unit Stake (Valor apostado dividido pelos palpites)
+          const unitStake = bet.total / (totalPalpitesNaBet > 0 ? totalPalpitesNaBet : 1);
+          
           const { factor } = checkVictory({ modal, palpites, premios });
 
           if (factor > 0) {
-            const winVal = realUnitStake * payout * factor;
+            const winVal = unitStake * payout * factor;
             prize += winVal;
-            console.log(`      💰 Ganhou! Modal: ${modal} | Fator: ${factor} | Prêmio: ${winVal}`);
+            console.log(`      💰 GANHOU! ${modal} | Prêmio: ${winVal.toFixed(2)}`);
           }
         });
 
         const finalPrize = Number(prize.toFixed(2));
         const status = finalPrize > 0 ? 'won' : 'nao premiado';
 
-        // Atualiza BD
         await prisma.$transaction(async (tx) => {
           await tx.bet.update({
             where: { id: bet.id },
-            data: {
-              status,
-              prize: finalPrize,
-              settledAt: new Date(),
-              resultId: id,
-            },
+            data: { status, prize: finalPrize, settledAt: new Date(), resultId: id },
           });
 
           if (finalPrize > 0) {
@@ -247,7 +253,7 @@ exports.settleBetsForResult = async (req, res) => {
         if (finalPrize > 0) summary.wins++;
 
       } catch (innerErr) {
-        console.error(`❌ Erro ao processar aposta ${bet.id}:`, innerErr);
+        console.error(`❌ Erro Bet ${bet.id}:`, innerErr);
         summary.errors.push({ id: bet.id, msg: innerErr.message });
       }
     }
@@ -256,102 +262,50 @@ exports.settleBetsForResult = async (req, res) => {
     res.json({ message: 'Processamento concluído', summary });
 
   } catch (err) {
-    console.error('Erro fatal no settle:', err);
-    res.status(500).json({ error: 'Erro interno ao liquidar.' });
+    console.error('Erro fatal:', err);
+    res.status(500).json({ error: 'Erro interno.' });
   }
 };
 
-// --- FUNÇÕES DE REGRA DE NEGÓCIO (Reaproveitadas/Ajustadas) ---
-
+// --- HELPERS ---
 function parseApostasFromBet(bet) {
-  // Tenta extrair o array de apostas do JSON
   try {
     if (typeof bet.palpites === 'string') return JSON.parse(bet.palpites);
     if (Array.isArray(bet.palpites)) return bet.palpites;
     return []; 
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function resolvePayout(modalidade) {
-  // Defina suas cotações aqui ou busque do banco se tiver tabela
   const table = {
-    'MILHAR': 4000,
-    'CENTENA': 400,
-    'DEZENA': 60,
-    'GRUPO': 18,
-    'DUQUE DEZENA': 300,
-    'TERNO DEZENA': 3000,
-    'DUQUE GRUPO': 18,
-    'TERNO GRUPO': 150,
-    // Adicione variações de escrita para garantir
-    'Milhar': 4000, 'Centena': 400, 'Grupo': 18
+    'MILHAR': 4000, 'CENTENA': 400, 'DEZENA': 60, 'GRUPO': 18,
+    'DUQUE DEZENA': 300, 'TERNO DEZENA': 3000, 'DUQUE GRUPO': 18, 'TERNO GRUPO': 150
   };
-  
-  // Normaliza chave
   const key = String(modalidade).toUpperCase();
-  // Busca parcial
-  for (const k in table) {
-    if (key.includes(k)) return table[k];
-  }
-  return 0;
-}
-
-function resolveUnitStake(apostaItem, totalItems, totalBetValue) {
-  // Tenta descobrir quanto vale essa aposta específica
-  // Se o front manda 'valor' no item:
-  if (apostaItem.valor) return Number(apostaItem.valor);
-  
-  // Se não, divide o total pelo número de itens
-  if (totalItems > 0) return totalBetValue / totalItems;
-  
+  for (const k in table) if (key.includes(k)) return table[k];
   return 0;
 }
 
 function checkVictory({ modal, palpites, premios }) {
-  // Lógica Simplificada de Vitória
-  // Retorna fator multiplicador (0 = perdeu, 1 = ganhou 1x, etc)
-  
   let factor = 0;
   const m = String(modal).toUpperCase();
   const cleanPalpites = palpites.map(p => String(p).replace(/\D/g, ''));
 
-  // 1. MILHAR (Cabeça / 1º premio)
   if (m.includes('MILHAR')) {
-    // Verifica apenas no 1º prêmio (índice 0) se for seco
-    // Se for do 1 ao 5, verifica em todos.
-    // Vamos assumir "1 ao 5" se não especificado, ou ajustar conforme sua regra.
-    // REGRA PADRÃO COMUM: Se acertar a milhar na cabeça
     if (cleanPalpites.includes(premios[0])) factor += 1;
-    
-    // Se a aposta for "pelos 5", o payout deve ser dividido por 5 lá na cotação
-    // ou aqui detectamos e ajustamos.
   }
-  
-  // 2. CENTENA
   else if (m.includes('CENTENA')) {
     const centenasPremios = premios.map(p => p.slice(-3));
-    // Verifica cabeça
     if (cleanPalpites.includes(centenasPremios[0])) factor += 1;
   }
-
-  // 3. GRUPO
   else if (m.includes('GRUPO')) {
-    // Grupo = (Dezena do premio / 4) arredondado pra cima
-    // Ex: 25 -> Gr 7.  00 -> Gr 25.
     const getGrp = (n) => {
       const d = parseInt(n.slice(-2));
       if (d === 0) return '25';
       return String(Math.ceil(d / 4));
     };
     const gruposPremios = premios.map(getGrp);
-    
-    // Se for aposta seca (1º premio)
     if (cleanPalpites.includes(gruposPremios[0])) factor += 1;
   }
-
-  // ... Adicione outras lógicas (Duque, Terno) aqui conforme necessário
-
   return { factor };
 }
