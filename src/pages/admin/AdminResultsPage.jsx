@@ -4,19 +4,19 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
-import { getNomeBicho } from '../../utils/bichos';
 
-// --- CONFIGURAÇÃO VISUAL DAS LOTERIAS ---
+// --- CONFIGURAÇÃO VISUAL DAS LOTERIAS (PADRONIZADA COM O USUÁRIO) ---
 const LOTERIAS_FIXAS = [
-  { id: 'PT-RIO', label: 'PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
-  { id: 'LOOK', label: 'LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
-  { id: 'NACIONAL', label: 'NACIONAL', color: 'bg-orange-100 hover:bg-orange-200 text-orange-800 border-orange-300' },
+  { id: 'PT-RIO', label: 'LT PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
+  { id: 'LOOK', label: 'LT LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
+  { id: 'NACIONAL', label: 'LT NACIONAL', color: 'bg-orange-100 hover:bg-orange-200 text-orange-800 border-orange-300' },
   { id: 'FEDERAL', label: 'FEDERAL', color: 'bg-green-100 hover:bg-green-200 text-green-800 border-green-300' },
-  { id: 'LOTEP', label: 'LOTEP', color: 'bg-purple-100 hover:bg-purple-200 text-purple-800 border-purple-300' },
-  { id: 'BAND', label: 'BAND', color: 'bg-red-100 hover:bg-red-200 text-red-800 border-red-300' },
-  { id: 'MALUCA', label: 'MALUCA', color: 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border-yellow-300' },
-  { id: 'ALVORADA', label: 'ALVORADA', color: 'bg-cyan-100 hover:bg-cyan-200 text-cyan-800 border-cyan-300' },
-  { id: 'MINAS', label: 'MINAS', color: 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300' },
+  { id: 'LOTEP', label: 'LT LOTEP', color: 'bg-purple-100 hover:bg-purple-200 text-purple-800 border-purple-300' },
+  { id: 'BAND', label: 'LT BAND', color: 'bg-red-100 hover:bg-red-200 text-red-800 border-red-300' },
+  { id: 'MALUCA', label: 'LT MALUQ RIO', color: 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border-yellow-300' },
+  { id: 'ALVORADA', label: 'LT ALVORADA', color: 'bg-cyan-100 hover:bg-cyan-200 text-cyan-800 border-cyan-300' },
+  { id: 'MINAS', label: 'LT MINAS', color: 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300' },
+  { id: 'BAHIA', label: 'LT BAHIA', color: 'bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border-indigo-300' },
   { id: 'OUTRA', label: 'OUTRA (DIGITAR)', color: 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300' },
 ];
 
@@ -35,11 +35,11 @@ const AdminResultsPage = () => {
   // --- ESTADOS DE DADOS ---
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null); // ID sendo processado
+  const [actionLoading, setActionLoading] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // --- ESTADOS DE UI (NOVO DESIGN) ---
+  // --- ESTADOS DE UI ---
   const [view, setView] = useState('dashboard'); // 'dashboard' | 'form'
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState({ title: '', text: '' });
@@ -50,10 +50,9 @@ const AdminResultsPage = () => {
   const [inputDate, setInputDate] = useState(todayStr);
   const [inputTime, setInputTime] = useState('');
   const [customLotteryName, setCustomLotteryName] = useState('');
-  const [rawInput, setRawInput] = useState(''); // Campo de colar rápido
+  const [rawInput, setRawInput] = useState('');
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
 
-  // --- FUNÇÕES DE BUSCA E AÇÃO ---
   const fetchResults = async () => {
     setLoading(true);
     setError('');
@@ -115,9 +114,8 @@ const AdminResultsPage = () => {
     }
   };
 
-  // --- FUNÇÕES DO NOVO FORMULÁRIO ---
-  const handleStartAdd = (lotteryId) => {
-    setSelectedLottery(lotteryId);
+  const handleStartAdd = (lotteryLabel) => {
+    setSelectedLottery(lotteryLabel);
     setCustomLotteryName('');
     setEditingId(null);
     setPrizes(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
@@ -130,13 +128,16 @@ const AdminResultsPage = () => {
   const handleEdit = (r) => {
     const nums = r.numeros || [];
     const grps = r.grupos || [];
+    
     const newPrizes = Array.from({ length: 7 }, (_, i) => ({
       numero: nums[i] ? String(nums[i]) : '',
-      grupo: grps[i] ? String(grps[i]) : '',
+      grupo: grps[i] ? String(grps[i]) : ''
     }));
+    
     setPrizes(newPrizes);
-
-    const knownLottery = LOTERIAS_FIXAS.find((l) => l.label === r.loteria);
+    
+    // Tenta encontrar na lista fixa, senão joga pra "OUTRA"
+    const knownLottery = LOTERIAS_FIXAS.find(l => l.label === r.loteria);
     if (knownLottery) {
       setSelectedLottery(knownLottery.label);
     } else {
@@ -144,8 +145,8 @@ const AdminResultsPage = () => {
       setCustomLotteryName(r.loteria);
     }
 
-    const dateFormatted = r.dataJogo?.includes('/') ? r.dataJogo.split('/').reverse().join('-') : r.dataJogo;
-    setInputDate(dateFormatted || todayStr);
+    const dateFormatted = r.dataJogo.includes('/') ? r.dataJogo.split('/').reverse().join('-') : r.dataJogo;
+    setInputDate(dateFormatted);
     setInputTime(r.codigoHorario || '');
     setEditingId(r.id || r._id);
     setView('form');
@@ -184,6 +185,7 @@ const AdminResultsPage = () => {
         newPrizes[i].grupo = calcGroup;
         cursor += numLength;
 
+        // Pula grupo se estiver colado junto
         const nextTwo = cleanData.substr(cursor, 2);
         const nextOne = cleanData.substr(cursor, 1);
         const padGroup = calcGroup.padStart(2, '0');
@@ -207,8 +209,8 @@ const AdminResultsPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const numeros = prizes.map((p) => p.numero).filter(Boolean);
-    const grupos = prizes.map((p) => p.grupo).filter(Boolean);
+    const numeros = prizes.map(p => p.numero).filter(Boolean);
+    const grupos = prizes.map(p => p.grupo).filter(Boolean);
 
     if (!numeros.length) {
       alert('Preencha pelo menos um número.');
@@ -216,12 +218,14 @@ const AdminResultsPage = () => {
     }
 
     const finalLotteryName = selectedLottery === 'OUTRA' ? customLotteryName : selectedLottery;
+    
+    // Normalização extra de segurança
     const payload = {
-      loteria: finalLotteryName,
+      loteria: finalLotteryName.trim(), 
       dataJogo: inputDate.split('-').reverse().join('/'),
       codigoHorario: inputTime,
       numeros,
-      grupos,
+      grupos
     };
 
     try {
@@ -255,11 +259,7 @@ const AdminResultsPage = () => {
       }
     >
       {(error || success) && (
-        <div
-          className={`mb-4 border-l-4 p-3 rounded-r shadow-sm ${
-            error ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'
-          }`}
-        >
+        <div className={`mb-4 border-l-4 p-3 rounded-r shadow-sm ${error ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'}`}>
           <p className="font-bold">{error ? 'Erro' : 'Sucesso'}</p>
           <p>{error || success}</p>
         </div>
@@ -272,7 +272,7 @@ const AdminResultsPage = () => {
               <button
                 key={lot.id}
                 onClick={() => handleStartAdd(lot.label)}
-                className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md`}
+                className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md text-center px-1`}
               >
                 {lot.label}
               </button>
@@ -280,76 +280,72 @@ const AdminResultsPage = () => {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">Histórico de Lançamentos</div>
+            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">
+              Histórico de Lançamentos
+            </div>
             {loading ? (
-              <div className="p-8 flex justify-center">
-                <Spinner size={32} />
-              </div>
+              <div className="p-8 flex justify-center"><Spinner size={32} /></div>
             ) : (
               <AdminTable headers={['Data', 'Loteria/Hora', 'Resultados', 'Grupos', 'Ações']}>
                 {results.length === 0 ? (
-                  <AdminTableRow>
-                    <AdminTableCell colSpan={5} className="text-center py-4">
-                      Nenhum resultado.
-                    </AdminTableCell>
-                  </AdminTableRow>
-                ) : (
-                  results.map((r) => {
-                    const nums = r.numeros || [];
-                    const grps = r.grupos || [];
-                    return (
-                      <AdminTableRow key={r.id || r._id}>
-                        <AdminTableCell className="font-semibold">{r.dataJogo}</AdminTableCell>
-                        <AdminTableCell>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-emerald-700">{r.loteria}</span>
-                            <span className="text-xs text-slate-500">{r.codigoHorario}</span>
-                          </div>
-                        </AdminTableCell>
-                        <AdminTableCell>
-                          <div className="flex flex-wrap gap-1 max-w-xs font-mono text-xs">{nums.join(' - ')}</div>
-                        </AdminTableCell>
-                        <AdminTableCell>
-                          <div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div>
-                        </AdminTableCell>
-                        <AdminTableCell>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => settleResult(r.id || r._id)}
-                              disabled={actionLoading === (r.id || r._id)}
-                              title="Liquidar Apostas"
-                              className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"
-                            >
-                              <FaCheck />
-                            </button>
-                            <button
-                              onClick={() => generatePule(r.id || r._id)}
-                              disabled={actionLoading === (r.id || r._id)}
-                              title="Gerar PDF Pule"
-                              className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                            >
-                              <FaReceipt />
-                            </button>
-                            <button
-                              onClick={() => handleEdit(r)}
-                              title="Editar"
-                              className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-                            >
-                              <FaEdit />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(r.id || r._id)}
-                              title="Excluir"
-                              className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                            >
-                              <FaTrash />
-                            </button>
-                          </div>
-                        </AdminTableCell>
-                      </AdminTableRow>
-                    );
-                  })
-                )}
+                  <AdminTableRow><AdminTableCell colSpan={5} className="text-center py-4">Nenhum resultado.</AdminTableCell></AdminTableRow>
+                ) : results.map(r => {
+                  const nums = r.numeros || [];
+                  const grps = r.grupos || [];
+                  return (
+                    <AdminTableRow key={r.id || r._id}>
+                      <AdminTableCell className="font-semibold">{r.dataJogo}</AdminTableCell>
+                      <AdminTableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-emerald-700">{r.loteria}</span>
+                          <span className="text-xs text-slate-500">{r.codigoHorario}</span>
+                        </div>
+                      </AdminTableCell>
+                      <AdminTableCell>
+                        <div className="flex flex-wrap gap-1 max-w-xs font-mono text-xs">
+                           {nums.join(' - ')}
+                        </div>
+                      </AdminTableCell>
+                      <AdminTableCell>
+                        <div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div>
+                      </AdminTableCell>
+                      <AdminTableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => settleResult(r.id || r._id)}
+                            disabled={actionLoading === (r.id || r._id)}
+                            title="Liquidar Apostas"
+                            className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"
+                          >
+                             <FaCheck />
+                          </button>
+                          <button
+                            onClick={() => generatePule(r.id || r._id)}
+                            disabled={actionLoading === (r.id || r._id)}
+                            title="Gerar PDF Pule"
+                            className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                          >
+                             <FaReceipt />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(r)}
+                            title="Editar"
+                            className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                          >
+                             <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(r.id || r._id)}
+                            title="Excluir"
+                            className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                          >
+                             <FaTrash />
+                          </button>
+                        </div>
+                      </AdminTableCell>
+                    </AdminTableRow>
+                  );
+                })}
               </AdminTable>
             )}
           </div>
@@ -359,116 +355,84 @@ const AdminResultsPage = () => {
       {view === 'form' && (
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
           <div className="bg-emerald-700 text-white p-4 flex justify-between items-center">
-            <button onClick={handleBack} className="flex items-center gap-2 font-bold hover:text-emerald-200">
-              <FaArrowLeft /> Voltar
-            </button>
-            <h2 className="text-xl font-black uppercase">
-              {selectedLottery === 'OUTRA' ? customLotteryName || 'Nova Loteria' : selectedLottery}
-            </h2>
-            <div className="w-16" />
+             <button onClick={handleBack} className="flex items-center gap-2 font-bold hover:text-emerald-200"><FaArrowLeft /> Voltar</button>
+             <h2 className="text-xl font-black uppercase">{selectedLottery === 'OUTRA' ? (customLotteryName || 'Nova Loteria') : selectedLottery}</h2>
+             <div className="w-16"></div>
           </div>
-
+          
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
-                <input
-                  type="date"
-                  value={inputDate}
-                  onChange={(e) => setInputDate(e.target.value)}
-                  className="w-full p-3 border rounded-xl"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
-                <input
-                  type="time"
-                  value={inputTime}
-                  onChange={(e) => setInputTime(e.target.value)}
-                  className="w-full p-3 border rounded-xl"
-                  required
-                />
-              </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
+                 <input type="date" value={inputDate} onChange={e => setInputDate(e.target.value)} className="w-full p-3 border rounded-xl" required />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
+                 <input type="text" value={inputTime} onChange={e => setInputTime(e.target.value)} placeholder="Ex: 11:00" className="w-full p-3 border rounded-xl" required />
+               </div>
             </div>
 
             {selectedLottery === 'OUTRA' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Loteria</label>
-                <input
-                  type="text"
-                  value={customLotteryName}
-                  onChange={(e) => setCustomLotteryName(e.target.value)}
-                  className="w-full p-3 border rounded-xl"
-                  placeholder="Digite o nome..."
-                  required
-                />
-              </div>
+               <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Loteria</label>
+                 <input type="text" value={customLotteryName} onChange={e => setCustomLotteryName(e.target.value)} className="w-full p-3 border rounded-xl" placeholder="Ex: LT PT RIO..." required />
+               </div>
             )}
 
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-              <label className="block text-xs font-bold text-emerald-800 uppercase mb-2">⚡ Colagem Rápida</label>
-              <textarea
-                value={rawInput}
-                onChange={handleSmartPaste}
-                placeholder="Cole a linha inteira aqui (Ex: 2690 1480...)"
-                className="w-full p-3 border border-emerald-300 rounded-lg font-mono text-sm h-20"
-              />
+               <label className="block text-xs font-bold text-emerald-800 uppercase mb-2">⚡ Colagem Rápida</label>
+               <textarea 
+                  value={rawInput} 
+                  onChange={handleSmartPaste} 
+                  placeholder="Cole a linha inteira aqui (Ex: 2690 1480...)" 
+                  className="w-full p-3 border border-emerald-300 rounded-lg font-mono text-sm h-20" 
+               />
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <div className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-2 font-black text-xs text-slate-500 uppercase text-center">
-                <span>#</span>
-                <span>Milhar</span>
-                <span>Grupo</span>
-              </div>
-              {prizes.map((prize, idx) => (
-                <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-3 items-center">
-                  <span className="text-center font-bold text-slate-400">{idx + 1}º</span>
-                  <input
-                    value={prize.numero}
-                    onChange={(e) => handleChangePrize(idx, 'numero', e.target.value)}
-                    className="p-3 border-2 border-slate-200 rounded-lg text-center font-mono text-lg font-bold"
-                    maxLength={4}
-                    placeholder="0000"
-                  />
-                  <input
-                    value={prize.grupo}
-                    onChange={(e) => handleChangePrize(idx, 'grupo', e.target.value)}
-                    className="p-3 border-2 border-slate-200 rounded-lg text-center font-bold text-lg bg-slate-200"
-                    maxLength={2}
-                    placeholder="Gr"
-                  />
-                </div>
-              ))}
+               <div className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-2 font-black text-xs text-slate-500 uppercase text-center">
+                  <span>#</span><span>Milhar</span><span>Grupo</span>
+               </div>
+               {prizes.map((prize, idx) => (
+                  <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-4 mb-3 items-center">
+                     <span className="text-center font-bold text-slate-400">{idx + 1}º</span>
+                     <input 
+                       value={prize.numero} 
+                       onChange={e => handleChangePrize(idx, 'numero', e.target.value)} 
+                       className="p-3 border-2 border-slate-200 rounded-lg text-center font-mono text-lg font-bold" 
+                       maxLength={4} 
+                       placeholder="0000" 
+                     />
+                     <input 
+                       value={prize.grupo} 
+                       onChange={e => handleChangePrize(idx, 'grupo', e.target.value)} 
+                       className="p-3 border-2 border-slate-200 rounded-lg text-center font-bold text-lg bg-slate-200" 
+                       maxLength={2} 
+                       placeholder="Gr" 
+                     />
+                  </div>
+               ))}
             </div>
 
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition"
-            >
-              {editingId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR RESULTADO'}
+            <button type="submit" className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition">
+               {editingId ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR RESULTADO'}
             </button>
           </form>
         </div>
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-bounce-in">
-            <div className="text-4xl mb-4">✅</div>
-            <h2 className="text-2xl font-black text-slate-800">{modalMessage.title}</h2>
-            <p className="text-slate-500 mb-8">{modalMessage.text}</p>
-            <div className="space-y-3">
-              <button onClick={handleAddAnother} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">
-                ADICIONAR OUTRO
-              </button>
-              <button onClick={handleBack} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">
-                VOLTAR AO INÍCIO
-              </button>
+         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-bounce-in">
+               <div className="text-4xl mb-4">✅</div>
+               <h2 className="text-2xl font-black text-slate-800">{modalMessage.title}</h2>
+               <p className="text-slate-500 mb-8">{modalMessage.text}</p>
+               <div className="space-y-3">
+                  <button onClick={handleAddAnother} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">ADICIONAR OUTRO</button>
+                  <button onClick={handleBack} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">VOLTAR AO INÍCIO</button>
+               </div>
             </div>
-          </div>
-        </div>
+         </div>
       )}
     </AdminLayout>
   );
