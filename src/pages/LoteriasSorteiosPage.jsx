@@ -146,6 +146,7 @@ const LoteriasSorteiosPage = () => {
     const day = base.getDay();
     return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
   }, [selectedDate]);
+  const isFederalDay = selectedDay === 3 || selectedDay === 6;
 
   const isPastHorario = (h) => {
     if (!isToday) return false;
@@ -156,7 +157,7 @@ const LoteriasSorteiosPage = () => {
 
   const adjustHorarios = (lot) => {
     const list = Array.isArray(lot.horarios) ? lot.horarios : [];
-    const isWedOrSat = selectedDay === 3 || selectedDay === 6;
+    const isWedOrSat = isFederalDay;
 
     if (!isWedOrSat) {
       // Fora dos dias de Federal, remove horários federais se aparecerem por algum motivo
@@ -208,6 +209,13 @@ const LoteriasSorteiosPage = () => {
           Voltar
         </button>
       </div>
+
+      {/* Aviso de UX em dia de Federal */}
+      {isFederalDay && (
+        <div style={{ width: '100%', maxWidth: '520px', background: '#FEF3C7', border: '1px solid #F59E0B', color: '#92400E', borderRadius: '12px', padding: '10px 12px', fontSize: '12px', fontWeight: 'bold' }}>
+          Dia de FEDERAL (Quarta/Sábado): horários 18h de PT RIO e MALUQ ficam indisponíveis, use FEDERAL 20h.
+        </div>
+      )}
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
