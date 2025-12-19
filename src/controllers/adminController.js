@@ -78,17 +78,48 @@ function checkVictory({ modal, palpites, premios }) {
 // 1. DASHBOARD
 exports.getDashboardStats = async (req, res) => {
   try {
-    const totalUsers = await prisma.user.count();
-    const totalBets = await prisma.bet.count();
-    let totalBalance = 0;
-    try {
-        const ag = await prisma.user.aggregate({ _sum: { balance: true } });
-        totalBalance = ag._sum.balance || 0;
-    } catch(e) {}
-    res.json({ totalUsers, totalBets, totalBalance, netProfit: 0 });
+    const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers] = await Promise.all([
+      prisma.user.aggregate({ _sum: { balance: true, bonus: true } }),
+      prisma.bet.aggregate({ _sum: { total: true } }),
+      prisma.withdrawalRequest.aggregate({
+        where: { status: { in: ['pending', 'approved'] } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      prisma.bet.count(),
+      prisma.user.count(),
+    ]);
+
+    const totalBalance = Number(usersAgg._sum.balance || 0);
+    const totalBonus = Number(usersAgg._sum.bonus || 0);
+    const platformFunds = Number(betsAgg._sum.total || 0);
+    const pendingWithdrawals = {
+      amount: Number(withdrawalsAgg._sum.amount || 0),
+      count: withdrawalsAgg._count?._all || 0,
+    };
+
+    res.json({
+      totalUsers,
+      betsCount,
+      platformFunds,
+      moneyOut: { bets: platformFunds },
+      wallets: {
+        saldo: totalBalance,
+        bonus: totalBonus,
+        total: totalBalance + totalBonus,
+      },
+      pendingWithdrawals,
+    });
   } catch (error) {
     console.error('Erro dashboard:', error);
-    res.json({ totalUsers: 0, totalBets: 0, totalBalance: 0 });
+    res.json({
+      totalUsers: 0,
+      betsCount: 0,
+      platformFunds: 0,
+      moneyOut: { bets: 0 },
+      wallets: { saldo: 0, bonus: 0, total: 0 },
+      pendingWithdrawals: { amount: 0, count: 0 },
+    });
   }
 };
 
@@ -155,14 +186,19 @@ exports.listWithdrawals = async (req, res) => {
 // 5. SUPERVISORES
 exports.listSupervisors = async (req, res) => {
   try {
-    const sups = await prisma.supervisor.findMany({
+    const page = Number(req.query.page) || 1;
+    const pageSize = 50;
+    const supervisors = await prisma.supervisor.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { user: true } 
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { users: { select: { id: true, name: true, phone: true } } },
     });
-    res.json(sups); 
+    const total = await prisma.supervisor.count();
+    res.json({ supervisors, total, page });
   } catch (error) {
     console.warn('Tabela Supervisor não encontrada:', error.message);
-    res.json([]);
+    res.json({ supervisors: [], total: 0, page: 1 });
   }
 };
 
