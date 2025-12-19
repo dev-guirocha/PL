@@ -25,7 +25,12 @@ const normalizeDate = (dateStr) => {
 };
 
 const getLotteryKey = (name) => {
-  return String(name || '').toUpperCase().replace('FEDERAL', '').replace('RIO', '').replace(/^LT/, '').replace(/[^A-Z0-9]/g, '');
+  return String(name || '')
+    .toUpperCase()
+    .replace('FEDERAL', '')
+    .replace('RIO', '')
+    .replace(/^LT\s*/, '')
+    .replace(/[^A-Z0-9]/g, '');
 };
 
 const isFederal = (name) => String(name).toUpperCase().includes('FEDERAL');
@@ -218,6 +223,14 @@ exports.createResult = async (req, res) => {
         grupos: gruposString || '[]' 
       },
     });
+
+    // Auto-liquidação após cadastrar resultado (sem mudar o contrato do endpoint)
+    try {
+      await settleBetsForResultId(result.id);
+    } catch (e) {
+      console.error('⚠️ Auto-liquidação falhou:', e?.message || e);
+    }
+
     res.status(201).json(result);
   } catch (error) {
     console.error(error);
@@ -280,96 +293,134 @@ exports.generatePule = async (req, res) => {
 };
 
 // 8. LIQUIDAÇÃO
+/**
+ * Liquida todas as apostas abertas compatíveis com um resultado.
+ * Retorna um summary (na prática idempotente, pois só processa status='open').
+ */
+async function settleBetsForResultId(id) {
+  console.log(`\n🚀 [V11-STRINGIFY] LIQUIDANDO RESULTADO ID: ${id}`);
+
+  const result = await prisma.result.findUnique({ where: { id } });
+  if (!result) {
+    const err = new Error('Resultado não encontrado');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const resDate = normalizeDate(result.dataJogo);
+  const resHour = extractHour(result.codigoHorario);
+  const resKey = getLotteryKey(result.loteria);
+  const resIsFed = isFederal(result.loteria);
+  const resIsMaluq = isMaluquinha(result.loteria);
+
+  const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
+
+  const bets = await prisma.bet.findMany({
+    where: {
+      status: 'open',
+      dataJogo: resDate,
+      codigoHorario: { contains: resHour },
+    },
+  });
+
+  console.log(`🔎 Analisando ${bets.length} apostas abertas...`);
+
+  for (const bet of bets) {
+    try {
+      const betKey = getLotteryKey(bet.loteria);
+      const betIsFed = isFederal(bet.loteria);
+      const betIsMaluq = isMaluquinha(bet.loteria);
+
+      let match = false;
+      if (resIsFed) {
+        if (betIsFed) match = true;
+      } else if (resIsMaluq) {
+        if (betIsMaluq) match = true;
+      } else {
+        if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
+        if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) match = true;
+      }
+
+      if (!match) continue;
+
+      console.log(`✅ MATCH! Aposta #${bet.id}`);
+      summary.totalBets++;
+
+      const apostas = parseApostasFromBet(bet);
+      if (!apostas || !apostas.length) {
+        await prisma.bet.update({
+          where: { id: bet.id },
+          data: { status: 'nao premiado', settledAt: new Date(), resultId: id, prize: 0 },
+        });
+        summary.processed++;
+        continue;
+      }
+
+      let premios = [];
+      try {
+        const n = typeof result.numeros === 'string' ? JSON.parse(result.numeros) : result.numeros;
+        if (Array.isArray(n)) premios = n.map(x => String(x).replace(/\D/g, '')).filter(Boolean);
+      } catch {
+        premios = [];
+      }
+
+      const payoutFactor = resolvePayout(bet.modalidade);
+      let finalPrize = 0;
+
+      const victory = checkVictory({
+        modal: bet.modalidade,
+        palpites: apostas,
+        premios,
+      });
+
+      if (victory?.factor > 0) {
+        finalPrize = Number(bet.valor || bet.total || 0) * Number(payoutFactor || 0) * Number(victory.factor || 1);
+      }
+
+      const status = finalPrize > 0 ? 'won' : 'nao premiado';
+
+      await prisma.$transaction(async (tx) => {
+        await tx.bet.update({
+          where: { id: bet.id },
+          data: { status, prize: finalPrize, settledAt: new Date(), resultId: id },
+        });
+
+        if (finalPrize > 0) {
+          await tx.user.update({
+            where: { id: bet.userId },
+            data: { balance: { increment: finalPrize } },
+          });
+
+          await tx.transaction.create({
+            data: {
+              userId: bet.userId,
+              type: 'prize',
+              amount: finalPrize,
+              description: `Prêmio ${bet.modalidade} (${bet.id})`,
+            },
+          });
+        }
+      });
+
+      summary.processed++;
+      if (finalPrize > 0) summary.wins++;
+    } catch (innerErr) {
+      summary.errors.push({ id: bet.id, msg: innerErr?.message || String(innerErr) });
+    }
+  }
+
+  return summary;
+}
+
 exports.settleBetsForResult = async (req, res) => {
   const id = Number(req.params.id);
-  console.log(`\n🚀 [V11-STRINGIFY] LIQUIDANDO RESULTADO ID: ${id}`);
-  
   try {
-    const result = await prisma.result.findUnique({ where: { id } });
-    if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
-
-    const resDate = normalizeDate(result.dataJogo);
-    const resHour = extractHour(result.codigoHorario);
-    const resIsFed = isFederal(result.loteria);
-    const resIsMaluq = isMaluquinha(result.loteria);
-    const resKey = getLotteryKey(result.loteria); 
-
-    console.log(`📊 GABARITO: Data=[${resDate}] Hora=[${resHour}] Tipo=[${resIsFed ? 'FED' : resIsMaluq ? 'MALUQ' : resKey}] String=[${result.loteria}]`);
-
-    let numerosSorteados = [];
-    try {
-      numerosSorteados = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros);
-    } catch { numerosSorteados = []; }
-    const premios = numerosSorteados.map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'));
-
-    const bets = await prisma.bet.findMany({ where: { status: 'open' }, include: { user: true } });
-    console.log(`🔎 Analisando ${bets.length} apostas abertas...`);
-    const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
-
-    for (const bet of bets) {
-      try {
-        const betDate = normalizeDate(bet.dataJogo);
-        const betHour = extractHour(bet.codigoHorario);
-        if (betDate !== resDate) continue;
-        if (betHour !== resHour) continue; 
-
-        const betIsFed = isFederal(bet.loteria);
-        const betIsMaluq = isMaluquinha(bet.loteria);
-        const betKey = getLotteryKey(bet.loteria);
-        let match = false;
-
-        if (resIsFed) { if (betIsFed) match = true; } 
-        else if (resIsMaluq) { if (betIsMaluq) match = true; } 
-        else {
-          if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
-          if (!match && (result.loteria.includes(bet.loteria) || bet.loteria.includes(result.loteria))) match = true;
-        }
-
-        if (!match) continue;
-        console.log(`✅ MATCH! Aposta #${bet.id}`);
-        summary.totalBets++;
-
-        const apostas = parseApostasFromBet(bet);
-        if (!apostas || !apostas.length) {
-           await prisma.bet.update({ where: { id: bet.id }, data: { status: 'nao premiado', settledAt: new Date(), resultId: id } });
-           summary.processed++;
-           continue;
-        }
-
-        let prize = 0;
-        apostas.forEach((aposta) => {
-          const modal = aposta.modalidade || bet.modalidade;
-          const payout = resolvePayout(modal);
-          if (payout > 0) {
-              const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-              const totalPalpitesNaBet = apostas.reduce((acc, curr) => acc + (curr.palpites?.length || 0), 0);
-              const unitStake = bet.total / (totalPalpitesNaBet > 0 ? totalPalpitesNaBet : 1);
-              const { factor } = checkVictory({ modal, palpites, premios });
-              if (factor > 0) prize += unitStake * payout * factor;
-          }
-        });
-
-        const finalPrize = Number(prize.toFixed(2));
-        const status = finalPrize > 0 ? 'won' : 'nao premiado';
-
-        await prisma.$transaction(async (tx) => {
-          await tx.bet.update({ where: { id: bet.id }, data: { status, prize: finalPrize, settledAt: new Date(), resultId: id } });
-          if (finalPrize > 0) {
-            await tx.user.update({ where: { id: bet.userId }, data: { balance: { increment: finalPrize } } });
-            await tx.transaction.create({ data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio ${bet.modalidade} (${bet.id})` } });
-          }
-        });
-
-        summary.processed++;
-        if (finalPrize > 0) summary.wins++;
-      } catch (innerErr) {
-        summary.errors.push({ id: bet.id, msg: innerErr.message });
-      }
-    }
-    res.json({ message: 'Processamento concluído', summary });
+    const summary = await settleBetsForResultId(id);
+    return res.json({ message: 'Processamento concluído', summary });
   } catch (err) {
-    console.error('Erro fatal:', err);
-    res.status(500).json({ error: 'Erro interno.' });
+    console.error('❌ Erro ao liquidar:', err);
+    const status = err.statusCode || 500;
+    return res.status(status).json({ error: err.message || 'Erro ao liquidar apostas.' });
   }
 };
 

@@ -5,6 +5,7 @@ const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT |
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 const TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_GRACE_MINUTES = 10;
+const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
 
 const betPayloadSchema = z.object({
   loteria: z.string().min(1, 'Loteria é obrigatória'),
@@ -41,6 +42,21 @@ const parseNowInTimezone = () => {
   const now = new Date();
   const tzString = now.toLocaleString('en-US', { timeZone: TIMEZONE });
   return new Date(tzString);
+};
+
+const getHourFromCode = (codigoHorario) => {
+  if (!codigoHorario) return null;
+  const m = String(codigoHorario).match(/(\d{1,2})/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  return Number.isNaN(h) ? null : h;
+};
+
+const getDayFromDateStr = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  return Number.isNaN(day) ? null : day;
 };
 
 const isBettingAllowed = (codigoHorario, dataJogoStr) => {
@@ -125,6 +141,22 @@ exports.create = async (req, res) => {
 
   const { loteria, codigoHorario, apostas } = parsed.data;
   const dataJogo = apostas[0].data;
+
+  // Regras FEDERAL (UX + backend)
+  const isFederalBet = /FEDERAL/i.test(codigoHorario) || /FEDERAL/i.test(loteria);
+  const day = getDayFromDateStr(dataJogo);
+  const hour = getHourFromCode(codigoHorario);
+  const isFederalDay = day !== null && FEDERAL_DAYS.includes(day);
+
+  if (isFederalBet) {
+    if (!isFederalDay || hour !== 20) {
+      return res.status(400).json({ error: 'Aposta FEDERAL permitida apenas quarta/sábado às 20H.' });
+    }
+  }
+
+  if (isFederalDay && hour === 18 && /PT[\s-]*RIO|MALUQ/i.test(loteria)) {
+    return res.status(400).json({ error: 'Em dia de Federal, use o horário das 20H (Federal) em vez de 18HS.' });
+  }
 
   if (!isBettingAllowed(codigoHorario, dataJogo)) {
     return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorario} do dia ${dataJogo}.` });

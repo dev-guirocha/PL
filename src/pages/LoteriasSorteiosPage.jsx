@@ -157,14 +157,24 @@ const LoteriasSorteiosPage = () => {
   const adjustHorarios = (lot) => {
     const list = Array.isArray(lot.horarios) ? lot.horarios : [];
     const isWedOrSat = selectedDay === 3 || selectedDay === 6;
-    if (!isWedOrSat) return list;
+
+    if (!isWedOrSat) {
+      // Fora dos dias de Federal, remove horários federais se aparecerem por algum motivo
+      return list.filter((h) => !/FEDERAL/i.test(h));
+    }
 
     if (lot.slug === 'rio-federal') {
-      return list.map((h) => (h === 'LT PT RIO 18HS' ? 'FEDERAL 20H' : h));
+      // Em dia de Federal, troca 18HS por Federal 20H
+      const filtered = list.filter((h) => h !== 'LT PT RIO 18HS');
+      const withFederal = filtered.includes('FEDERAL 20H') ? filtered : [...filtered, 'FEDERAL 20H'];
+      return withFederal;
     }
 
     if (lot.slug === 'maluquinha') {
-      return list.map((h) => (h === 'LT MALUQ RIO 18HS' ? 'LT MALUQ FEDERAL 20HS' : h));
+      // Em dia de Federal, troca 18HS por MALUQ FEDERAL 20HS
+      const filtered = list.filter((h) => h !== 'LT MALUQ RIO 18HS');
+      const withFederal = filtered.includes('LT MALUQ FEDERAL 20HS') ? filtered : [...filtered, 'LT MALUQ FEDERAL 20HS'];
+      return withFederal;
     }
 
     return list;
