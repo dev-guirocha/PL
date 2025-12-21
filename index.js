@@ -40,7 +40,8 @@ const wildcardOrigins = [
   /\.up\.railway\.app$/,
 ];
 const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
-const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
+// Une origens padrão com as fornecidas por ambiente para não bloquear localhost durante QA
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
 app.use(helmet());
 app.use(compression());
