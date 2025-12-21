@@ -184,13 +184,21 @@ const LoteriasSorteiosPage = () => {
     return list;
   };
 
-  const toggleSelection = (slug, nome, horario) => {
-    const key = `${slug}-${horario}`;
+  const splitHorario = (h) => {
+    const parts = String(h || '').trim().split(/\s+/);
+    const codigoHorario = parts.pop() || '';
+    const loteria = parts.join(' ').trim();
+    return { loteria: loteria || String(h || '').trim(), codigoHorario };
+  };
+
+  const toggleSelection = (slug, displayName, horarioCompleto) => {
+    const key = `${slug}-${horarioCompleto}`;
     const exists = selected.find((s) => s.key === key);
     if (exists) {
       setSelected(selected.filter((s) => s.key !== key));
     } else {
-      setSelected([...selected, { key, slug, nome, horario }]);
+      const { loteria, codigoHorario } = splitHorario(horarioCompleto);
+      setSelected([...selected, { key, slug, nome: loteria, horario: codigoHorario, originalHorario: horarioCompleto }]);
     }
   };
 
@@ -278,7 +286,7 @@ const LoteriasSorteiosPage = () => {
                 {expanded === lot.slug && (
                   <div style={styles.horarios}>
                     {horariosAjustados.map((h, idx) => {
-                      const isSelected = selected.some((s) => s.slug === lot.slug && s.horario === h);
+                      const isSelected = selected.some((s) => s.slug === lot.slug && s.originalHorario === h);
                       return (
                         <span
                           key={idx}
