@@ -27,7 +27,24 @@ export const BICHOS_NOME = {
   25: 'Vaca',
 };
 
+// Recebe MILHAR ou DEZENA e retorna o GRUPO (1-25)
+export const getGrupoDoBicho = (numero) => {
+  const str = String(numero).padStart(2, '0');
+  const dezenaStr = str.slice(-2);
+  const dezena = parseInt(dezenaStr, 10);
+  if (Number.isNaN(dezena)) return null;
+  if (dezena === 0) return 25; // Vaca
+  return Math.ceil(dezena / 4);
+};
+
 export const getNomeBicho = (grupo) => {
   const g = parseInt(grupo, 10);
   return BICHOS_NOME[g] || '';
+};
+
+export const getNomeDoBicho = (numeroOrGrupo, isGrupo = false) => {
+  let grupo;
+  if (isGrupo) grupo = parseInt(numeroOrGrupo, 10);
+  else grupo = getGrupoDoBicho(numeroOrGrupo);
+  return BICHOS_NOME[grupo] || '';
 };

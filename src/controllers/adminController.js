@@ -1,7 +1,16 @@
 // src/controllers/adminController.js
-// VERSÃO V16 - Chaves seguras + datas flexíveis + colocação/payout + logs
+// VERSÃO V18 - Chaves seguras + datas flexíveis + colocação/payout + mapeamento direto de grupo
 
 const prisma = require('../utils/prismaClient');
+
+// Mapeamento fixo de grupo -> bicho (jogo do bicho)
+const BICHOS_NOME = {
+  1: 'Avestruz', 2: 'Águia', 3: 'Burro', 4: 'Borboleta', 5: 'Cachorro',
+  6: 'Cabra', 7: 'Carneiro', 8: 'Camelo', 9: 'Cobra', 10: 'Coelho',
+  11: 'Cavalo', 12: 'Elefante', 13: 'Galo', 14: 'Gato', 15: 'Jacaré',
+  16: 'Leão', 17: 'Macaco', 18: 'Porco', 19: 'Pavão', 20: 'Peru',
+  21: 'Touro', 22: 'Tigre', 23: 'Urso', 24: 'Veado', 25: 'Vaca',
+};
 
 // --- FUNÇÕES AUXILIARES ---
 const extractHour = (str) => {
@@ -54,14 +63,17 @@ function resolvePayout(modalidade) {
   return 0;
 }
 
-// NOVO: Converte número (00-99) para Grupo (1-25)
+// NOVO: Converte número (milhar ou dezena) para Grupo (1-25) usando a dezena final
 function getGrupoFromNumber(number) {
   const str = String(number).padStart(2, '0');
-  const last2 = parseInt(str.slice(-2), 10);
-  if (Number.isNaN(last2)) return null;
-  if (last2 === 0) return '25'; // Vaca
-  return String(Math.ceil(last2 / 4));
+  const dezenaStr = str.slice(-2); // pega exatamente os dois últimos dígitos
+  const dezena = parseInt(dezenaStr, 10);
+  if (Number.isNaN(dezena)) return null;
+  if (dezena === 0) return '25'; // Vaca (00)
+  return String(Math.ceil(dezena / 4));
 }
+
+const getNomeBicho = (grupo) => BICHOS_NOME[parseInt(grupo, 10)] || 'Desconhecido';
 
 // NOVO: Determina índices de prêmio baseado na colocação (String do banco)
 function getPrizeIndices(colocacao) {
@@ -263,8 +275,26 @@ exports.listSupervisors = async (req, res) => {
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
-    const numerosString = Array.isArray(numeros) ? JSON.stringify(numeros) : numeros;
-    const gruposString = Array.isArray(grupos) ? JSON.stringify(grupos) : grupos;
+    let numerosArray = [];
+    if (Array.isArray(numeros)) numerosArray = numeros;
+    else if (typeof numeros === 'string') {
+      try { numerosArray = JSON.parse(numeros); } catch { numerosArray = []; }
+    }
+
+    let gruposArray = [];
+    if (Array.isArray(grupos) && grupos.length) {
+      gruposArray = grupos;
+    } else {
+      gruposArray = numerosArray
+        .map((milhar) => {
+          const dezena = String(milhar).padStart(4, '0').slice(-2);
+          return getGrupoFromNumber(dezena);
+        })
+        .filter(Boolean);
+    }
+
+    const numerosString = JSON.stringify(numerosArray);
+    const gruposString = JSON.stringify(gruposArray);
 
     const result = await prisma.result.create({
       data: { 
@@ -350,7 +380,7 @@ exports.generatePule = async (req, res) => {
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [V16-FINAL] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V18-DIRETO] LIQUIDANDO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) throw new Error('Resultado não encontrado');
@@ -362,6 +392,23 @@ async function settleBetsForResultId(id) {
   const resKey = getLotteryKey(result.loteria);
 
   console.log(`🔎 FILTRO: Data [${datesToSearch.join(', ')}] | Hora [${resHour}] | Chave [${resKey}]`);
+
+  // Log de conferência das milhares -> dezena -> grupo
+  try {
+    const nums = typeof result.numeros === 'string' ? JSON.parse(result.numeros) : result.numeros;
+    console.log('🎲 SORTEIO (Milhar -> Dezena -> Grupo/Bicho):');
+    if (Array.isArray(nums)) {
+      nums.forEach((milhar, idx) => {
+        const milharStr = String(milhar).padStart(4, '0');
+        const dezena = milharStr.slice(-2);
+        const grp = getGrupoFromNumber(dezena);
+        const bicho = getNomeBicho(grp);
+        console.log(`   ${idx + 1}º: ${milharStr} => Dezena ${dezena} => Grupo ${grp} (${bicho})`);
+      });
+    }
+  } catch (e) {
+    console.warn('Não foi possível logar grupos do resultado:', e?.message || e);
+  }
 
   const bets = await prisma.bet.findMany({
     where: {
