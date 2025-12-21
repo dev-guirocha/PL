@@ -345,37 +345,25 @@ exports.generatePule = async (req, res) => {
   }
 };
 
-// 8. LIQUIDAÇÃO (CORRIGIDA DATA V14)
+// 8. LIQUIDAÇÃO (VERSÃO DIAGNÓSTICO DE MATCH V15)
 /**
  * Liquida todas as apostas abertas compatíveis com um resultado.
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [V14-FIX-DATA] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V15-DEBUG-MATCH] LIQUIDANDO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
-  if (!result) {
-    const err = new Error('Resultado não encontrado');
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!result) throw new Error('Resultado não encontrado');
 
-  // 1. Prepara as variações de data para buscar (ISO e Original)
   const resDateISO = normalizeDate(result.dataJogo);
   const resDateOriginal = result.dataJogo;
   const datesToSearch = [resDateISO, resDateOriginal].filter((d, i, self) => d && self.indexOf(d) === i);
-
   const resHour = extractHour(result.codigoHorario);
+
   const resKey = getLotteryKey(result.loteria);
-  const resIsFed = isFederal(result.loteria);
-  const resIsMaluq = isMaluquinha(result.loteria);
+  console.log(`🔑 CHAVE DO RESULTADO: "${resKey}" (Nome Original: "${result.loteria}")`);
 
-  console.log('🔎 BUSCANDO APOSTAS:');
-  console.log(`   - Datas Possíveis: ${JSON.stringify(datesToSearch)}`);
-  console.log(`   - Hora (Filtro): Contém "${resHour}"`);
-  console.log(`   - Loteria Result: "${result.loteria}"`);
-
-  // 2. Busca no Banco aceitando múltiplos formatos de data
   const bets = await prisma.bet.findMany({
     where: {
       status: 'open',
@@ -384,31 +372,52 @@ async function settleBetsForResultId(id) {
     },
   });
 
-  console.log(`📦 APOSTAS ENCONTRADAS: ${bets.length}`);
+  console.log(`📦 APOSTAS PRELIMINARES (Data/Hora): ${bets.length}`);
 
   const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
   for (const bet of bets) {
-    try {
-      // 3. Match de Loteria
-      const betKey = getLotteryKey(bet.loteria);
-      const betIsFed = isFederal(bet.loteria);
-      const betIsMaluq = isMaluquinha(bet.loteria);
+    console.log(`\n--- Analisando Aposta #${bet.id} ---`);
+    console.log(`   Nome na Aposta: "${bet.loteria}"`);
 
-      let match = false;
-      if (resIsFed) {
-        if (betIsFed) match = true;
-      } else if (resIsMaluq) {
-        if (betIsMaluq) match = true;
-      } else {
-        if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
-        if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) match = true;
+    const betKey = getLotteryKey(bet.loteria);
+    console.log(`   Chave Gerada:   "${betKey}"`);
+
+    const resIsFed = String(result.loteria).toUpperCase().includes('FEDERAL');
+    const betIsFed = String(bet.loteria).toUpperCase().includes('FEDERAL');
+    const resIsMal = String(result.loteria).toUpperCase().includes('MALUQ');
+    const betIsMal = String(bet.loteria).toUpperCase().includes('MALUQ');
+
+    let match = false;
+    let reason = '';
+
+    if (resIsFed) {
+      match = betIsFed;
+      reason = match ? 'Match Federal' : 'Resultado é Federal, aposta não.';
+    } else if (resIsMal) {
+      match = betIsMal;
+      reason = match ? 'Match Maluquinha' : 'Resultado é Maluquinha, aposta não.';
+    } else {
+      if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) {
+        match = true;
+        reason = 'Match por Chave (Key)';
       }
+      if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) {
+        match = true;
+        reason = 'Match por Inclusão de Nome';
+      }
+      if (!match) reason = `Chaves diferentes ("${betKey}" vs "${resKey}") e nomes não contidos.`;
+    }
 
-      if (!match) continue;
+    if (!match) {
+      console.log(`❌ REJEITADA: ${reason}`);
+      continue;
+    }
 
-      summary.totalBets++;
+    console.log(`✅ ACEITA: ${reason}`);
+    summary.totalBets++;
 
+    try {
       const apostas = parseApostasFromBet(bet);
       if (!apostas || !apostas.length) {
         await prisma.bet.update({
@@ -423,17 +432,16 @@ async function settleBetsForResultId(id) {
       try {
         const n = typeof result.numeros === 'string' ? JSON.parse(result.numeros) : result.numeros;
         if (Array.isArray(n)) premios = n.map(x => String(x).replace(/\D/g, '')).filter(Boolean);
-      } catch {
-        premios = [];
-      }
+      } catch { premios = []; }
 
-      // 4. Verifica Vitória (V13 logic)
       const victory = checkVictory({
         modal: bet.modalidade,
         colocacao: bet.colocacao,
         palpites: apostas,
         premios,
       });
+
+      console.log(`   > Vitória: ${victory.factor > 0 ? 'SIM' : 'NÃO'} (Fator: ${victory.factor}, Checked: ${victory.checkedCount})`);
 
       let finalPrize = 0;
       if (victory?.factor > 0) {
@@ -443,6 +451,7 @@ async function settleBetsForResultId(id) {
 
         finalPrize = (betValue * payoutBase * victory.factor) / divisor;
         finalPrize = Math.round((finalPrize + Number.EPSILON) * 100) / 100;
+        console.log(`   > Prêmio Calculado: R$ ${finalPrize}`);
       }
 
       const status = finalPrize > 0 ? 'won' : 'nao premiado';
@@ -458,7 +467,6 @@ async function settleBetsForResultId(id) {
             where: { id: bet.userId },
             data: { balance: { increment: finalPrize } },
           });
-
           await tx.transaction.create({
             data: {
               userId: bet.userId,
