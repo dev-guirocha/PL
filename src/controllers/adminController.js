@@ -345,13 +345,13 @@ exports.generatePule = async (req, res) => {
   }
 };
 
-// 8. LIQUIDAÇÃO
+// 8. LIQUIDAÇÃO (CORRIGIDA DATA V14)
 /**
  * Liquida todas as apostas abertas compatíveis com um resultado.
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [DEBUG] INICIANDO LIQUIDAÇÃO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V14-FIX-DATA] LIQUIDANDO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) {
@@ -360,37 +360,37 @@ async function settleBetsForResultId(id) {
     throw err;
   }
 
-  const resDate = normalizeDate(result.dataJogo);
+  // 1. Prepara as variações de data para buscar (ISO e Original)
+  const resDateISO = normalizeDate(result.dataJogo);
+  const resDateOriginal = result.dataJogo;
+  const datesToSearch = [resDateISO, resDateOriginal].filter((d, i, self) => d && self.indexOf(d) === i);
+
   const resHour = extractHour(result.codigoHorario);
   const resKey = getLotteryKey(result.loteria);
   const resIsFed = isFederal(result.loteria);
   const resIsMaluq = isMaluquinha(result.loteria);
 
-  console.log('🔎 BUSCANDO APOSTAS COM:');
-  console.log(`   - Data (DB): "${resDate}" (Original: ${result.dataJogo})`);
-  console.log(`   - Hora (Filtro): Contém "${resHour}" (Original: ${result.codigoHorario})`);
+  console.log('🔎 BUSCANDO APOSTAS:');
+  console.log(`   - Datas Possíveis: ${JSON.stringify(datesToSearch)}`);
+  console.log(`   - Hora (Filtro): Contém "${resHour}"`);
   console.log(`   - Loteria Result: "${result.loteria}"`);
 
+  // 2. Busca no Banco aceitando múltiplos formatos de data
   const bets = await prisma.bet.findMany({
     where: {
       status: 'open',
-      dataJogo: resDate,
+      dataJogo: { in: datesToSearch },
       codigoHorario: { contains: resHour },
     },
   });
 
-  console.log(`📦 APOSTAS ENCONTRADAS NO BANCO: ${bets.length}`);
-
-  if (bets.length === 0) {
-    console.log('⚠️ AVISO: Nenhuma aposta "open" encontrada para essa Data/Hora.');
-    console.log(`   Dica: Verifique se a 'dataJogo' na tabela Bet está exatamente igual a: ${resDate}`);
-    return { totalBets: 0, processed: 0, wins: 0, errors: [] };
-  }
+  console.log(`📦 APOSTAS ENCONTRADAS: ${bets.length}`);
 
   const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
   for (const bet of bets) {
     try {
+      // 3. Match de Loteria
       const betKey = getLotteryKey(bet.loteria);
       const betIsFed = isFederal(bet.loteria);
       const betIsMaluq = isMaluquinha(bet.loteria);
@@ -405,13 +405,8 @@ async function settleBetsForResultId(id) {
         if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) match = true;
       }
 
-      if (!match) {
-        console.log(`❌ Aposta #${bet.id} ignorada: Nome da loteria não bateu.`);
-        console.log(`   (Bet: "${bet.loteria}" vs Result: "${result.loteria}")`);
-        continue;
-      }
+      if (!match) continue;
 
-      console.log(`✅ MATCH! Aposta #${bet.id}`);
       summary.totalBets++;
 
       const apostas = parseApostasFromBet(bet);
@@ -432,6 +427,7 @@ async function settleBetsForResultId(id) {
         premios = [];
       }
 
+      // 4. Verifica Vitória (V13 logic)
       const victory = checkVictory({
         modal: bet.modalidade,
         colocacao: bet.colocacao,
@@ -477,6 +473,7 @@ async function settleBetsForResultId(id) {
       summary.processed++;
       if (finalPrize > 0) summary.wins++;
     } catch (innerErr) {
+      console.error(`Erro processando aposta ${bet.id}:`, innerErr);
       summary.errors.push({ id: bet.id, msg: innerErr?.message || String(innerErr) });
     }
   }
