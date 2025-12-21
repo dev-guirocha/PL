@@ -1,16 +1,5 @@
 // src/data/sorteios.js
 
-// --- FUNÇÕES DE LÓGICA (Definidas antes) ---
-function getDayOfWeek() {
-  const now = new Date();
-  return now.getDay(); // 0 = Dom, 3 = Qua, 6 = Sáb
-}
-
-function isFederalDay() {
-  const day = getDayOfWeek();
-  return day === 3 || day === 6; // Quarta ou Sábado
-}
-
 function getHorariosRio() {
   const base = ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'LT PT RIO 18HS', 'LT PT RIO 21HS'];
   return base;
@@ -22,7 +11,6 @@ function getHorariosMaluquinha() {
 }
 
 function getHorariosFederal() {
-  if (!isFederalDay()) return [];
   return ['FEDERAL 20H', 'LT MALUQ FEDERAL 20HS'];
 }
 

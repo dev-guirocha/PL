@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
-import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 
 const LOTERIAS_1_10_ALLOWED = ['lotece-lotep', 'bahia'];
@@ -142,11 +141,10 @@ const LoteriasSorteiosPage = () => {
   const currentHour = new Date().getHours();
 
   const selectedDay = useMemo(() => {
-    const base = selectedDate ? new Date(selectedDate) : new Date();
+    const base = selectedDate ? new Date(`${selectedDate}T12:00:00`) : new Date();
     const day = base.getDay();
     return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
   }, [selectedDate]);
-  const isFederalDay = selectedDay === 3 || selectedDay === 6;
 
   const isPastHorario = (h) => {
     if (!isToday) return false;
@@ -157,28 +155,27 @@ const LoteriasSorteiosPage = () => {
 
   const adjustHorarios = (lot) => {
     const list = Array.isArray(lot.horarios) ? lot.horarios : [];
-    const isWedOrSat = isFederalDay;
+    const isFedDay = selectedDay === 3 || selectedDay === 6; // Qua ou Sáb
 
-    if (!isWedOrSat) {
-      // Fora de dia de Federal:
-      // - some o grupo FEDERAL
-      // - remove qualquer horário com "FEDERAL"
+    // Fora de dia de FEDERAL:
+    // - esconde o grupo FEDERAL
+    // - remove quaisquer horários com 'FEDERAL' por segurança
+    if (!isFedDay) {
       if (lot.slug === 'federal') return [];
       return list.filter((h) => !/FEDERAL/i.test(h));
     }
 
-    // Em dia de Federal:
-    // - PT RIO 18HS indisponível
+    // Em dia de FEDERAL:
+    // - bloqueia os horários 18HS do RIO e do MALUQ (backend também bloqueia)
     if (lot.slug === 'rio-federal') {
-      return list.filter((h) => h !== 'LT PT RIO 18HS');
+      return list.filter((h) => !/LT\\s*PT\\s*RIO\\s*18H/i.test(h));
     }
 
-    // - MALUQ 18HS indisponível
     if (lot.slug === 'maluquinha') {
-      return list.filter((h) => h !== 'LT MALUQ RIO 18HS');
+      return list.filter((h) => !/LT\\s*MALUQ\\s*RIO\\s*18H/i.test(h));
     }
 
-    // - Grupo FEDERAL: garante que só exibe horários federais
+    // Grupo FEDERAL (20h):
     if (lot.slug === 'federal') {
       return list.filter((h) => /FEDERAL/i.test(h));
     }
