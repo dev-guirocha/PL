@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaClock, FaCheck } from 'react-icons/fa';
+import { FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
@@ -167,16 +167,14 @@ const LoteriasSorteiosPage = () => {
     }
 
     // Em dia de FEDERAL:
-    // - bloqueia os horários 18HS do RIO e do MALUQ (backend também bloqueia)
     if (lot.slug === 'rio-federal') {
-      return list.filter((h) => !/LT\\s*PT\\s*RIO\\s*18H/i.test(h));
+      return list.filter((h) => !/LT\s*PT\s*RIO\s*18H/i.test(h));
     }
 
     if (lot.slug === 'maluquinha') {
-      return list.filter((h) => !/LT\\s*MALUQ\\s*RIO\\s*18H/i.test(h));
+      return list.filter((h) => !/LT\s*MALUQ\s*RIO\s*18H/i.test(h));
     }
 
-    // Grupo FEDERAL (20h):
     if (lot.slug === 'federal') {
       return list.filter((h) => /FEDERAL/i.test(h));
     }
@@ -184,22 +182,50 @@ const LoteriasSorteiosPage = () => {
     return list;
   };
 
-  const splitHorario = (h) => {
-    const parts = String(h || '').trim().split(/\s+/);
-    const codigoHorario = parts.pop() || '';
-    const loteria = parts.join(' ').trim();
-    return { loteria: loteria || String(h || '').trim(), codigoHorario };
+  // Converte um texto de horário (ex.: "LT PT RIO 18HS", "FEDERAL 20H") em:
+  // - loteria: "LT PT RIO" / "FEDERAL"
+  // - codigoHorario: "18HS" / "20H"
+  const splitHorario = (txt) => {
+    const clean = String(txt || '').trim().replace(/\s+/g, ' ');
+    if (!clean) return { loteria: '', codigoHorario: '' };
+    const parts = clean.split(' ');
+    if (parts.length === 1) return { loteria: clean, codigoHorario: '' };
+    const codigoHorario = parts[parts.length - 1];
+    const loteria = parts.slice(0, -1).join(' ').trim();
+    return { loteria: loteria || clean, codigoHorario };
   };
 
-  const toggleSelection = (slug, displayName, horarioCompleto) => {
-    const key = `${slug}-${horarioCompleto}`;
+  const toggleSelection = (slug, lotNome, horarioTxt) => {
+    const parsed = splitHorario(horarioTxt);
+
+    // Para controle de seleção na UI, guardamos o texto original do horário
+    const rawHorario = String(horarioTxt || '').trim();
+
+    // O que vai para o backend (limpo):
+    const nome = parsed.loteria;          // ex.: "LT PT RIO"
+    const horario = parsed.codigoHorario; // ex.: "18HS"
+
+    const key = `${slug}-${rawHorario}`;
     const exists = selected.find((s) => s.key === key);
     if (exists) {
       setSelected(selected.filter((s) => s.key !== key));
-    } else {
-      const { loteria, codigoHorario } = splitHorario(horarioCompleto);
-      setSelected([...selected, { key, slug, nome: loteria, horario: codigoHorario, originalHorario: horarioCompleto }]);
+      return;
     }
+
+    setSelected([
+      ...selected,
+      {
+        key,
+        slug,
+        // nome/horario são os campos "contratuais" usados no FinalPage -> backend
+        nome,
+        horario,
+        // rawHorario é só para o match visual (selecionado) na lista
+        rawHorario,
+        // opcional: nome do card/grupo para debug/UX
+        grupo: lotNome,
+      },
+    ]);
   };
 
   return (
@@ -249,7 +275,7 @@ const LoteriasSorteiosPage = () => {
                 {s.nome} • {s.horario}
                 <button
                   type="button"
-                  onClick={() => toggleSelection(s.slug, s.nome, s.horario)}
+                  onClick={() => toggleSelection(s.slug, s.grupo || s.nome, s.rawHorario || s.horario)}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -286,7 +312,7 @@ const LoteriasSorteiosPage = () => {
                 {expanded === lot.slug && (
                   <div style={styles.horarios}>
                     {horariosAjustados.map((h, idx) => {
-                      const isSelected = selected.some((s) => s.slug === lot.slug && s.originalHorario === h);
+                      const isSelected = selected.some((s) => s.slug === lot.slug && (s.rawHorario || s.horario) === h);
                       return (
                         <span
                           key={idx}
