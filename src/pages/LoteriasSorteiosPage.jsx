@@ -145,6 +145,7 @@ const LoteriasSorteiosPage = () => {
     const day = base.getDay();
     return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
   }, [selectedDate]);
+  const isFederalDay = selectedDay === 3 || selectedDay === 6;
 
   const isPastHorario = (h) => {
     if (!isToday) return false;
