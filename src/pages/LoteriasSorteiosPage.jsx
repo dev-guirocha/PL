@@ -160,22 +160,27 @@ const LoteriasSorteiosPage = () => {
     const isWedOrSat = isFederalDay;
 
     if (!isWedOrSat) {
-      // Fora dos dias de Federal, remove horários federais se aparecerem por algum motivo
+      // Fora de dia de Federal:
+      // - some o grupo FEDERAL
+      // - remove qualquer horário com "FEDERAL"
+      if (lot.slug === 'federal') return [];
       return list.filter((h) => !/FEDERAL/i.test(h));
     }
 
+    // Em dia de Federal:
+    // - PT RIO 18HS indisponível
     if (lot.slug === 'rio-federal') {
-      // Em dia de Federal, troca 18HS por Federal 20H
-      const filtered = list.filter((h) => h !== 'LT PT RIO 18HS');
-      const withFederal = filtered.includes('FEDERAL 20H') ? filtered : [...filtered, 'FEDERAL 20H'];
-      return withFederal;
+      return list.filter((h) => h !== 'LT PT RIO 18HS');
     }
 
+    // - MALUQ 18HS indisponível
     if (lot.slug === 'maluquinha') {
-      // Em dia de Federal, troca 18HS por MALUQ FEDERAL 20HS
-      const filtered = list.filter((h) => h !== 'LT MALUQ RIO 18HS');
-      const withFederal = filtered.includes('LT MALUQ FEDERAL 20HS') ? filtered : [...filtered, 'LT MALUQ FEDERAL 20HS'];
-      return withFederal;
+      return list.filter((h) => h !== 'LT MALUQ RIO 18HS');
+    }
+
+    // - Grupo FEDERAL: garante que só exibe horários federais
+    if (lot.slug === 'federal') {
+      return list.filter((h) => /FEDERAL/i.test(h));
     }
 
     return list;
@@ -262,15 +267,19 @@ const LoteriasSorteiosPage = () => {
             </div>
           )}
 
-          {loteriasExibidas.map((lot) => (
-            <div key={lot.slug} style={styles.item} onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}>
-              <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
-              {expanded === lot.slug && (
-                <div style={styles.horarios}>
-                  {adjustHorarios(lot)
-                    .slice()
-                    .sort((a, b) => timeValue(a) - timeValue(b))
-                    .map((h, idx) => {
+          {loteriasExibidas.map((lot) => {
+            const horariosAjustados = adjustHorarios(lot)
+              .slice()
+              .sort((a, b) => timeValue(a) - timeValue(b));
+
+            if (!horariosAjustados.length) return null;
+
+            return (
+              <div key={lot.slug} style={styles.item} onClick={() => setExpanded((prev) => (prev === lot.slug ? null : lot.slug))}>
+                <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{lot.nome}</div>
+                {expanded === lot.slug && (
+                  <div style={styles.horarios}>
+                    {horariosAjustados.map((h, idx) => {
                       const isSelected = selected.some((s) => s.slug === lot.slug && s.horario === h);
                       return (
                         <span
@@ -294,10 +303,11 @@ const LoteriasSorteiosPage = () => {
                         </span>
                       );
                     })}
-                </div>
-              )}
-            </div>
-          ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <button

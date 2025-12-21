@@ -13,21 +13,17 @@ function isFederalDay() {
 
 function getHorariosRio() {
   const base = ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'LT PT RIO 18HS', 'LT PT RIO 21HS'];
-  if (isFederalDay()) {
-    const filtrado = base.filter(h => h !== 'LT PT RIO 18HS');
-    filtrado.push('FEDERAL 20H');
-    // Retorna ordenado visualmente (colocando Federal no lugar das 18h/20h)
-    return ['LT PT RIO 09HS', 'LT PT RIO 11HS', 'LT PT RIO 14HS', 'LT PT RIO 16HS', 'FEDERAL 20H', 'LT PT RIO 21HS'];
-  }
   return base;
 }
 
 function getHorariosMaluquinha() {
   const base = ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ RIO 18HS', 'LT MALUQ RIO 21HS'];
-  if (isFederalDay()) {
-    return ['LT MALUQ RIO 09HS', 'LT MALUQ RIO 11HS', 'LT MALUQ RIO 14HS', 'LT MALUQ RIO 16HS', 'LT MALUQ FEDERAL 20HS', 'LT MALUQ RIO 21HS'];
-  }
   return base;
+}
+
+function getHorariosFederal() {
+  if (!isFederalDay()) return [];
+  return ['FEDERAL 20H', 'LT MALUQ FEDERAL 20HS'];
 }
 
 // --- A LISTA PRINCIPAL (Exportada com const e function para garantir compatibilidade) ---
@@ -41,6 +37,11 @@ export const LOTERIAS_SORTEIOS = [
     nome: 'MALUQUINHA',
     slug: 'maluquinha',
     horarios: getHorariosMaluquinha(),
+  },
+  {
+    nome: 'FEDERAL',
+    slug: 'federal',
+    horarios: getHorariosFederal(),
   },
   {
     nome: 'NACIONAL',
