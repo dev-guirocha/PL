@@ -1,5 +1,5 @@
 // src/controllers/adminController.js
-// VERSÃO V12 - CORREÇÃO DE ARRAY PARA STRING (JSON.stringify) + colocação/payout
+// VERSÃO V16 - Chaves seguras + datas flexíveis + colocação/payout + logs
 
 const prisma = require('../utils/prismaClient');
 
@@ -28,7 +28,6 @@ const getLotteryKey = (name) => {
   return String(name || '')
     .toUpperCase()
     .replace('FEDERAL', '')
-    .replace('RIO', '')
     .replace(/^LT\s*/, '')
     .replace(/[^A-Z0-9]/g, '');
 };
@@ -345,13 +344,13 @@ exports.generatePule = async (req, res) => {
   }
 };
 
-// 8. LIQUIDAÇÃO (VERSÃO DIAGNÓSTICO DE MATCH V15)
+// 8. LIQUIDAÇÃO (V16 - chaves seguras, datas flexíveis, logs)
 /**
  * Liquida todas as apostas abertas compatíveis com um resultado.
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [V15-DEBUG-MATCH] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V16-FINAL] LIQUIDANDO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) throw new Error('Resultado não encontrado');
@@ -360,9 +359,9 @@ async function settleBetsForResultId(id) {
   const resDateOriginal = result.dataJogo;
   const datesToSearch = [resDateISO, resDateOriginal].filter((d, i, self) => d && self.indexOf(d) === i);
   const resHour = extractHour(result.codigoHorario);
-
   const resKey = getLotteryKey(result.loteria);
-  console.log(`🔑 CHAVE DO RESULTADO: "${resKey}" (Nome Original: "${result.loteria}")`);
+
+  console.log(`🔎 FILTRO: Data [${datesToSearch.join(', ')}] | Hora [${resHour}] | Chave [${resKey}]`);
 
   const bets = await prisma.bet.findMany({
     where: {
@@ -372,49 +371,31 @@ async function settleBetsForResultId(id) {
     },
   });
 
-  console.log(`📦 APOSTAS PRELIMINARES (Data/Hora): ${bets.length}`);
+  console.log(`📦 APOSTAS CANDIDATAS (Data/Hora): ${bets.length}`);
 
   const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
   for (const bet of bets) {
-    console.log(`\n--- Analisando Aposta #${bet.id} ---`);
-    console.log(`   Nome na Aposta: "${bet.loteria}"`);
-
     const betKey = getLotteryKey(bet.loteria);
-    console.log(`   Chave Gerada:   "${betKey}"`);
-
     const resIsFed = String(result.loteria).toUpperCase().includes('FEDERAL');
     const betIsFed = String(bet.loteria).toUpperCase().includes('FEDERAL');
     const resIsMal = String(result.loteria).toUpperCase().includes('MALUQ');
     const betIsMal = String(bet.loteria).toUpperCase().includes('MALUQ');
 
     let match = false;
-    let reason = '';
 
-    if (resIsFed) {
-      match = betIsFed;
-      reason = match ? 'Match Federal' : 'Resultado é Federal, aposta não.';
-    } else if (resIsMal) {
-      match = betIsMal;
-      reason = match ? 'Match Maluquinha' : 'Resultado é Maluquinha, aposta não.';
-    } else {
-      if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) {
-        match = true;
-        reason = 'Match por Chave (Key)';
-      }
-      if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) {
-        match = true;
-        reason = 'Match por Inclusão de Nome';
-      }
-      if (!match) reason = `Chaves diferentes ("${betKey}" vs "${resKey}") e nomes não contidos.`;
+    if (resIsFed) match = betIsFed;
+    else if (resIsMal) match = betIsMal;
+    else {
+      if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
+      if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) match = true;
     }
 
     if (!match) {
-      console.log(`❌ REJEITADA: ${reason}`);
+      console.log(`❌ IGNORADA #${bet.id}: ${bet.loteria} (Key: ${betKey}) != ${result.loteria}`);
       continue;
     }
 
-    console.log(`✅ ACEITA: ${reason}`);
     summary.totalBets++;
 
     try {
@@ -441,8 +422,6 @@ async function settleBetsForResultId(id) {
         premios,
       });
 
-      console.log(`   > Vitória: ${victory.factor > 0 ? 'SIM' : 'NÃO'} (Fator: ${victory.factor}, Checked: ${victory.checkedCount})`);
-
       let finalPrize = 0;
       if (victory?.factor > 0) {
         const payoutBase = resolvePayout(bet.modalidade);
@@ -451,7 +430,7 @@ async function settleBetsForResultId(id) {
 
         finalPrize = (betValue * payoutBase * victory.factor) / divisor;
         finalPrize = Math.round((finalPrize + Number.EPSILON) * 100) / 100;
-        console.log(`   > Prêmio Calculado: R$ ${finalPrize}`);
+        console.log(`✅ GANHOU #${bet.id}: R$ ${finalPrize} (Fator: ${victory.factor})`);
       }
 
       const status = finalPrize > 0 ? 'won' : 'nao premiado';
@@ -481,12 +460,12 @@ async function settleBetsForResultId(id) {
       summary.processed++;
       if (finalPrize > 0) summary.wins++;
     } catch (innerErr) {
-      console.error(`Erro processando aposta ${bet.id}:`, innerErr);
-      summary.errors.push({ id: bet.id, msg: innerErr?.message || String(innerErr) });
+      console.error(`Erro #${bet.id}:`, innerErr);
+      summary.errors.push({ id: bet.id, msg: innerErr.message });
     }
   }
 
-  console.log('🏁 FIM DA LIQUIDAÇÃO. Resumo:', summary);
+  console.log('🏁 FIM. Resumo:', summary);
   return summary;
 }
 
