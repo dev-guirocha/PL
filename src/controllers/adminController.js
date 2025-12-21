@@ -1,5 +1,5 @@
 // src/controllers/adminController.js
-// VERSÃO V11 - CORREÇÃO DE ARRAY PARA STRING (JSON.stringify)
+// VERSÃO V12 - CORREÇÃO DE ARRAY PARA STRING (JSON.stringify) + colocação/payout
 
 const prisma = require('../utils/prismaClient');
 
@@ -55,25 +55,78 @@ function resolvePayout(modalidade) {
   return 0;
 }
 
-function checkVictory({ modal, palpites, premios }) {
-  let factor = 0;
+// NOVO: Converte número (00-99) para Grupo (1-25)
+function getGrupoFromNumber(number) {
+  const str = String(number).padStart(2, '0');
+  const last2 = parseInt(str.slice(-2), 10);
+  if (Number.isNaN(last2)) return null;
+  if (last2 === 0) return '25'; // Vaca
+  return String(Math.ceil(last2 / 4));
+}
+
+// NOVO: Determina índices de prêmio baseado na colocação (String do banco)
+function getPrizeIndices(colocacao) {
+  const c = String(colocacao || '').toUpperCase();
+
+  if (c.includes('1/5') || c.includes('1 AO 5')) return [0, 1, 2, 3, 4];
+  if (c.includes('1/4')) return [0, 1, 2, 3];
+  if (c.includes('1/3')) return [0, 1, 2];
+  if (c.includes('1/2')) return [0, 1];
+
+  // Padrão: Apenas o 1º prêmio (Cabeça)
+  return [0];
+}
+
+// ATUALIZADO V12: Verifica vitória considerando colocação e modalidades compostas
+function checkVictory({ modal, colocacao, palpites, premios }) {
   const m = String(modal).toUpperCase();
   const cleanPalpites = palpites.map(p => String(p).replace(/\D/g, ''));
-  if (m.includes('MILHAR')) {
-    if (cleanPalpites.includes(premios[0])) factor += 1;
-  } else if (m.includes('CENTENA')) {
-    const centenasPremios = premios.map(p => p.slice(-3));
-    if (cleanPalpites.includes(centenasPremios[0])) factor += 1;
-  } else if (m.includes('GRUPO')) {
-    const getGrp = (n) => {
-      const d = parseInt(n.slice(-2));
-      if (d === 0) return '25';
-      return String(Math.ceil(d / 4));
-    };
-    const gruposPremios = premios.map(getGrp);
-    if (cleanPalpites.includes(gruposPremios[0])) factor += 1;
+  const indicesToCheck = getPrizeIndices(colocacao);
+
+  // Extrai somente os valores relevantes ao modal (milhar/centena/dezena/grupo) nas posições válidas
+  const drawnItems = [];
+  for (const index of indicesToCheck) {
+    if (!premios[index]) continue;
+
+    const premioRaw = String(premios[index]);
+    const premioMilhar = premioRaw.slice(-4).padStart(4, '0');
+    const premioCentena = premioRaw.slice(-3).padStart(3, '0');
+    const premioDezena = premioRaw.slice(-2).padStart(2, '0');
+    const premioGrupo = getGrupoFromNumber(premioDezena);
+
+    if (m.includes('MILHAR')) drawnItems.push(premioMilhar);
+    else if (m.includes('CENTENA')) drawnItems.push(premioCentena);
+    else if (m.includes('GRUPO') || m.includes('GP')) drawnItems.push(premioGrupo);
+    else if (m.includes('DEZENA') || m.includes('DEZ')) drawnItems.push(premioDezena);
   }
-  return { factor };
+
+  // Lógica para apostas compostas (Duque/Terno/Quadra/Quina)
+  if (m.includes('DUQUE') || m.includes('TERNO') || m.includes('QUADRA') || m.includes('QUINA')) {
+    const uniqueDrawn = new Set(drawnItems);
+    let matchCount = 0;
+
+    for (const p of cleanPalpites) {
+      if (uniqueDrawn.has(p)) matchCount++;
+    }
+
+    let required = 99;
+    if (m.includes('DUQUE')) required = 2;
+    else if (m.includes('TERNO')) required = 3;
+    else if (m.includes('QUADRA')) required = 4;
+    else if (m.includes('QUINA')) required = 5;
+
+    const factor = matchCount >= required ? 1 : 0;
+    // Pagamentos dessas modalidades já consideram 1º ao 5º; não dividir pelo número de posições.
+    return { factor, checkedCount: 1 };
+  }
+
+  // Lógica para apostas simples (milhar, centena, dezena, grupo)
+  let hits = 0;
+  for (const item of drawnItems) {
+    if (cleanPalpites.includes(item)) hits++;
+  }
+
+  return { factor: hits, checkedCount: indicesToCheck.length };
 }
 
 // ==========================================
@@ -298,7 +351,7 @@ exports.generatePule = async (req, res) => {
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [V11-STRINGIFY] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V12-PLACEMENT] LIQUIDANDO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) {
@@ -364,17 +417,24 @@ async function settleBetsForResultId(id) {
         premios = [];
       }
 
-      const payoutFactor = resolvePayout(bet.modalidade);
-      let finalPrize = 0;
-
       const victory = checkVictory({
         modal: bet.modalidade,
+        colocacao: bet.colocacao, // <--- Importante: Passando a colocação
         palpites: apostas,
         premios,
       });
 
+      let finalPrize = 0;
       if (victory?.factor > 0) {
-        finalPrize = Number(bet.valor || bet.total || 0) * Number(payoutFactor || 0) * Number(victory.factor || 1);
+        const payoutBase = resolvePayout(bet.modalidade);
+        const betValue = Number(bet.valor || bet.total || 0); // Valor total da aposta
+
+        // Se jogou 1/5 (checkedCount = 5), o prêmio base é dividido por 5.
+        // Fórmula: (Valor * PayoutTable * Acertos) / PosiçõesJogadas
+        const divisor = victory.checkedCount > 0 ? victory.checkedCount : 1;
+
+        finalPrize = (betValue * payoutBase * victory.factor) / divisor;
+        finalPrize = Math.round((finalPrize + Number.EPSILON) * 100) / 100;
       }
 
       const status = finalPrize > 0 ? 'won' : 'nao premiado';
