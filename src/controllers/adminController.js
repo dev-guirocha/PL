@@ -351,7 +351,7 @@ exports.generatePule = async (req, res) => {
  * Retorna um summary (na prática idempotente, pois só processa status='open').
  */
 async function settleBetsForResultId(id) {
-  console.log(`\n🚀 [V12-PLACEMENT] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [DEBUG] INICIANDO LIQUIDAÇÃO RESULTADO ID: ${id}`);
 
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) {
@@ -366,7 +366,10 @@ async function settleBetsForResultId(id) {
   const resIsFed = isFederal(result.loteria);
   const resIsMaluq = isMaluquinha(result.loteria);
 
-  const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
+  console.log('🔎 BUSCANDO APOSTAS COM:');
+  console.log(`   - Data (DB): "${resDate}" (Original: ${result.dataJogo})`);
+  console.log(`   - Hora (Filtro): Contém "${resHour}" (Original: ${result.codigoHorario})`);
+  console.log(`   - Loteria Result: "${result.loteria}"`);
 
   const bets = await prisma.bet.findMany({
     where: {
@@ -376,7 +379,15 @@ async function settleBetsForResultId(id) {
     },
   });
 
-  console.log(`🔎 Analisando ${bets.length} apostas abertas...`);
+  console.log(`📦 APOSTAS ENCONTRADAS NO BANCO: ${bets.length}`);
+
+  if (bets.length === 0) {
+    console.log('⚠️ AVISO: Nenhuma aposta "open" encontrada para essa Data/Hora.');
+    console.log(`   Dica: Verifique se a 'dataJogo' na tabela Bet está exatamente igual a: ${resDate}`);
+    return { totalBets: 0, processed: 0, wins: 0, errors: [] };
+  }
+
+  const summary = { totalBets: 0, processed: 0, wins: 0, errors: [] };
 
   for (const bet of bets) {
     try {
@@ -394,7 +405,11 @@ async function settleBetsForResultId(id) {
         if (!match && (String(result.loteria).includes(String(bet.loteria)) || String(bet.loteria).includes(String(result.loteria)))) match = true;
       }
 
-      if (!match) continue;
+      if (!match) {
+        console.log(`❌ Aposta #${bet.id} ignorada: Nome da loteria não bateu.`);
+        console.log(`   (Bet: "${bet.loteria}" vs Result: "${result.loteria}")`);
+        continue;
+      }
 
       console.log(`✅ MATCH! Aposta #${bet.id}`);
       summary.totalBets++;
@@ -419,7 +434,7 @@ async function settleBetsForResultId(id) {
 
       const victory = checkVictory({
         modal: bet.modalidade,
-        colocacao: bet.colocacao, // <--- Importante: Passando a colocação
+        colocacao: bet.colocacao,
         palpites: apostas,
         premios,
       });
@@ -427,10 +442,7 @@ async function settleBetsForResultId(id) {
       let finalPrize = 0;
       if (victory?.factor > 0) {
         const payoutBase = resolvePayout(bet.modalidade);
-        const betValue = Number(bet.valor || bet.total || 0); // Valor total da aposta
-
-        // Se jogou 1/5 (checkedCount = 5), o prêmio base é dividido por 5.
-        // Fórmula: (Valor * PayoutTable * Acertos) / PosiçõesJogadas
+        const betValue = Number(bet.valor || bet.total || 0);
         const divisor = victory.checkedCount > 0 ? victory.checkedCount : 1;
 
         finalPrize = (betValue * payoutBase * victory.factor) / divisor;
@@ -469,6 +481,7 @@ async function settleBetsForResultId(id) {
     }
   }
 
+  console.log('🏁 FIM DA LIQUIDAÇÃO. Resumo:', summary);
   return summary;
 }
 
