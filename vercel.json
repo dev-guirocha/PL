@@ -7,6 +7,8 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
     { "src": "/assets/(.*)", "dest": "/dist/assets/$1" },
+    { "src": "/manifest.webmanifest", "dest": "/dist/manifest.webmanifest" },
+    { "src": "/sw.js", "dest": "/dist/sw.js" },
     { "src": "/(.*)", "dest": "/dist/index.html" }
   ]
 }
