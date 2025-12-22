@@ -33,8 +33,8 @@ const apostaSchema = z
 
 const betRequestSchema = z.object({
   apostas: z.array(apostaSchema).min(1, 'Envie ao menos uma aposta para debitar.'),
-  loteria: z.string().optional(),
-  codigoHorario: z.string().optional(),
+  loteria: z.string({ required_error: 'Informe o nome da loteria.' }).min(1, 'Nome da loteria inválido.'),
+  codigoHorario: z.string({ required_error: 'Informe o horário.' }).min(1, 'Horário inválido.'),
 });
 
 // Extrai a hora de um texto como "LT PT RIO 14HS" e monta um Date no dia informado
@@ -106,7 +106,7 @@ async function placeBet({ prismaClient, userId, apostas, loteria, codigoHorario 
       userId,
       type: 'bet',
       amount: -debited,
-      description: `Aposta em ${loteria || 'Loteria'}`,
+      description: `Aposta em ${loteria}`,
       client: tx,
       suppressErrors: false,
     });

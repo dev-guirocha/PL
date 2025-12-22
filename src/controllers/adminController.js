@@ -536,3 +536,37 @@ exports.getBets = exports.listBets;
 exports.getWithdrawals = exports.listWithdrawals;
 exports.getResults = exports.listResults;
 exports.getSupervisors = exports.listSupervisors;
+
+// 9. DEBUG: ENCONTRAR APOSTAS SEM NOME DE LOTERIA
+async function debugOrphanedBets(req, res) {
+  try {
+    console.log('🔍 Buscando apostas sem nome de loteria...');
+    const bets = await prisma.bet.findMany({
+      where: {
+        OR: [{ loteria: null }, { loteria: '' }],
+      },
+      include: { user: { select: { name: true, phone: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const result = bets.map((b) => ({
+      id: b.id,
+      criadoEm: b.createdAt,
+      horaNoBanco: b.codigoHorario,
+      dataJogo: b.dataJogo,
+      usuario: b.user?.name,
+      telefone: b.user?.phone,
+      palpites: b.palpites,
+    }));
+
+    return res.json({
+      count: result.length,
+      bets: result,
+      dica: "Se 'horaNoBanco' tiver apenas a hora (ex: 14:00), consulte o usuário pelo telefone.",
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+exports.debugOrphanedBets = debugOrphanedBets;
