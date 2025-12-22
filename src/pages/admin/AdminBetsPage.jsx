@@ -50,8 +50,11 @@ const extractPrize = (bet) => {
 };
 
 const extractCode = (bet) => {
-  if (bet.codigoHorario) return bet.codigoHorario;
-  if (bet.loteria) return bet.loteria;
+  const lot = bet.loteria;
+  const code = bet.codigoHorario;
+  if (lot && code) return `${lot} - ${code}`;
+  if (lot) return lot;
+  if (code) return code;
   const first = (bet.apostas || []).find((ap) => ap.codigoHorario || ap.jogo);
   return first?.codigoHorario || first?.jogo || '—';
 };
