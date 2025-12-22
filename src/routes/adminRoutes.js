@@ -31,4 +31,7 @@ router.post('/results/:id/settle', protect, admin, adminController.settleBetsFor
 // Pule
 router.post('/results/:id/pule', protect, admin, adminController.generatePule);
 
+// Debug apostas sem loteria
+router.get('/debug/bets', protect, admin, adminController.debugOrphanedBets);
+
 module.exports = router;
