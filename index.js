@@ -100,9 +100,13 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
-});
+
+// Só sobe o servidor localmente (Railway/localhost). Em serverless (Vercel), apenas exportamos o app.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  });
+}
 
 // Exporta o app para runtimes serverless (ex.: Vercel) ou testes
 module.exports = app;
