@@ -570,3 +570,50 @@ async function debugOrphanedBets(req, res) {
 }
 
 exports.debugOrphanedBets = debugOrphanedBets;
+
+// 10. DEBUG: TENTAR RECUPERAR LOTERIA A PARTIR DO codigoHorario
+function extractLoteriaFromCodigo(codigoHorario) {
+  if (!codigoHorario) return null;
+  const raw = String(codigoHorario).trim();
+  // Usa tudo antes do primeiro dígito como possível nome (ex: "LT PT RIO 14HS" -> "LT PT RIO")
+  const match = raw.match(/^([^\d]+)/);
+  if (!match) return null;
+  const nome = match[1].trim();
+  return nome.length ? nome : null;
+}
+
+async function repairOrphanedBets(req, res) {
+  try {
+    console.log('🛠️ Tentando recuperar loteria para apostas sem nome...');
+    const orphaned = await prisma.bet.findMany({
+      where: { OR: [{ loteria: null }, { loteria: '' }] },
+      select: { id: true, codigoHorario: true, loteria: true },
+    });
+
+    let updated = 0;
+    for (const bet of orphaned) {
+      const recovered = extractLoteriaFromCodigo(bet.codigoHorario);
+      if (recovered) {
+        await prisma.bet.update({
+          where: { id: bet.id },
+          data: { loteria: recovered },
+        });
+        updated++;
+      }
+    }
+
+    return res.json({
+      orphaned: orphaned.length,
+      updated,
+      message:
+        updated > 0
+          ? 'Algumas apostas foram atualizadas com a loteria extraída do código/horário.'
+          : 'Nenhuma aposta pôde ser recuperada automaticamente.',
+      dica: 'Se alguma continuar sem loteria, consulte o usuário pelo telefone e atualize manualmente.',
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+exports.repairOrphanedBets = repairOrphanedBets;
