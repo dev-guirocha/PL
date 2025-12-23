@@ -140,9 +140,23 @@ const LoteriasSorteiosPage = () => {
   const isToday = selectedDate === todayIso;
   const currentHour = new Date().getHours();
 
-  const selectedDay = useMemo(() => {
-    const base = selectedDate ? new Date(`${selectedDate}T12:00:00`) : new Date();
+  const getSelectedDay = (isoStr) => {
+    if (!isoStr) return null;
+    const parts = isoStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+    const [y, m, d] = parts;
+    const base = new Date(y, m - 1, d); // parse como data local para evitar shift de fuso
     const day = base.getDay();
+    return Number.isNaN(day) ? null : day;
+  };
+
+  const isDateFederal = (isoStr) => {
+    const day = getSelectedDay(isoStr);
+    return day === 3 || day === 6;
+  };
+
+  const selectedDay = useMemo(() => {
+    const day = getSelectedDay(selectedDate);
     return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
   }, [selectedDate]);
   const isFederalDay = selectedDay === 3 || selectedDay === 6;
@@ -156,7 +170,7 @@ const LoteriasSorteiosPage = () => {
 
   const adjustHorarios = (lot) => {
     const list = Array.isArray(lot.horarios) ? lot.horarios : [];
-    const isFedDay = selectedDay === 3 || selectedDay === 6; // Qua ou Sáb
+    const isFedDay = isDateFederal(selectedDate); // Qua ou Sáb
 
     // Fora de dia de FEDERAL:
     // - esconde o grupo FEDERAL
