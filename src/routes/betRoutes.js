@@ -43,36 +43,44 @@ const extractHourMinute = (codigoHorario) => {
   return null;
 };
 
+const parseLocalDate = (yyyyMmDd) => {
+  if (!yyyyMmDd || typeof yyyyMmDd !== 'string') return null;
+  const parts = yyyyMmDd.split('-').map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+  const [year, month, day] = parts;
+  const d = new Date(year, month - 1, day);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
 const isFederalDay = (yyyyMmDd) => {
-  if (!yyyyMmDd) return false;
-  const d = new Date(`${yyyyMmDd}T00:00:00-03:00`);
-  if (Number.isNaN(d.getTime())) return false;
+  const d = parseLocalDate(yyyyMmDd);
+  if (!d) return false;
   const dow = d.getDay();
   return dow === 3 || dow === 6; // Wed or Sat
 };
 
 const validateFederalRules = (req, res, next) => {
   try {
-    const { codigoHorario, apostas } = req.body || {};
-    const code = normalize(codigoHorario);
+    const { codigoHorario, apostas, loteria: loteriaGlobal } = req.body || {};
+    const payload = Array.isArray(apostas) && apostas.length ? apostas : [req.body || {}];
 
-    const hasFederalKeyword = code.includes('FEDERAL');
-    const time = extractHourMinute(codigoHorario);
-    const hour = time?.hour;
+    for (const ap of payload) {
+      const dateStr = ap?.data;
+      const loteria = ap?.loteria || loteriaGlobal || '';
+      const cod = ap?.codigoHorario || codigoHorario;
+      const code = normalize(cod);
+      const loteriaNorm = normalize(loteria);
 
-    const dates = Array.isArray(apostas)
-      ? [...new Set(apostas.map((a) => a?.data).filter(Boolean))]
-      : [];
+      const hasFederalKeyword = code.includes('FEDERAL') || loteriaNorm.includes('FEDERAL');
+      const time = extractHourMinute(cod);
+      const hour = time?.hour;
 
-    if (dates.length === 0) {
-      return next();
-    }
+      if (!dateStr) continue;
 
-    for (const dateStr of dates) {
       const federalDay = isFederalDay(dateStr);
 
-      const isPtRio = code.includes('PT') && code.includes('RIO');
-      const isMaluqRio = code.includes('MALUQ') && code.includes('RIO');
+      const isPtRio = /\bPT\s*RIO\b/.test(loteriaNorm);
+      const isMaluqRio = /\bMALUQ\s*RIO\b/.test(loteriaNorm);
       const is18 = hour === 18;
       const isBlocked18Slot = (isPtRio || isMaluqRio) && is18 && !hasFederalKeyword;
 
@@ -93,10 +101,8 @@ const validateFederalRules = (req, res, next) => {
             return res.status(400).json({ error: 'FEDERAL só é permitido às 20h (quarta e sábado).' });
           }
         }
-      } else {
-        if (hasFederalKeyword) {
-          return res.status(400).json({ error: 'FEDERAL só está disponível nas quartas e sábados às 20h.' });
-        }
+      } else if (hasFederalKeyword) {
+        return res.status(400).json({ error: 'FEDERAL só está disponível nas quartas e sábados às 20h.' });
       }
     }
 
