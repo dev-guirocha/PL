@@ -54,8 +54,12 @@ const getHourFromCode = (codigoHorario) => {
 
 const getDayFromDateStr = (dateStr) => {
   if (!dateStr) return null;
-  const d = new Date(dateStr);
-  const day = d.getDay();
+  const parts = String(dateStr).split('-').map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+  const [y, m, d] = parts;
+  // Usa meio-dia local para evitar rollback de fuso (UTC -> dia anterior)
+  const date = new Date(y, m - 1, d, 12, 0, 0);
+  const day = date.getDay();
   return Number.isNaN(day) ? null : day;
 };
 
