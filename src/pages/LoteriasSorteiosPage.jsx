@@ -7,6 +7,14 @@ import { useAuth } from '../context/AuthContext';
 
 const LOTERIAS_1_10_ALLOWED = ['lotece-lotep', 'bahia'];
 
+// Gera string YYYY-MM-DD no fuso local (evita shift para UTC)
+const getLocalDateStr = (dateObj) => {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
   const { authError, refreshUser } = useAuth();
@@ -136,9 +144,10 @@ const LoteriasSorteiosPage = () => {
   };
 
   const selectedDate = draft?.data;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = getLocalDateStr(new Date());
   const isToday = selectedDate === todayIso;
   const currentHour = new Date().getHours();
+  const currentMinutes = new Date().getMinutes();
 
   const getSelectedDay = (isoStr) => {
     if (!isoStr) return null;
@@ -162,10 +171,16 @@ const LoteriasSorteiosPage = () => {
   const isFederalDay = selectedDay === 3 || selectedDay === 6;
 
   const isPastHorario = (h) => {
-    if (!isToday) return false;
+    if (!isToday) {
+      if (selectedDate && selectedDate < todayIso) return true; // datas passadas bloqueiam
+      return false; // datas futuras não bloqueiam
+    }
     const hour = timeValue(h);
     if (Number.isNaN(hour)) return false;
-    return hour <= currentHour;
+    if (hour < currentHour) return true;
+    if (hour > currentHour) return false;
+    // hora igual: já estamos na mesma hora, considera como passado
+    return currentMinutes >= 0;
   };
 
   const adjustHorarios = (lot) => {

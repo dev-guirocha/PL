@@ -6,6 +6,14 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { GAME_NAMES } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
 
+// Gera string YYYY-MM-DD no fuso local (evita shift para UTC)
+const getLocalDateStr = (dateObj) => {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const LoteriasDatePage = () => {
   const navigate = useNavigate();
   const { jogo } = useParams();
@@ -24,7 +32,7 @@ const LoteriasDatePage = () => {
       d.setDate(today.getDate() + i);
       arr.push({
         label: d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }),
-        value: d.toISOString().slice(0, 10),
+        value: getLocalDateStr(d),
       });
     }
     return arr;
