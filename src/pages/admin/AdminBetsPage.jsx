@@ -159,6 +159,17 @@ const AdminBetsPage = () => {
     }
   };
 
+  const handleRecheck = async (betId) => {
+    if (!window.confirm('Deseja reconferir esta aposta com os resultados existentes?')) return;
+    try {
+      const response = await api.post(`/admin/bets/${betId}/recheck`);
+      window.alert(response.data?.message || 'Reconferência concluída.');
+      fetchBets();
+    } catch (error) {
+      window.alert('Erro: ' + (error.response?.data?.error || 'Falha ao reconferir'));
+    }
+  };
+
   useEffect(() => {
     fetchBets();
   }, []);
@@ -235,11 +246,24 @@ const AdminBetsPage = () => {
 
   const totalValue = visibleBets.reduce((acc, b) => acc + (Number(b.total) || Number(b.valor) || 0), 0);
 
-  const renderBetsTable = (items) => (
-    <AdminTable headers={['Ref', 'Modalidade', 'Código/Horário', 'Data da Aposta', 'Prêmio', 'Números', 'Valor', 'Data/Horário', 'Status']}>
+  const renderBetsTable = (items, showActions) => (
+    <AdminTable
+      headers={[
+        'Ref',
+        'Modalidade',
+        'Código/Horário',
+        'Data da Aposta',
+        'Prêmio',
+        'Números',
+        'Valor',
+        'Data/Horário',
+        'Status',
+        ...(showActions ? ['Ações'] : [])
+      ]}
+    >
       {items.length === 0 ? (
         <AdminTableRow>
-          <AdminTableCell className="text-center text-slate-500" colSpan={9}>
+          <AdminTableCell className="text-center text-slate-500" colSpan={showActions ? 10 : 9}>
             Nenhuma aposta encontrada.
           </AdminTableCell>
         </AdminTableRow>
@@ -289,6 +313,17 @@ const AdminBetsPage = () => {
               <AdminTableCell>
                 <StatusBadge status={displayStatus} />
               </AdminTableCell>
+              {showActions && (
+                <AdminTableCell>
+                  <button
+                    onClick={() => handleRecheck(bet.id || bet._id || bet.betId)}
+                    className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
+                    title="Reconferir se houve erro no pagamento"
+                  >
+                    Reconferir
+                  </button>
+                </AdminTableCell>
+              )}
             </AdminTableRow>
           );
         })
@@ -434,10 +469,10 @@ const AdminBetsPage = () => {
                   )}
                 </div>
               </div>
-              <div>{renderBetsTable(visibleArchivedBets)}</div>
+              <div>{renderBetsTable(visibleArchivedBets, true)}</div>
             </div>
           ) : (
-            renderBetsTable(activeBets)
+            renderBetsTable(activeBets, false)
           )}
         </>
       )}

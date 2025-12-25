@@ -6,19 +6,23 @@ import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
 import { LOTERIAS_SORTEIOS } from '../../data/sorteios'; 
 
-const LOTERIAS_FIXAS = [
-  { id: 'PT-RIO', label: 'LT PT RIO', color: 'bg-blue-100 hover:bg-blue-200 text-blue-800 border-blue-300' },
-  { id: 'LOOK', label: 'LT LOOK', color: 'bg-pink-100 hover:bg-pink-200 text-pink-800 border-pink-300' },
-  { id: 'NACIONAL', label: 'LT NACIONAL', color: 'bg-orange-100 hover:bg-orange-200 text-orange-800 border-orange-300' },
-  { id: 'FEDERAL', label: 'FEDERAL', color: 'bg-green-100 hover:bg-green-200 text-green-800 border-green-300' },
-  { id: 'LOTEP', label: 'LT LOTEP', color: 'bg-purple-100 hover:bg-purple-200 text-purple-800 border-purple-300' },
-  { id: 'BAND', label: 'LT BAND', color: 'bg-red-100 hover:bg-red-200 text-red-800 border-red-300' },
-  { id: 'MALUCA', label: 'LT MALUQ RIO', color: 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border-yellow-300' },
-  { id: 'ALVORADA', label: 'LT ALVORADA', color: 'bg-cyan-100 hover:bg-cyan-200 text-cyan-800 border-cyan-300' },
-  { id: 'MINAS', label: 'LT MINAS', color: 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300' },
-  { id: 'BAHIA', label: 'LT BAHIA', color: 'bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border-indigo-300' },
-  { id: 'OUTRA', label: 'OUTRA (DIGITAR)', color: 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300' },
+const LOTERIAS = [
+  { id: 'RIO/FEDERAL', label: 'RIO/FEDERAL' },
+  { id: 'MALUQUINHA', label: 'MALUQUINHA' },
+  { id: 'NACIONAL', label: 'NACIONAL' },
+  { id: 'LOOK/GOIAS', label: 'LOOK/GOIAS' },
+  { id: 'SAO-PAULO', label: 'SAO-PAULO' },
+  { id: 'LOTECE/LOTEP', label: 'LOTECE/LOTEP' },
+  { id: 'BAHIA', label: 'BAHIA' },
+  { id: 'CAPITAL', label: 'CAPITAL' },
+  { id: 'MINAS GERAIS', label: 'MINAS GERAIS' },
+  { id: 'SORTE', label: 'SORTE' },
+  { id: 'FEDERAL', label: 'FEDERAL' },
+  { id: 'MALUQ FEDERAL', label: 'MALUQ FEDERAL' }
 ];
+
+const LOTERIA_BUTTON_CLASS =
+  'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300';
 
 const calculateGroup = (numberStr) => {
   if (!numberStr || numberStr.length < 2) return '';
@@ -150,7 +154,7 @@ const AdminResultsPage = () => {
     }));
     
     setPrizes(newPrizes);
-    const knownLottery = LOTERIAS_FIXAS.find(l => l.label === r.loteria);
+    const knownLottery = LOTERIAS.find(l => l.label === r.loteria);
     if (knownLottery) {
       setSelectedLottery(knownLottery.label);
     } else {
@@ -225,7 +229,15 @@ const AdminResultsPage = () => {
       {view === 'dashboard' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
-            {LOTERIAS_FIXAS.map((lot) => (<button key={lot.id} onClick={() => handleStartAdd(lot.label)} className={`${lot.color} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md text-center px-1`}>{lot.label}</button>))}
+            {LOTERIAS.map((lot) => (
+              <button
+                key={lot.id}
+                onClick={() => handleStartAdd(lot.label)}
+                className={`${LOTERIA_BUTTON_CLASS} border-2 h-24 rounded-xl shadow-sm flex items-center justify-center text-sm md:text-base font-black tracking-wide transition-all transform hover:scale-105 hover:shadow-md text-center px-1`}
+              >
+                {lot.label}
+              </button>
+            ))}
           </div>
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700">Histórico de Lançamentos</div>

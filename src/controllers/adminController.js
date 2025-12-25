@@ -1,13 +1,16 @@
 // src/controllers/adminController.js
-// VERSÃO V19.4 - FINAL PRODUCTION
-// - FIX: listWithdrawals não busca mais pixKey no User (evita crash)
-// - FIX: Retorno do settle inclui 'processed' para o Admin Front
-// - OPTIMIZE: findMany filtra resultId: null na entrada
-// - CORE: Mantém todas as blindagens de concorrência e parsers da V19.3
+// VERSÃO V21 - DIAMOND FINAL (ESTABILIDADE + RECONFERÊNCIA)
 
 const prisma = require('../utils/prismaClient');
 
-// --- FUNÇÕES AUXILIARES ---
+// --- LISTA OFICIAL ---
+const VALID_LOTTERIES = [
+  'RIO/FEDERAL', 'MALUQUINHA', 'NACIONAL', 'LOOK/GOIAS', 'SAO-PAULO',
+  'LOTECE/LOTEP', 'BAHIA', 'CAPITAL', 'MINAS GERAIS', 'SORTE',
+  'FEDERAL', 'MALUQ FEDERAL'
+];
+
+// --- FUNÇÕES AUXILIARES GLOBAIS ---
 const extractHour = (str) => {
   if (!str) return 'XX';
   const nums = String(str).replace(/\D/g, '');
@@ -28,54 +31,6 @@ const normalizeDate = (dateStr) => {
   return clean;
 };
 
-// NUMBER PARSER HEURÍSTICO
-const toNumberSafe = (v) => {
-  if (v === null || v === undefined) return 0;
-  if (typeof v === 'number') return v;
-
-  let s = String(v).trim();
-  if (!s) return 0;
-
-  const hasComma = s.includes(',');
-  const hasDot = s.includes('.');
-
-  // 1.234 => 1234
-  if (hasDot && !hasComma) {
-    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  // 1,234 => 1234 | 10,50 => 10.50
-  if (hasComma && !hasDot) {
-    if (/^\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, '');
-    else s = s.replace(/\./g, '').replace(',', '.'); 
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  const lastComma = s.lastIndexOf(',');
-  const lastDot = s.lastIndexOf('.');
-  if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.'); // BR
-  else if (lastDot > lastComma) s = s.replace(/,/g, ''); // US
-
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-};
-
-// VALIDATOR DE DATA REAL
-const isValidISODate = (iso) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return (
-    dt.getUTCFullYear() === y &&
-    dt.getUTCMonth() === (m - 1) &&
-    dt.getUTCDate() === d
-  );
-};
-
-// CANONICAL NAME NORMALIZER
 const getCanonicalName = (str) => {
   return String(str || '')
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -83,6 +38,23 @@ const getCanonicalName = (str) => {
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
+};
+
+const normalizeLotteryFamily = (name) => {
+  const c = getCanonicalName(name);
+  if (c.includes('MALUQ') && c.includes('FEDERAL')) return 'MALUQ FEDERAL';
+  if (c.includes('MALUQ')) return 'MALUQUINHA';
+  if (c.includes('RIO') && c.includes('FEDERAL')) return 'RIO/FEDERAL';
+  if (c.includes('FEDERAL')) return 'FEDERAL';
+  if (c.includes('NACIONAL')) return 'NACIONAL';
+  if (c.includes('LOOK') || c.includes('GOIAS')) return 'LOOK/GOIAS';
+  if (c.includes('SAO') && c.includes('PAULO')) return 'SAO-PAULO';
+  if (c.includes('LOTECE') || c.includes('LOTEP')) return 'LOTECE/LOTEP';
+  if (c.includes('BAHIA')) return 'BAHIA';
+  if (c.includes('CAPITAL')) return 'CAPITAL';
+  if (c.includes('MINAS')) return 'MINAS GERAIS';
+  if (c.includes('SORTE')) return 'SORTE';
+  return 'UNKNOWN';
 };
 
 const getLotteryKey = (name) => {
@@ -96,7 +68,38 @@ const getLotteryKey = (name) => {
 const isFederal = (name) => getCanonicalName(name).includes('FEDERAL');
 const isMaluquinha = (name) => getCanonicalName(name).includes('MALUQ');
 
-const sortDigits = (str) => String(str).split('').sort().join('');
+const toNumberSafe = (v) => {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim();
+  if (!s) return 0;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasDot && !hasComma) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (hasComma && !hasDot) {
+    if (/^\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, '');
+    else s = s.replace(/\./g, '').replace(',', '.'); 
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+  else if (lastDot > lastComma) s = s.replace(/,/g, '');
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const isValidISODate = (iso) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === (m - 1) && dt.getUTCDate() === d;
+};
 
 const pad = (s, len) => String(s).replace(/\D/g, '').slice(-len).padStart(len, '0');
 const toMilhar = (s) => pad(s, 4);
@@ -109,12 +112,12 @@ const getGrupoFromMilhar = (milhar4) => {
   if (d === 0) return '25';
   return String(Math.ceil(d / 4));
 };
-
 const normalizeGrupoPalpite = (p) => {
   const p2 = pad(p, 2);           
   if (p2 === '00') return '25';   
   return p2.startsWith('0') ? p2.slice(1) : p2; 
 };
+const sortDigits = (str) => String(str).split('').sort().join('');
 
 function nCk(n, k) {
   if (k < 0 || k > n) return 0;
@@ -132,10 +135,10 @@ function parseApostasFromBet(bet) {
   } catch { return []; }
 }
 
-// PAYOUT PRIORITÁRIO
 function resolvePayout(modalidade) {
   const table = {
     'TERNO DEZENA': 3000, 'DUQUE DEZENA': 300, 'TERNO GRUPO': 150, 'DUQUE GRUPO': 18,
+    'MILHAR INV': 4000, 'CENTENA INV': 400, 'DEZENA INV': 60,
     'MILHAR': 4000, 'CENTENA': 400, 'DEZENA': 60, 'GRUPO': 18, 'UNIDADE': 6, 
   };
   let key = String(modalidade || '').toUpperCase()
@@ -307,15 +310,11 @@ exports.listBets = async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Erro bets' }); }
 };
 
-// [FIX V19.4] CORREÇÃO NO INCLUDE (USER NÃO TEM PIXKEY)
 exports.listWithdrawals = async (req, res) => {
   try {
     const withdrawals = await prisma.withdrawalRequest.findMany({ 
         orderBy: { createdAt: 'desc' }, 
-        include: { 
-          // PixKey está em withdrawalRequest, não user. Apenas dados básicos do user.
-          user: { select: { name: true, phone: true } } 
-        } 
+        include: { user: { select: { name: true, phone: true } } } 
     });
     res.json({ withdrawals });
   } catch (e) { res.json({ withdrawals: [] }); }
@@ -333,6 +332,10 @@ exports.listSupervisors = async (req, res) => {
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
+    
+    // [VALIDATION] Opcional: Garante loteria na lista permitida
+    // if (!VALID_LOTTERIES.includes(String(loteria).trim().toUpperCase())) { ... }
+
     const result = await prisma.result.create({
       data: { 
         loteria, dataJogo, codigoHorario, 
@@ -379,10 +382,10 @@ exports.generatePule = async (req, res) => {
 };
 
 
-// [LIQUIDAÇÃO V19.4 - FINAL]
+// [LIQUIDAÇÃO V21]
 exports.settleBetsForResult = async (req, res) => {
   const id = Number(req.params.id);
-  console.log(`\n🚀 [V19.4-IRIDIUM-FINAL] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V21-MASS] LIQUIDANDO RESULTADO ID: ${id}`);
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
@@ -410,14 +413,12 @@ exports.settleBetsForResult = async (req, res) => {
       .filter(Boolean);
 
     if (!premios.length) {
-       console.log('[V19] ABORT: Result sem números válidos =>', result.numeros);
        return res.status(400).json({ error: 'Resultado sem números válidos para liquidar.' });
     }
 
     const bets = await prisma.bet.findMany({
       where: { 
         status: 'open',
-        // [OPTIMIZATION] Filtra já no banco quem não tem resultId (idempotência básica)
         resultId: null 
       },
       include: { user: true },
@@ -454,7 +455,6 @@ exports.settleBetsForResult = async (req, res) => {
 
         const apostas = parseApostasFromBet(bet);
         if (!apostas || !apostas.length) {
-          // [SAFE GUARD] resultId: null garante idempotência
           const voidTx = await prisma.bet.updateMany({
             where: { id: bet.id, status: 'open', resultId: null },
             data: { status: 'lost', settledAt: new Date(), resultId: id, prize: 0 },
@@ -500,7 +500,8 @@ exports.settleBetsForResult = async (req, res) => {
             }
           } else {
             const payout = resolvePayout(modalRaw);
-            if (!payout) continue;
+            // [FIX CRÍTICO] !payout = se NÃO tiver payout, continua.
+            if (!payout) continue; 
             const { factor } = checkVictory({ modal: modalRaw, palpites, premios: premiosAllowed });
             if (factor > 0) prize += perNumber * payout * factor;
           }
@@ -510,7 +511,6 @@ exports.settleBetsForResult = async (req, res) => {
         const status = finalPrize > 0 ? 'won' : 'lost';
 
         const didSettle = await prisma.$transaction(async (tx) => {
-          // [SAFE GUARD] resultId: null garante que ainda não foi liquidado por outro processo
           const updateBatch = await tx.bet.updateMany({
             where: { id: bet.id, status: 'open', resultId: null },
             data: { status, prize: finalPrize, settledAt: new Date(), resultId: id },
@@ -544,18 +544,206 @@ exports.settleBetsForResult = async (req, res) => {
       }
     }
     
-    // [FIX V19.4] Response agora inclui 'processed' para compatibilidade com Admin Front
-    return res.json({ 
-        message: 'Processamento concluído', 
-        summary: {
-            processed: bets.length,
-            ...summary
-        }
-    });
+    return res.json({ message: 'Processamento concluído', summary: { processed: bets.length, ...summary } });
 
   } catch (err) {
     console.error('Erro fatal:', err);
     return res.status(500).json({ error: 'Erro interno.' });
+  }
+};
+
+// [RECHECK SINGLE BET - V21 FINAL]
+exports.recheckSingleBet = async (req, res) => {
+  const betId = Number(req.params.id);
+  console.log(`\n🕵️ [V21-RECHECK] Aposta ID: ${betId}`);
+
+  try {
+    const bet = await prisma.bet.findUnique({
+      where: { id: betId },
+      include: { user: true }
+    });
+
+    if (!bet) return res.status(404).json({ error: 'Aposta não encontrada' });
+
+    const betDateISO = normalizeDate(bet.dataJogo);
+    const betHour = extractHour(bet.codigoHorario);
+
+    if (!isValidISODate(betDateISO) || betHour === 'XX') {
+      return res.status(400).json({ error: 'Aposta com data/hora inválida.' });
+    }
+
+    const betFamily = normalizeLotteryFamily(bet.loteria);
+    const [ano, mes, dia] = betDateISO.split('-');
+    const betDateBR = `${dia}/${mes}/${ano}`;
+
+    const candidates = await prisma.result.findMany({
+      where: {
+        OR: [
+          { dataJogo: { contains: betDateISO } },
+          { dataJogo: { contains: betDateBR } },
+          { dataJogo: String(bet.dataJogo) }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    let matchingResult = null;
+
+    for (const r of candidates) {
+      const rDate = normalizeDate(r.dataJogo);
+      const rHour = extractHour(r.codigoHorario);
+      if (rDate !== betDateISO) continue;
+      if (rHour !== betHour) continue;
+
+      const rFamily = normalizeLotteryFamily(r.loteria);
+      const betCanonical = getCanonicalName(bet.loteria);
+      const rCanonical = getCanonicalName(r.loteria);
+
+      const familyMatch = (betFamily !== 'UNKNOWN' && betFamily === rFamily);
+      const fallbackMatch = (rCanonical === betCanonical) || rCanonical.includes(betCanonical) || betCanonical.includes(rCanonical);
+
+      if (familyMatch || fallbackMatch) {
+        matchingResult = r;
+        break;
+      }
+    }
+
+    if (!matchingResult) {
+      return res.status(404).json({ error: 'Resultado correspondente não encontrado.' });
+    }
+
+    let numerosSorteados = [];
+    try {
+      numerosSorteados = Array.isArray(matchingResult.numeros)
+        ? matchingResult.numeros
+        : JSON.parse(matchingResult.numeros);
+    } catch { numerosSorteados = []; }
+
+    const premios = (Array.isArray(numerosSorteados) ? numerosSorteados : [])
+      .map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'))
+      .filter(Boolean);
+
+    if (!premios.length) {
+      return res.status(400).json({ error: 'Resultado encontrado, mas sem números válidos.' });
+    }
+
+    const apostas = parseApostasFromBet(bet);
+    let prize = 0;
+
+    for (const aposta of apostas) {
+      const modalRaw = aposta.modalidade || bet.modalidade || '';
+      const colocacaoRaw = aposta.colocacao || bet.colocacao || '';
+      const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
+      const palpCount = palpites.length || 0;
+
+      const rawTotal = (aposta.total !== undefined && aposta.total !== null) ? aposta.total : bet.total;
+      const betTotalNum = toNumberSafe(rawTotal);
+      const valPorNum = toNumberSafe(aposta.valorPorNumero);
+
+      const perNumber = valPorNum > 0 ? valPorNum : (palpCount > 0 ? betTotalNum / palpCount : 0);
+      if (!perNumber || perNumber <= 0 || !palpCount) continue;
+
+      const allowedIdx = indicesFromColocacao(colocacaoRaw);
+      const premiosAllowed = allowedIdx.map(i => premios[i]).filter(Boolean);
+      if (!premiosAllowed.length) continue;
+
+      const baseMods = expandModalidades(modalRaw);
+
+      if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
+        for (const palpite of palpites) {
+          let best = 0;
+          for (const base of baseMods) {
+            const payout = resolvePayout(base);
+            if (!payout) continue;
+            const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
+            if (factor > 0) {
+              const amount = perNumber * payout * factor;
+              if (amount > best) best = amount;
+            }
+          }
+          prize += best;
+        }
+      } else {
+        const payout = resolvePayout(modalRaw);
+        if (!payout) continue;
+        const { factor } = checkVictory({ modal: modalRaw, palpites, premios: premiosAllowed });
+        if (factor > 0) prize += perNumber * payout * factor;
+      }
+    }
+
+    const finalPrize = Number(prize.toFixed(2));
+    const newStatus = finalPrize > 0 ? 'won' : 'lost';
+
+    const oldStatus = bet.status;
+    const oldPrize = toNumberSafe(String(bet.prize ?? 0));
+
+    if (newStatus === oldStatus && Number(finalPrize.toFixed(2)) === Number(oldPrize.toFixed(2))) {
+      return res.json({
+        message: `Aposta já está correta (${newStatus}). Nenhuma alteração.`,
+        bet,
+        matchedResult: { id: matchingResult.id, loteria: matchingResult.loteria }
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (oldStatus === 'won' && oldPrize > 0) {
+        await tx.user.update({
+          where: { id: bet.userId },
+          data: { balance: { decrement: oldPrize } }
+        });
+        await tx.transaction.create({
+          data: {
+            userId: bet.userId,
+            type: 'adjustment',
+            amount: -oldPrize,
+            description: `Estorno Correção (${bet.id})`
+          }
+        });
+      }
+
+      const upd = await tx.bet.updateMany({
+        where: {
+          id: bet.id,
+          status: oldStatus,
+          // prize: bet.prize // Opcional
+        },
+        data: {
+          status: newStatus,
+          prize: finalPrize,
+          settledAt: new Date(),
+          resultId: matchingResult.id
+        }
+      });
+
+      if (upd.count === 0) {
+        throw new Error('Aposta foi alterada por outro processo. Tente novamente.');
+      }
+
+      if (finalPrize > 0) {
+        await tx.user.update({
+          where: { id: bet.userId },
+          data: { balance: { increment: finalPrize } }
+        });
+        await tx.transaction.create({
+          data: {
+            userId: bet.userId,
+            type: 'prize',
+            amount: finalPrize,
+            description: `Prêmio Recalculado (${bet.id})`
+          }
+        });
+      }
+    });
+
+    return res.json({
+      message: 'Aposta corrigida com sucesso!',
+      changes: { from: { status: oldStatus, prize: oldPrize }, to: { status: newStatus, prize: finalPrize } },
+      matchedResult: { id: matchingResult.id, loteria: matchingResult.loteria }
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err?.message || 'Erro interno ao reconferir.' });
   }
 };
 
@@ -567,12 +755,3 @@ exports.getBets = exports.listBets;
 exports.getWithdrawals = exports.listWithdrawals;
 exports.getResults = exports.listResults;
 exports.getSupervisors = exports.listSupervisors;
-
-// --- DEBUG/LEGACY HOOKS (mantidos para compatibilidade de rota) ---
-exports.debugOrphanedBets = async (req, res) => {
-  return res.json({ message: 'Funcionalidade de debug de apostas órfãs indisponível na V19.4.' });
-};
-
-exports.repairOrphanedBets = async (req, res) => {
-  return res.json({ message: 'Funcionalidade de reparo de apostas órfãs indisponível na V19.4.' });
-};
