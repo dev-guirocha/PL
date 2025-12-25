@@ -329,6 +329,14 @@ exports.listSupervisors = async (req, res) => {
   } catch (e) { res.json({ supervisors: [], total: 0 }); }
 };
 
+exports.debugOrphanedBets = async (req, res) => {
+  res.status(501).json({ error: 'Rota desativada na V21.' });
+};
+
+exports.repairOrphanedBets = async (req, res) => {
+  res.status(501).json({ error: 'Rota desativada na V21.' });
+};
+
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;

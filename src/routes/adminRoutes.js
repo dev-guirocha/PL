@@ -2,37 +2,53 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
+
+// [DEBUG] Validador de Handlers (IMPEDE O CRASH GENÉRICO)
+function mustBeFn(name) {
+  const fn = adminController[name];
+  if (typeof fn !== 'function') {
+    // Isso vai aparecer no seu log do Railway dizendo EXATAMENTE o que falta
+    throw new Error(
+      `🚨 [ERRO FATAL DE ROTA] A função 'adminController.${name}' não existe! \n` +
+      `Verifique se você salvou/subiu o arquivo adminController.js correto.`
+    );
+  }
+  return fn;
+}
+
+// Middleware de Proteção
+router.use(verifyToken, isAdmin);
+
+// --- ROTAS DO PAINEL ---
 
 // Dashboard
-router.get('/dashboard', protect, admin, adminController.getDashboardStats);
-router.get('/stats', protect, admin, adminController.getDashboardStats);
+router.get('/dashboard/stats', mustBeFn('getDashboardStats'));
 
 // Usuários
-router.get('/users', protect, admin, adminController.listUsers);
-router.put('/users/:id/block', protect, admin, adminController.toggleUserBlock);
-
-// Supervisores
-router.get('/supervisors', protect, admin, adminController.listSupervisors);
+router.get('/users', mustBeFn('listUsers'));
+router.post('/users/:id/block', mustBeFn('toggleUserBlock'));
 
 // Apostas
-router.get('/bets', protect, admin, adminController.listBets);
+router.get('/bets', mustBeFn('listBets'));
+router.post('/bets/:id/recheck', mustBeFn('recheckSingleBet')); // <--- A NOVA ROTA V20
 
 // Saques
-router.get('/withdrawals', protect, admin, adminController.listWithdrawals);
+router.get('/withdrawals', mustBeFn('listWithdrawals'));
 
-// Resultados & Liquidação
-router.get('/results', protect, admin, adminController.listResults);
-router.post('/results', protect, admin, adminController.createResult);
-router.put('/results/:id', protect, admin, adminController.updateResult);
-router.delete('/results/:id', protect, admin, adminController.deleteResult);
-router.post('/results/:id/settle', protect, admin, adminController.settleBetsForResult);
+// Supervisores
+router.get('/supervisors', mustBeFn('listSupervisors'));
 
-// Pule
-router.post('/results/:id/pule', protect, admin, adminController.generatePule);
+// Resultados
+router.post('/results', mustBeFn('createResult'));
+router.get('/results', mustBeFn('listResults'));
+router.put('/results/:id', mustBeFn('updateResult'));
+router.delete('/results/:id', mustBeFn('deleteResult'));
 
-// Debug apostas sem loteria
-router.get('/debug/bets', protect, admin, adminController.debugOrphanedBets);
-router.post('/debug/bets/repair', protect, admin, adminController.repairOrphanedBets);
+// Liquidação (Settle)
+router.post('/results/:id/settle', mustBeFn('settleBetsForResult'));
+
+// Pule (Impressão)
+router.post('/pule/:id', mustBeFn('generatePule'));
 
 module.exports = router;
