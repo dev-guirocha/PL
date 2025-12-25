@@ -567,3 +567,12 @@ exports.getBets = exports.listBets;
 exports.getWithdrawals = exports.listWithdrawals;
 exports.getResults = exports.listResults;
 exports.getSupervisors = exports.listSupervisors;
+
+// --- DEBUG/LEGACY HOOKS (mantidos para compatibilidade de rota) ---
+exports.debugOrphanedBets = async (req, res) => {
+  return res.json({ message: 'Funcionalidade de debug de apostas órfãs indisponível na V19.4.' });
+};
+
+exports.repairOrphanedBets = async (req, res) => {
+  return res.json({ message: 'Funcionalidade de reparo de apostas órfãs indisponível na V19.4.' });
+};
