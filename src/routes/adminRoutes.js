@@ -2,13 +2,22 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+
+// Importa e RENOMEIA para evitar conflito se necessário, ou usa direto
 const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
 
-// [DEBUG] Validador de Handlers (IMPEDE O CRASH GENÉRICO)
+// --- BLINDAGEM 1: Verificar Middleware (CRÍTICO) ---
+if (typeof verifyToken !== 'function' || typeof isAdmin !== 'function') {
+  throw new Error(
+    `🚨 [ERRO FATAL DE MIDDLEWARE] verifyToken ou isAdmin não são funções!\n` +
+    `Verifique o arquivo 'src/middlewares/authMiddleware.js' e se o caminho do require interno está correto (singular vs plural).`
+  );
+}
+
+// --- BLINDAGEM 2: Verificar Controller (O que já fizemos) ---
 function mustBeFn(name) {
   const fn = adminController[name];
   if (typeof fn !== 'function') {
-    // Isso vai aparecer no seu log do Railway dizendo EXATAMENTE o que falta
     throw new Error(
       `🚨 [ERRO FATAL DE ROTA] A função 'adminController.${name}' não existe! \n` +
       `Verifique se você salvou/subiu o arquivo adminController.js correto.`
@@ -17,7 +26,7 @@ function mustBeFn(name) {
   return fn;
 }
 
-// Middleware de Proteção
+// Aplica Middleware (Agora seguro porque verificamos acima)
 router.use(verifyToken, isAdmin);
 
 // --- ROTAS DO PAINEL ---
@@ -31,7 +40,7 @@ router.post('/users/:id/block', mustBeFn('toggleUserBlock'));
 
 // Apostas
 router.get('/bets', mustBeFn('listBets'));
-router.post('/bets/:id/recheck', mustBeFn('recheckSingleBet')); // <--- A NOVA ROTA V20
+router.post('/bets/:id/recheck', mustBeFn('recheckSingleBet')); // V21
 
 // Saques
 router.get('/withdrawals', mustBeFn('listWithdrawals'));
