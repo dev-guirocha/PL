@@ -62,6 +62,6 @@ router.delete('/results/:id', mustBeFn('deleteResult'));
 router.post('/results/:id/settle', mustBeFn('settleBetsForResult'));
 
 // Pule (Impressão)
-router.post('/pule/:id', mustBeFn('generatePule'));
+router.post('/results/:id/pule', mustBeFn('generatePule'));
 
 module.exports = router;
