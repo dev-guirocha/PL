@@ -36,7 +36,7 @@ router.use(verifyToken, isAdmin);
 // --- ROTAS DO PAINEL ---
 
 // Dashboard
-router.get('/dashboard/stats', mustBeFn('getDashboardStats'));
+router.get('/stats', mustBeFn('getDashboardStats'));
 
 // Usuários
 router.get('/users', mustBeFn('listUsers'));
