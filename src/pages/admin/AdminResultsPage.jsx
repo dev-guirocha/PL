@@ -47,12 +47,34 @@ const AdminResultsPage = () => {
     if (!selectedLottery || selectedLottery === 'OUTRA') return [];
     let foundTimes = [];
     const listaOficial = Array.isArray(LOTERIAS_SORTEIOS) ? LOTERIAS_SORTEIOS : [];
-    listaOficial.forEach(grupo => {
+
+    const searchMap = {
+      'RIO/FEDERAL': ['RIO', 'PT RIO', 'PT-RIO'],
+      'LOOK/GOIAS': ['LOOK', 'GOIAS', 'ALVORADA'],
+      'SAO-PAULO': ['SAO PAULO', 'BAND', 'BANDEIRANTE'],
+      'LOTECE/LOTEP': ['LOTECE', 'LOTEP', 'LOTE'],
+      'MALUQUINHA': ['MALUQ'],
+      'MALUQ FEDERAL': ['MALUQ', 'FEDERAL'],
+      'MINAS GERAIS': ['MINAS'],
+      'BAHIA': ['BAHIA'],
+      'CAPITAL': ['CAPITAL'],
+      'SORTE': ['SORTE'],
+      'NACIONAL': ['NACIONAL'],
+      'FEDERAL': ['FEDERAL']
+    };
+
+    const terms = searchMap[selectedLottery] || [selectedLottery];
+
+    listaOficial.forEach((grupo) => {
       if (Array.isArray(grupo.horarios)) {
-        grupo.horarios.forEach(fullString => {
-          if (fullString.includes(selectedLottery)) foundTimes.push(fullString);
-          else if (selectedLottery === 'FEDERAL' && fullString.includes('FEDERAL')) foundTimes.push(fullString);
-          else if (selectedLottery === 'MALUQUINHA' && fullString.includes('MALUQ')) foundTimes.push(fullString);
+        grupo.horarios.forEach((fullString) => {
+          const upperStr = String(fullString).toUpperCase();
+          const match = terms.some((term) => upperStr.includes(String(term).toUpperCase()));
+          if (match) {
+            if (selectedLottery === 'MALUQUINHA' && upperStr.includes('FEDERAL')) return;
+            if (selectedLottery === 'MALUQ FEDERAL' && !upperStr.includes('FEDERAL')) return;
+            foundTimes.push(fullString);
+          }
         });
       }
     });
