@@ -24,14 +24,6 @@ const LOTERIAS = [
 const LOTERIA_BUTTON_CLASS =
   'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300';
 
-const calculateGroup = (numberStr) => {
-  if (!numberStr || numberStr.length < 2) return '';
-  const number = parseInt(numberStr.slice(-2), 10);
-  if (Number.isNaN(number)) return '';
-  if (number === 0) return '25';
-  return String(Math.ceil(number / 4));
-};
-
 const AdminResultsPage = () => {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [results, setResults] = useState([]);
@@ -60,7 +52,7 @@ const AdminResultsPage = () => {
         grupo.horarios.forEach(fullString => {
           if (fullString.includes(selectedLottery)) foundTimes.push(fullString);
           else if (selectedLottery === 'FEDERAL' && fullString.includes('FEDERAL')) foundTimes.push(fullString);
-          else if (selectedLottery === 'LT MALUQ RIO' && fullString.includes('MALUQ')) foundTimes.push(fullString);
+          else if (selectedLottery === 'MALUQUINHA' && fullString.includes('MALUQ')) foundTimes.push(fullString);
         });
       }
     });
@@ -174,23 +166,19 @@ const AdminResultsPage = () => {
   const handleSmartPaste = (e) => {
     const text = e.target.value;
     setRawInput(text);
-    const cleanData = text.replace(/\D/g, '');
-    if (!cleanData) return;
+    const allNumbers = String(text).match(/\d+/g) || [];
+    if (!allNumbers.length) return;
     const newPrizes = Array.from({ length: 7 }, () => ({ numero: '', grupo: '' }));
-    let cursor = 0;
-    for (let i = 0; i < 7; i++) {
-      if (cursor >= cleanData.length) break;
-      let numLength = 4;
-      if (cleanData.length - cursor < 4) numLength = cleanData.length - cursor;
-      const rawNum = cleanData.substr(cursor, numLength);
-      if (rawNum) {
-        newPrizes[i].numero = rawNum;
-        newPrizes[i].grupo = calculateGroup(rawNum);
-        cursor += numLength;
-        const nextTwo = cleanData.substr(cursor, 2);
-        const nextOne = cleanData.substr(cursor, 1);
-        if (nextTwo === newPrizes[i].grupo.padStart(2,'0') || (nextTwo.length===2 && nextTwo === newPrizes[i].grupo)) cursor += 2;
-        else if (nextOne === newPrizes[i].grupo) cursor += 1;
+    let row = 0;
+    for (let i = 0; i < allNumbers.length && row < 7; i += 2) {
+      const milharRaw = allNumbers[i];
+      const grupoRaw = allNumbers[i + 1];
+      if (milharRaw) {
+        newPrizes[row].numero = milharRaw.slice(0, 4);
+        if (grupoRaw) {
+          newPrizes[row].grupo = String(grupoRaw).replace(/\D/g, '').slice(0, 2);
+        }
+        row += 1;
       }
     }
     setPrizes(newPrizes);
@@ -199,7 +187,6 @@ const AdminResultsPage = () => {
   const handleChangePrize = (index, field, value) => {
     const newPrizes = [...prizes];
     newPrizes[index][field] = value;
-    if (field === 'numero') newPrizes[index].grupo = calculateGroup(value);
     setPrizes(newPrizes);
   };
 
