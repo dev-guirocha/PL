@@ -1,14 +1,10 @@
 // src/controllers/adminController.js
-// VERSÃO V21 - DIAMOND FINAL (ESTABILIDADE + RECONFERÊNCIA)
+// VERSÃO V22 - PRODUCTION FIX
+// - FIX: Mapeamento de Famílias (PT SP -> SAO-PAULO, CORUJA -> RIO, etc)
+// - CORE: Unifica lógica de match do 'Settle' com o 'Recheck'
+// - FIX: Garante leitura de 'MILHAR E CT' corretamente
 
 const prisma = require('../utils/prismaClient');
-
-// --- LISTA OFICIAL ---
-const VALID_LOTTERIES = [
-  'RIO/FEDERAL', 'MALUQUINHA', 'NACIONAL', 'LOOK/GOIAS', 'SAO-PAULO',
-  'LOTECE/LOTEP', 'BAHIA', 'CAPITAL', 'MINAS GERAIS', 'SORTE',
-  'FEDERAL', 'MALUQ FEDERAL'
-];
 
 // --- FUNÇÕES AUXILIARES GLOBAIS ---
 const extractHour = (str) => {
@@ -40,33 +36,40 @@ const getCanonicalName = (str) => {
     .toUpperCase();
 };
 
+// [MÁGICA AQUI] Dicionário de Apelidos
 const normalizeLotteryFamily = (name) => {
-  const c = getCanonicalName(name);
+  const c = getCanonicalName(name); // Ex: "PTSP20HS", "SAOPAULO"
+
+  // RIO DE JANEIRO
+  if (c.includes('RIO') && c.includes('FEDERAL')) return 'RIO/FEDERAL';
+  if (c.includes('PTRIO') || c.includes('CORUJA') || c.includes('RIO')) return 'RIO/FEDERAL';
+
+  // SÃO PAULO (Aqui resolve o seu caso PT SP)
+  if (c.includes('SAO') && c.includes('PAULO')) return 'SAO-PAULO';
+  if (c.includes('BAND')) return 'SAO-PAULO'; // Bandeirante
+  if (c.includes('PTSP')) return 'SAO-PAULO'; // PT SP
+  if (c.includes('SP') && (c.includes('PT') || c.includes('LT'))) return 'SAO-PAULO';
+
+  // MALUQUINHA
   if (c.includes('MALUQ') && c.includes('FEDERAL')) return 'MALUQ FEDERAL';
   if (c.includes('MALUQ')) return 'MALUQUINHA';
-  if (c.includes('RIO') && c.includes('FEDERAL')) return 'RIO/FEDERAL';
+
+  // GOIAS / LOOK
+  if (c.includes('LOOK') || c.includes('GOIAS') || c.includes('ALVORADA')) return 'LOOK/GOIAS';
+
+  // NORDESTE
+  if (c.includes('LOTECE') || c.includes('LOTEP') || c.includes('PARAIBA') || c.includes('CEARA')) return 'LOTECE/LOTEP';
+  if (c.includes('BAHIA')) return 'BAHIA';
+
+  // OUTROS
   if (c.includes('FEDERAL')) return 'FEDERAL';
   if (c.includes('NACIONAL')) return 'NACIONAL';
-  if (c.includes('LOOK') || c.includes('GOIAS')) return 'LOOK/GOIAS';
-  if (c.includes('SAO') && c.includes('PAULO')) return 'SAO-PAULO';
-  if (c.includes('LOTECE') || c.includes('LOTEP')) return 'LOTECE/LOTEP';
-  if (c.includes('BAHIA')) return 'BAHIA';
   if (c.includes('CAPITAL')) return 'CAPITAL';
   if (c.includes('MINAS')) return 'MINAS GERAIS';
   if (c.includes('SORTE')) return 'SORTE';
+
   return 'UNKNOWN';
 };
-
-const getLotteryKey = (name) => {
-  return getCanonicalName(name)
-    .replace('FEDERAL', '')
-    .replace('RIO', '')
-    .replace(/^LT/, '')
-    .replace(/[^A-Z0-9]/g, '');
-};
-
-const isFederal = (name) => getCanonicalName(name).includes('FEDERAL');
-const isMaluquinha = (name) => getCanonicalName(name).includes('MALUQ');
 
 const toNumberSafe = (v) => {
   if (v === null || v === undefined) return 0;
@@ -329,21 +332,10 @@ exports.listSupervisors = async (req, res) => {
   } catch (e) { res.json({ supervisors: [], total: 0 }); }
 };
 
-exports.debugOrphanedBets = async (req, res) => {
-  res.status(501).json({ error: 'Rota desativada na V21.' });
-};
-
-exports.repairOrphanedBets = async (req, res) => {
-  res.status(501).json({ error: 'Rota desativada na V21.' });
-};
-
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
     
-    // [VALIDATION] Opcional: Garante loteria na lista permitida
-    // if (!VALID_LOTTERIES.includes(String(loteria).trim().toUpperCase())) { ... }
-
     const result = await prisma.result.create({
       data: { 
         loteria, dataJogo, codigoHorario, 
@@ -390,10 +382,10 @@ exports.generatePule = async (req, res) => {
 };
 
 
-// [LIQUIDAÇÃO V21]
+// [LIQUIDAÇÃO V22 - SMART MATCHING]
 exports.settleBetsForResult = async (req, res) => {
   const id = Number(req.params.id);
-  console.log(`\n🚀 [V21-MASS] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V22-SETTLE] LIQUIDANDO RESULTADO ID: ${id}`);
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
@@ -403,12 +395,11 @@ exports.settleBetsForResult = async (req, res) => {
     const resHour = extractHour(result.codigoHorario);
     
     if (!isValidISODate(resDate) || resHour === 'XX') {
-        return res.status(400).json({ error: 'Resultado com Data ou Hora inválida. Liquidação abortada.' });
+        return res.status(400).json({ error: 'Resultado com Data ou Hora inválida.' });
     }
 
-    const resIsFed = isFederal(result.loteria);
-    const resIsMaluq = isMaluquinha(result.loteria);
-    const resKey = getLotteryKey(result.loteria);
+    // [UPGRADE V22] Usa a família normalizada
+    const resFamily = normalizeLotteryFamily(result.loteria);
     const resCanonical = getCanonicalName(result.loteria);
 
     let numerosSorteados = [];
@@ -443,19 +434,20 @@ exports.settleBetsForResult = async (req, res) => {
         if (betDate !== resDate) continue;
         if (betHour !== resHour) continue;
 
+        // [UPGRADE V22] Match Inteligente Unificado
+        const betFamily = normalizeLotteryFamily(bet.loteria);
         const betCanonical = getCanonicalName(bet.loteria);
+        
         let match = false;
-        if (betCanonical === resCanonical) match = true;
+        
+        // 1. Match por Família (Ex: "PT SP" == "SAO-PAULO")
+        if (betFamily !== 'UNKNOWN' && betFamily === resFamily) {
+            match = true;
+        } 
+        // 2. Match por Texto (Fallback)
         else {
-            const betIsFed = isFederal(bet.loteria);
-            const betIsMaluq = isMaluquinha(bet.loteria);
-            const betKey = getLotteryKey(bet.loteria);
-            if (resIsFed) { if (betIsFed) match = true; }
-            else if (resIsMaluq) { if (betIsMaluq) match = true; }
-            else {
-                if (betKey && resKey && (betKey === resKey || betKey.includes(resKey) || resKey.includes(betKey))) match = true;
-                if (!match && (resCanonical.includes(betCanonical) || betCanonical.includes(resCanonical))) match = true;
-            }
+            if (betCanonical === resCanonical) match = true;
+            else if (resCanonical.includes(betCanonical) || betCanonical.includes(resCanonical)) match = true;
         }
 
         if (!match) continue;
@@ -508,7 +500,6 @@ exports.settleBetsForResult = async (req, res) => {
             }
           } else {
             const payout = resolvePayout(modalRaw);
-            // [FIX CRÍTICO] !payout = se NÃO tiver payout, continua.
             if (!payout) continue; 
             const { factor } = checkVictory({ modal: modalRaw, palpites, premios: premiosAllowed });
             if (factor > 0) prize += perNumber * payout * factor;
@@ -560,10 +551,10 @@ exports.settleBetsForResult = async (req, res) => {
   }
 };
 
-// [RECHECK SINGLE BET - V21 FINAL]
+// [RECHECK SINGLE BET - V22 UNIFICADO]
 exports.recheckSingleBet = async (req, res) => {
   const betId = Number(req.params.id);
-  console.log(`\n🕵️ [V21-RECHECK] Aposta ID: ${betId}`);
+  console.log(`\n🕵️ [V22-RECHECK] Aposta ID: ${betId}`);
 
   try {
     const bet = await prisma.bet.findUnique({
@@ -604,10 +595,10 @@ exports.recheckSingleBet = async (req, res) => {
       if (rHour !== betHour) continue;
 
       const rFamily = normalizeLotteryFamily(r.loteria);
+      const familyMatch = (betFamily !== 'UNKNOWN' && betFamily === rFamily);
+      
       const betCanonical = getCanonicalName(bet.loteria);
       const rCanonical = getCanonicalName(r.loteria);
-
-      const familyMatch = (betFamily !== 'UNKNOWN' && betFamily === rFamily);
       const fallbackMatch = (rCanonical === betCanonical) || rCanonical.includes(betCanonical) || betCanonical.includes(rCanonical);
 
       if (familyMatch || fallbackMatch) {
