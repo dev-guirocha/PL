@@ -48,11 +48,17 @@ const AdminResultsPage = () => {
     let foundTimes = [];
     const listaOficial = Array.isArray(LOTERIAS_SORTEIOS) ? LOTERIAS_SORTEIOS : [];
 
+    const normalize = (str) =>
+      String(str)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+
     const searchMap = {
-      'RIO/FEDERAL': ['RIO', 'PT RIO', 'PT-RIO'],
-      'LOOK/GOIAS': ['LOOK', 'GOIAS', 'ALVORADA'],
-      'SAO-PAULO': ['SAO PAULO', 'BAND', 'BANDEIRANTE'],
-      'LOTECE/LOTEP': ['LOTECE', 'LOTEP', 'LOTE'],
+      'RIO/FEDERAL': ['RIO', 'PT RIO', 'PT-RIO', 'CORUJA'],
+      'LOOK/GOIAS': ['LOOK', 'GOIAS', 'ALVORADA', 'GOIAS'],
+      'SAO-PAULO': ['SAO PAULO', 'BAND', 'BANDEIRANTE', 'PT SP', 'PT-SP', 'SP'],
+      'LOTECE/LOTEP': ['LOTECE', 'LOTEP', 'LOTE', 'PARAIBA', 'CEARA'],
       'MALUQUINHA': ['MALUQ'],
       'MALUQ FEDERAL': ['MALUQ', 'FEDERAL'],
       'MINAS GERAIS': ['MINAS'],
@@ -68,11 +74,11 @@ const AdminResultsPage = () => {
     listaOficial.forEach((grupo) => {
       if (Array.isArray(grupo.horarios)) {
         grupo.horarios.forEach((fullString) => {
-          const upperStr = String(fullString).toUpperCase();
-          const match = terms.some((term) => upperStr.includes(String(term).toUpperCase()));
+          const normStr = normalize(fullString);
+          const match = terms.some((term) => normStr.includes(normalize(term)));
           if (match) {
-            if (selectedLottery === 'MALUQUINHA' && upperStr.includes('FEDERAL')) return;
-            if (selectedLottery === 'MALUQ FEDERAL' && !upperStr.includes('FEDERAL')) return;
+            if (selectedLottery === 'MALUQUINHA' && normStr.includes('FEDERAL')) return;
+            if (selectedLottery === 'MALUQ FEDERAL' && !normStr.includes('FEDERAL')) return;
             foundTimes.push(fullString);
           }
         });
