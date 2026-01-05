@@ -10,6 +10,7 @@ const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
 const betPayloadSchema = z.object({
   loteria: z.string().min(1, 'Loteria é obrigatória'),
   codigoHorario: z.string().min(1, 'Horário é obrigatório'),
+  dataJogo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve ser YYYY-MM-DD').optional(),
   apostas: z
     .array(
       z.object({
@@ -143,8 +144,16 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: parsed.error.errors?.[0]?.message || 'Dados de aposta inválidos.' });
   }
 
-  const { loteria, codigoHorario, apostas } = parsed.data;
-  const dataJogo = apostas[0].data;
+  const { loteria, codigoHorario, apostas, dataJogo: rootDataJogo } = parsed.data;
+  const dataJogo = rootDataJogo || apostas?.[0]?.data;
+
+  console.log(
+    `[BET_CREATE] User: ${req.userId} | RootDate: ${rootDataJogo} | Aposta0Date: ${apostas?.[0]?.data} | Final: ${dataJogo}`,
+  );
+
+  if (!dataJogo) {
+    return res.status(400).json({ error: 'Data do jogo não identificada.' });
+  }
 
   // Regras FEDERAL (UX + backend)
   const isFederalBet = /FEDERAL/i.test(codigoHorario) || /FEDERAL/i.test(loteria);

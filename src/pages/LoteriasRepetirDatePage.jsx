@@ -125,7 +125,16 @@ const LoteriasRepetirDatePage = () => {
           style={styles.action}
           onClick={() => {
             if (!selectedDate) return;
-            updateDraft({ data: selectedDate, currentSaved: false });
+            const currentDraft = getDraft();
+            const allSynced = (currentDraft?.apostas || []).every((ap) => ap.data === selectedDate);
+
+            if (!allSynced) {
+              console.warn('Detectado desincronia de data. Corrigindo forçadamente.');
+              const apostasSincronizadas = (currentDraft?.apostas || []).map((ap) => ({ ...ap, data: selectedDate }));
+              updateDraft({ ...currentDraft, data: selectedDate, apostas: apostasSincronizadas, currentSaved: false });
+            } else {
+              updateDraft({ data: selectedDate, currentSaved: false });
+            }
             navigate('/loterias-sorteios');
           }}
         >
