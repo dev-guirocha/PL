@@ -2,6 +2,7 @@
 require('dotenv').config(); // Para ler o .env
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -43,27 +44,28 @@ const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
 // Une origens padrão com as fornecidas por ambiente para não bloquear localhost durante QA
 const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
-app.use(helmet());
-app.use(compression());
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (allowAnyOrigin) return callback(null, true);
+    const isListed = origin && allowedOrigins.includes(origin);
+    const matchesWildcard = origin && wildcardOrigins.some((re) => re.test(origin));
+    if (!origin || isListed || matchesWildcard) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token'],
+  optionsSuccessStatus: 204,
+};
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (allowAnyOrigin) return callback(null, true);
-      // Permite ferramentas sem origin (Postman, curl) e origens explicitamente permitidas
-      const isListed = origin && allowedOrigins.includes(origin);
-      const matchesWildcard = origin && wildcardOrigins.some((re) => re.test(origin));
-      if (!origin || isListed || matchesWildcard) {
-        return callback(null, true);
-      }
-      // Retorna false para evitar erro 500 em preflight; o browser irá bloquear se não houver header de CORS
-      return callback(null, false);
-    },
-    credentials: true,
-    optionsSuccessStatus: 204,
-  }),
-); // Deixa o Front-end falar com o Back-end
-app.use(express.json()); // Permite ler JSON no corpo da requisição
+app.use(helmet());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(compression());
+app.use(cookieParser());
+app.use(express.json());
 
 // Webhook deve ficar antes do CSRF para não ser bloqueado
 app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);
