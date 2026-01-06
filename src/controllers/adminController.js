@@ -1,12 +1,17 @@
 // src/controllers/adminController.js
-// VERSÃO V22 - PRODUCTION FIX
-// - FIX: Mapeamento de Famílias (PT SP -> SAO-PAULO, CORUJA -> RIO, etc)
-// - CORE: Unifica lógica de match do 'Settle' com o 'Recheck'
-// - FIX: Garante leitura de 'MILHAR E CT' corretamente
+// VERSÃO V34B - FINAL PRODUCTION (CENTRALIZED NORMALIZATION + PATCHED CONSISTENCY)
+// - ARCH: Normalização da modalidade ocorre UMA VEZ (modalNorm) e é usada em TODO downstream.
+// - FIX: PALPITÃO normaliza para PALPITAO (removendo acento), evitando drift.
+// - FIX: expandModalidades reconhece PALPITAO (já normalizado) e compostas são consistentes.
+// - CORE: Engine V3.3 (Hybrid Logic, Synced Recheck, Reconstitutable Audit).
 
 const prisma = require('../utils/prismaClient');
 
-// --- FUNÇÕES AUXILIARES GLOBAIS ---
+// --- CONSTANTES ---
+const MAX_AUTO_PAYOUT = 10000; // Teto para aprovação automática
+const AUDIT_LOGS = process.env.AUDIT_LOGS === '1'; // Controlado por ENV
+
+// --- FUNÇÕES AUXILIARES ---
 const extractHour = (str) => {
   if (!str) return 'XX';
   const nums = String(str).replace(/\D/g, '');
@@ -21,7 +26,7 @@ const normalizeDate = (dateStr) => {
   if (clean.includes('/')) {
     const parts = clean.split('/');
     if (parts.length === 3) {
-      return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
     }
   }
   return clean;
@@ -29,45 +34,32 @@ const normalizeDate = (dateStr) => {
 
 const getCanonicalName = (str) => {
   return String(str || '')
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w\s]/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 };
 
-// [MÁGICA AQUI] Dicionário de Apelidos
 const normalizeLotteryFamily = (name) => {
-  const c = getCanonicalName(name); // Ex: "PTSP20HS", "SAOPAULO"
-
-  // RIO DE JANEIRO
+  const c = getCanonicalName(name);
   if (c.includes('RIO') && c.includes('FEDERAL')) return 'RIO/FEDERAL';
   if (c.includes('PTRIO') || c.includes('CORUJA') || c.includes('RIO')) return 'RIO/FEDERAL';
-
-  // SÃO PAULO (Aqui resolve o seu caso PT SP)
   if (c.includes('SAO') && c.includes('PAULO')) return 'SAO-PAULO';
-  if (c.includes('BAND')) return 'SAO-PAULO'; // Bandeirante
-  if (c.includes('PTSP')) return 'SAO-PAULO'; // PT SP
+  if (c.includes('BAND')) return 'SAO-PAULO';
+  if (c.includes('PTSP')) return 'SAO-PAULO';
   if (c.includes('SP') && (c.includes('PT') || c.includes('LT'))) return 'SAO-PAULO';
-
-  // MALUQUINHA
   if (c.includes('MALUQ') && c.includes('FEDERAL')) return 'MALUQ FEDERAL';
   if (c.includes('MALUQ')) return 'MALUQUINHA';
-
-  // GOIAS / LOOK
   if (c.includes('LOOK') || c.includes('GOIAS') || c.includes('ALVORADA')) return 'LOOK/GOIAS';
-
-  // NORDESTE
   if (c.includes('LOTECE') || c.includes('LOTEP') || c.includes('PARAIBA') || c.includes('CEARA')) return 'LOTECE/LOTEP';
   if (c.includes('BAHIA')) return 'BAHIA';
-
-  // OUTROS
   if (c.includes('FEDERAL')) return 'FEDERAL';
   if (c.includes('NACIONAL')) return 'NACIONAL';
   if (c.includes('CAPITAL')) return 'CAPITAL';
   if (c.includes('MINAS')) return 'MINAS GERAIS';
   if (c.includes('SORTE')) return 'SORTE';
-
   return 'UNKNOWN';
 };
 
@@ -85,7 +77,7 @@ const toNumberSafe = (v) => {
   }
   if (hasComma && !hasDot) {
     if (/^\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, '');
-    else s = s.replace(/\./g, '').replace(',', '.'); 
+    else s = s.replace(/\./g, '').replace(',', '.');
     const n = Number(s);
     return Number.isFinite(n) ? n : 0;
   }
@@ -104,6 +96,19 @@ const isValidISODate = (iso) => {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === (m - 1) && dt.getUTCDate() === d;
 };
 
+const normalizeModalidade = (raw) => {
+  return String(raw || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\bCT\b/g, 'CENTENA')
+    .replace(/\bDZ\b/g, 'DEZENA')
+    .replace(/\bGP\b/g, 'GRUPO')
+    .replace(/\bUN\b/g, 'UNIDADE')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 const pad = (s, len) => String(s).replace(/\D/g, '').slice(-len).padStart(len, '0');
 const toMilhar = (s) => pad(s, 4);
 const toCentena = (s) => pad(s, 3);
@@ -116,9 +121,9 @@ const getGrupoFromMilhar = (milhar4) => {
   return String(Math.ceil(d / 4));
 };
 const normalizeGrupoPalpite = (p) => {
-  const p2 = pad(p, 2);           
-  if (p2 === '00') return '25';   
-  return p2.startsWith('0') ? p2.slice(1) : p2; 
+  const p2 = pad(p, 2);
+  if (p2 === '00') return '25';
+  return p2.startsWith('0') ? p2.slice(1) : p2;
 };
 const sortDigits = (str) => String(str).split('').sort().join('');
 
@@ -134,95 +139,167 @@ function parseApostasFromBet(bet) {
   try {
     if (typeof bet.palpites === 'string') return JSON.parse(bet.palpites);
     if (Array.isArray(bet.palpites)) return bet.palpites;
-    return []; 
-  } catch { return []; }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
-function resolvePayout(modalidade) {
-  const table = {
-    'TERNO DEZENA': 3000, 'DUQUE DEZENA': 300, 'TERNO GRUPO': 150, 'DUQUE GRUPO': 18,
-    'MILHAR INV': 4000, 'CENTENA INV': 400, 'DEZENA INV': 60,
-    'MILHAR': 4000, 'CENTENA': 400, 'DEZENA': 60, 'GRUPO': 18, 'UNIDADE': 6, 
-  };
-  let key = String(modalidade || '').toUpperCase()
-    .replace(/\bCT\b/g, 'CENTENA').replace(/\bDZ\b/g, 'DEZENA')
-    .replace(/\bGP\b/g, 'GRUPO').replace(/\bUN\b/g, 'UNIDADE');
-  const keys = Object.keys(table).sort((a, b) => b.length - a.length);
-  for (const k of keys) {
-    if (key.includes(k)) return table[k];
+function normalizeColocacao(raw) {
+  return String(raw || '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+function getColocacaoFraction(colocacaoRaw) {
+  const c = normalizeColocacao(colocacaoRaw);
+  const m = c.match(/(\d+)\s*(?:AO|A|\/|-)\s*(\d+)/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (Number.isFinite(a) && Number.isFinite(b) && b > 0) return { a, b };
   }
-  return 0;
+  if (/^(1|1\s*PREMIO|1\s*PRÊMIO)\b/.test(c)) return { a: 1, b: 1 };
+  return null;
+}
+
+function resolvePayoutV2(m) {
+  if (m === 'MILHAR') return { type: 'base', value: 8000 };
+  if (m === 'CENTENA') return { type: 'base', value: 800 };
+  if (m === 'DEZENA') return { type: 'base', value: 80 };
+  if (m === 'GRUPO') return { type: 'base', value: 20 };
+  if (m === 'UNIDADE') return { type: 'base', value: 8 };
+
+  if (m.includes('MILHAR') && (m.includes('INV') || m.includes('INVERSA'))) return { type: 'base', value: 333.33 };
+  if (m.includes('CENTENA') && (m.includes('INV') || m.includes('INVERSA'))) return { type: 'base', value: 133.33 };
+
+  const fixo1_5 = { type: 'fixed', allowedFractions: [{ a: 1, b: 5 }] };
+
+  if (m.includes('DUQUE') && m.includes('DEZ')) return { ...fixo1_5, value: 300 };
+  if (m.includes('TERNO') && m.includes('DEZ') && !m.includes('SECO')) return { ...fixo1_5, value: 5000 };
+
+  if (m.includes('DUQUE') && m.includes('GRUPO')) return { ...fixo1_5, value: 18 };
+  if (m.includes('TERNO') && m.includes('GRUPO')) return { ...fixo1_5, value: 150 };
+  if (m.includes('QUADRA') && m.includes('GRUPO')) return { ...fixo1_5, value: 1000 };
+
+  if (m.includes('PASSE VAI') && !m.includes('VEM')) return { ...fixo1_5, value: 100 };
+  if (m.includes('PASSE VAI') && m.includes('VEM')) return { ...fixo1_5, value: 55 };
+  if (m.includes('PALPITAO')) return { ...fixo1_5, value: 800 };
+
+  if (m.includes('TERNO') && m.includes('DEZ') && m.includes('SECO')) {
+    return { type: 'fixed', value: 10000, allowedFractions: [{ a: 1, b: 3 }] };
+  }
+
+  return { type: 'unknown', value: 0 };
+}
+
+function isAllowedFraction(allowedFractions, frac) {
+  if (!allowedFractions || allowedFractions.length === 0) return true;
+  if (!frac) return false;
+  return allowedFractions.some((x) => x.a === frac.a && x.b === frac.b);
+}
+
+function computeFinalPayout({ modalidadeRaw, colocacaoRaw }) {
+  const p = resolvePayoutV2(modalidadeRaw);
+
+  if (p.type === 'unknown') {
+    return { ok: false, payout: 0, reason: 'UNKNOWN_MODALIDADE' };
+  }
+
+  const frac = getColocacaoFraction(colocacaoRaw);
+
+  if (p.type === 'fixed') {
+    if (!isAllowedFraction(p.allowedFractions, frac)) {
+      return { ok: false, payout: 0, reason: 'INVALID_COLOCACAO' };
+    }
+    return { ok: true, payout: p.value };
+  }
+
+  if (!frac) return { ok: true, payout: p.value };
+
+  if (frac.a === 1 && frac.b >= 1) {
+    return { ok: true, payout: p.value / frac.b };
+  }
+
+  return { ok: false, payout: 0, reason: 'UNSUPPORTED_FRACTION' };
 }
 
 function indicesFromColocacao(colocacao) {
-  const c = String(colocacao || '').toUpperCase().replace(/\s+/g, ' ').trim();
-  const frac = c.match(/(\d)\s*\/\s*(\d)/);
-  if (frac) {
-    const a = Number(frac[1]);
-    const b = Number(frac[2]);
-    if (a === 1 && b >= 1) return Array.from({ length: Math.min(b, 7) }, (_, i) => i);
+  const frac = getColocacaoFraction(colocacao);
+
+  if (frac && frac.a !== 1) return [];
+
+  if (frac && frac.a === 1) {
+    return Array.from({ length: Math.min(frac.b, 7) }, (_, i) => i);
   }
-  const eFrac = c.match(/1\s*E\s*1\s*\/\s*(\d)/);
-  if (eFrac) {
-    const b = Number(eFrac[1]);
-    return Array.from({ length: Math.min(b, 7) }, (_, i) => i);
-  }
-  const fracPremio = c.match(/1\s*\/\s*(\d)\s*PR[ÊE]MIO/);
-  if (fracPremio) {
-    const b = Number(fracPremio[1]);
-    return Array.from({ length: Math.min(b, 7) }, (_, i) => i);
-  }
-  if (c.startsWith('1')) return [0];
-  if (c.startsWith('2')) return [1];
-  if (c.startsWith('3')) return [2];
-  if (c.startsWith('4')) return [3];
-  if (c.startsWith('5')) return [4];
-  if (c.startsWith('6')) return [5];
-  if (c.startsWith('7')) return [6];
-  return [0];
+
+  const c = normalizeColocacao(colocacao);
+  if (/^(1|1\s*PREMIO|1\s*PRÊMIO)\b/.test(c)) return [0];
+  if (/^2\b/.test(c)) return [1];
+  if (/^3\b/.test(c)) return [2];
+  if (/^4\b/.test(c)) return [3];
+  if (/^5\b/.test(c)) return [4];
+  if (/^6\b/.test(c)) return [5];
+  if (/^7\b/.test(c)) return [6];
+
+  return [];
 }
 
-function expandModalidades(modalRaw) {
-  const m = String(modalRaw || '').toUpperCase();
+function expandModalidades(m) {
   const has = (re) => re.test(m);
-  if (has(/DUQUE|TERNO|QUADRA|QUINA/)) return ['COMPOSTA'];
+
+  if (has(/DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/)) return ['COMPOSTA'];
+
   const suffix = [];
   if (has(/INV/)) suffix.push('INV');
   if (has(/ESQ/)) suffix.push('ESQ');
   if (has(/MEIO/)) suffix.push('MEIO');
   const suffixStr = suffix.length ? ' ' + suffix.join(' ') : '';
+
   const out = [];
   if (has(/MILHAR/)) out.push(('MILHAR' + suffixStr).trim());
-  if (has(/CENTENA|\bCT\b/)) out.push(('CENTENA' + suffixStr).trim());
-  if (has(/DEZENA|\bDZ\b/)) out.push(('DEZENA' + suffixStr).trim());
-  if (has(/UNIDADE|\bUN\b/)) out.push(('UNIDADE' + suffixStr).trim());
-  if (has(/GRUPO|\bGP\b/)) out.push('GRUPO');
+  if (has(/CENTENA/)) out.push(('CENTENA' + suffixStr).trim());
+  if (has(/DEZENA/)) out.push(('DEZENA' + suffixStr).trim());
+  if (has(/UNIDADE/)) out.push(('UNIDADE' + suffixStr).trim());
+  if (has(/GRUPO/)) out.push('GRUPO');
+
   return out.length ? out : ['UNKNOWN'];
 }
 
 function checkVictory({ modal, palpites, premios }) {
-  const m = String(modal || '').toUpperCase();
+  const m = modal;
   const cleanPalpitesRaw = (Array.isArray(palpites) ? palpites : []).map((p) => String(p).replace(/\D/g, ''));
   const uniquePalpitesRaw = [...new Set(cleanPalpitesRaw.filter(Boolean))];
   const uniquePremios4 = [...new Set((Array.isArray(premios) ? premios : []).map(toMilhar).filter(Boolean))];
 
-  if (m.includes('DUQUE') || m.includes('TERNO') || m.includes('QUADRA') || m.includes('QUINA')) {
+  if (m.includes('DUQUE') || m.includes('TERNO') || m.includes('QUADRA') || m.includes('QUINA') || m.includes('PASSE') || m.includes('PALPITAO')) {
     const isDuque = m.includes('DUQUE');
     const isTerno = m.includes('TERNO');
     const isQuadra = m.includes('QUADRA');
-    const required = isDuque ? 2 : isTerno ? 3 : isQuadra ? 4 : 5;
-    const domain = m.includes('GRUPO') || m.includes('GP') ? 'GRUPO' : 'DEZENA';
+    const isPasse = m.includes('PASSE');
+    const isPalpitao = m.includes('PALPITAO');
+
+    let required = 0;
+    if (isDuque) required = 2;
+    else if (isTerno) required = 3;
+    else if (isQuadra) required = 4;
+    else if (isPasse) required = 2;
+    else if (isPalpitao) required = 1;
+
+    const domain = (m.includes('GRUPO') || isPasse || isPalpitao) ? 'GRUPO' : 'DEZENA';
+
     const validTargets = uniquePremios4
       .map((p4) => (domain === 'GRUPO' ? getGrupoFromMilhar(p4) : toDezena(p4)))
       .filter(Boolean);
+
     const normalizedPalpites = uniquePalpitesRaw.map((p) => {
       if (domain === 'GRUPO') return normalizeGrupoPalpite(p);
       return toDezena(p);
     });
+
     const hits = [...new Set(normalizedPalpites)].filter((p) => validTargets.includes(p));
     const hitCount = hits.length;
     const factor = hitCount >= required ? nCk(hitCount, required) : 0;
-    return { factor };
+
+    return { factor, hits, required, domain };
   }
 
   let kind = 'UNKNOWN';
@@ -232,21 +309,22 @@ function checkVictory({ modal, palpites, premios }) {
   else if (m.includes('DEZENA')) kind = 'DEZENA';
   else if (m.includes('UNIDADE')) kind = 'UNIDADE';
 
-  const isInv = m.includes('INV');   
-  const isEsq = m.includes('ESQ');   
-  const isMeio = m.includes('MEIO'); 
+  const isInv = m.includes('INV');
+  const isEsq = m.includes('ESQ');
+  const isMeio = m.includes('MEIO');
+
   let targets = [];
   if (kind === 'MILHAR') {
     targets = uniquePremios4;
   } else if (kind === 'CENTENA') {
-    if (isEsq) targets = uniquePremios4.map(p => p.slice(0, 3)); 
-    else targets = uniquePremios4.map(p => toCentena(p));        
+    if (isEsq) targets = uniquePremios4.map((p) => p.slice(0, 3));
+    else targets = uniquePremios4.map((p) => toCentena(p));
   } else if (kind === 'DEZENA') {
-    if (isEsq) targets = uniquePremios4.map(p => p.slice(0, 2));      
-    else if (isMeio) targets = uniquePremios4.map(p => p.slice(1, 3)); 
-    else targets = uniquePremios4.map(p => toDezena(p));              
-  } else if (kind === 'UNIDADE') targets = uniquePremios4.map(p => toUnidade(p));
-  else if (kind === 'GRUPO') targets = uniquePremios4.map(p => getGrupoFromMilhar(p));
+    if (isEsq) targets = uniquePremios4.map((p) => p.slice(0, 2));
+    else if (isMeio) targets = uniquePremios4.map((p) => p.slice(1, 3));
+    else targets = uniquePremios4.map((p) => toDezena(p));
+  } else if (kind === 'UNIDADE') targets = uniquePremios4.map((p) => toUnidade(p));
+  else if (kind === 'GRUPO') targets = uniquePremios4.map((p) => getGrupoFromMilhar(p));
 
   let requiredLen = 0;
   if (kind === 'MILHAR') requiredLen = 4;
@@ -254,7 +332,7 @@ function checkVictory({ modal, palpites, premios }) {
   if (kind === 'DEZENA') requiredLen = 2;
   if (kind === 'UNIDADE') requiredLen = 1;
 
-  const cleanPalpites = uniquePalpitesRaw.map(p => {
+  const cleanPalpites = uniquePalpitesRaw.map((p) => {
     if (kind === 'GRUPO') return normalizeGrupoPalpite(p);
     return pad(p, requiredLen);
   });
@@ -262,13 +340,13 @@ function checkVictory({ modal, palpites, premios }) {
   let wins = [];
   if (isInv && kind !== 'GRUPO') {
     const sortedTargets = targets.map(sortDigits);
-    wins = cleanPalpites.filter(p => sortedTargets.includes(sortDigits(p)));
+    wins = cleanPalpites.filter((p) => sortedTargets.includes(sortDigits(p)));
   } else {
-    wins = cleanPalpites.filter(p => targets.includes(p));
+    wins = cleanPalpites.filter((p) => targets.includes(p));
   }
-  return { factor: wins.length };
-}
 
+  return { factor: wins.length, wins };
+}
 
 // ==========================================
 // CONTROLLERS
@@ -302,7 +380,7 @@ exports.listUsers = async (req, res) => {
   } catch(e) { res.status(500).json({error: 'Erro list users'}); }
 };
 
-exports.toggleUserBlock = async (req, res) => res.json({ message: "Desativado." });
+exports.toggleUserBlock = async (req, res) => res.json({ message: 'Desativado.' });
 
 exports.listBets = async (req, res) => {
   try {
@@ -335,7 +413,7 @@ exports.listSupervisors = async (req, res) => {
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
-    
+
     const result = await prisma.result.create({
       data: { 
         loteria, dataJogo, codigoHorario, 
@@ -381,11 +459,9 @@ exports.generatePule = async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Erro pule' }); }
 };
 
-
-// [LIQUIDAÇÃO V22 - SMART MATCHING]
 exports.settleBetsForResult = async (req, res) => {
   const id = Number(req.params.id);
-  console.log(`\n🚀 [V22-SETTLE] LIQUIDANDO RESULTADO ID: ${id}`);
+  console.log(`\n🚀 [V34B-SETTLE] LIQUIDANDO RESULTADO ID: ${id}`);
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
@@ -393,33 +469,31 @@ exports.settleBetsForResult = async (req, res) => {
 
     const resDate = normalizeDate(result.dataJogo);
     const resHour = extractHour(result.codigoHorario);
-    
+
     if (!isValidISODate(resDate) || resHour === 'XX') {
-        return res.status(400).json({ error: 'Resultado com Data ou Hora inválida.' });
+      return res.status(400).json({ error: 'Resultado com Data ou Hora inválida.' });
     }
 
-    // [UPGRADE V22] Usa a família normalizada
     const resFamily = normalizeLotteryFamily(result.loteria);
     const resCanonical = getCanonicalName(result.loteria);
 
     let numerosSorteados = [];
     try {
       numerosSorteados = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros);
-    } catch { numerosSorteados = []; }
+    } catch {
+      numerosSorteados = [];
+    }
 
     const premios = (Array.isArray(numerosSorteados) ? numerosSorteados : [])
       .map((n) => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'))
       .filter(Boolean);
 
     if (!premios.length) {
-       return res.status(400).json({ error: 'Resultado sem números válidos para liquidar.' });
+      return res.status(400).json({ error: 'Resultado sem números válidos para liquidar.' });
     }
 
     const bets = await prisma.bet.findMany({
-      where: { 
-        status: 'open',
-        resultId: null 
-      },
+      where: { status: 'open', resultId: null },
       include: { user: true },
     });
 
@@ -429,85 +503,178 @@ exports.settleBetsForResult = async (req, res) => {
       try {
         const betDate = normalizeDate(bet.dataJogo);
         const betHour = extractHour(bet.codigoHorario);
-        
         if (!isValidISODate(betDate) || betHour === 'XX') continue;
         if (betDate !== resDate) continue;
         if (betHour !== resHour) continue;
 
-        // [UPGRADE V22] Match Inteligente Unificado
         const betFamily = normalizeLotteryFamily(bet.loteria);
         const betCanonical = getCanonicalName(bet.loteria);
-        
+
         let match = false;
-        
-        // 1. Match por Família (Ex: "PT SP" == "SAO-PAULO")
-        if (betFamily !== 'UNKNOWN' && betFamily === resFamily) {
-            match = true;
-        } 
-        // 2. Match por Texto (Fallback)
-        else {
-            if (betCanonical === resCanonical) match = true;
-            else if (resCanonical.includes(betCanonical) || betCanonical.includes(resCanonical)) match = true;
-        }
+        if (betFamily !== 'UNKNOWN' && betFamily === resFamily) match = true;
+        else if (betCanonical === resCanonical || resCanonical.includes(betCanonical) || betCanonical.includes(resCanonical)) match = true;
 
         if (!match) continue;
         summary.matched++;
 
         const apostas = parseApostasFromBet(bet);
         if (!apostas || !apostas.length) {
-          const voidTx = await prisma.bet.updateMany({
-            where: { id: bet.id, status: 'open', resultId: null },
+          await prisma.bet.updateMany({
+            where: { id: bet.id },
             data: { status: 'lost', settledAt: new Date(), resultId: id, prize: 0 },
           });
-          if (voidTx.count > 0) summary.settled++;
+          summary.settled++;
           continue;
         }
 
         let prize = 0;
+        let requiresManualReview = false;
+
         for (const aposta of apostas) {
-          const modalRaw = aposta.modalidade || bet.modalidade || '';
-          const colocacaoRaw = aposta.colocacao || bet.colocacao || '';
+          const modalSrc = aposta.modalidade || bet.modalidade || '';
+          const modalNorm = normalizeModalidade(modalSrc);
+
+          const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
           const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-          const palpCount = palpites.length || 0;
-          
-          const rawTotal = (aposta.total !== undefined && aposta.total !== null) ? aposta.total : bet.total;
+
+          const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
           const betTotalNum = toNumberSafe(rawTotal);
           const valPorNum = toNumberSafe(aposta.valorPorNumero);
-
-          const perNumber = valPorNum > 0 ? valPorNum : (palpCount > 0 ? betTotalNum / palpCount : 0);
+          const palpCount = palpites.length || 0;
+          const perNumber = valPorNum > 0 ? valPorNum : palpCount > 0 ? betTotalNum / palpCount : 0;
 
           if (!perNumber || perNumber <= 0 || !palpCount) continue;
 
+          if (modalNorm.includes('PASSE') || modalNorm.includes('PALPITAO')) {
+            requiresManualReview = true;
+          }
+
+          const { ok, payout, reason } = computeFinalPayout({ modalidadeRaw: modalNorm, colocacaoRaw });
+          if (!ok) {
+            console.warn(`[BET ${bet.id}] Ignorada: ${reason} (${modalNorm} @ ${colocacaoRaw})`);
+            continue;
+          }
+
           const allowedIdx = indicesFromColocacao(colocacaoRaw);
+          if (!allowedIdx.length) {
+            console.warn(`[BET ${bet.id}] COLOCACAO_INVALIDA_FAIL_CLOSED (${colocacaoRaw})`);
+            continue;
+          }
+
           const premiosAllowed = allowedIdx.map((i) => premios[i]).filter(Boolean);
           if (!premiosAllowed.length) continue;
 
-          const baseMods = expandModalidades(modalRaw);
+          const baseMods = expandModalidades(modalNorm);
 
           if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
             for (const palpite of palpites) {
               let bestForThisPalpite = 0;
+              let bestMeta = null;
+
               for (const base of baseMods) {
-                const payout = resolvePayout(base);
-                if (!payout) continue;
+                const sub = computeFinalPayout({ modalidadeRaw: base, colocacaoRaw });
+                if (!sub.ok) continue;
+
                 const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
                 if (factor > 0) {
-                  const amount = perNumber * payout * factor;
-                  if (amount > bestForThisPalpite) bestForThisPalpite = amount;
+                  const amount = perNumber * sub.payout * factor;
+                  if (amount > bestForThisPalpite) {
+                    bestForThisPalpite = amount;
+                    bestMeta = {
+                      betId: bet.id,
+                      resultId: id,
+                      colocacao: colocacaoRaw,
+                      palpite: palpite,
+                      palpitesCount: palpites.length,
+                      mod: base,
+                      stake: perNumber,
+                      payout: sub.payout,
+                      factor,
+                      win: amount,
+                    };
+                  }
                 }
               }
-              prize += bestForThisPalpite;
+
+              if (bestForThisPalpite > 0) {
+                if (AUDIT_LOGS && bestMeta) console.log('[AUDIT WIN]', bestMeta);
+                prize += bestForThisPalpite;
+              }
             }
           } else {
-            const payout = resolvePayout(modalRaw);
-            if (!payout) continue; 
-            const { factor } = checkVictory({ modal: modalRaw, palpites, premios: premiosAllowed });
-            if (factor > 0) prize += perNumber * payout * factor;
+            const isComposta = /DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/.test(modalNorm);
+
+            if (isComposta) {
+              const { factor, hits, required, domain } = checkVictory({
+                modal: modalNorm,
+                palpites,
+                premios: premiosAllowed,
+              });
+
+              if (factor > 0) {
+                const amount = perNumber * payout * factor;
+                prize += amount;
+
+                if (AUDIT_LOGS)
+                  console.log('[AUDIT WIN]', {
+                    betId: bet.id,
+                    resultId: id,
+                    colocacao: colocacaoRaw,
+                    palpite: Array.isArray(hits) ? hits : null,
+                    required: Number.isFinite(required) ? required : null,
+                    domain: domain || null,
+                    palpitesCount: palpites.length,
+                    mod: modalNorm,
+                    stake: perNumber,
+                    payout,
+                    factor,
+                    win: amount,
+                  });
+              }
+            } else {
+              const { factor, wins } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
+
+              if (factor > 0 && (!Array.isArray(wins) || wins.length === 0)) {
+                console.warn(`[BET ${bet.id}] WIN_WITHOUT_WINS_FAIL_CLOSED (${modalNorm} @ ${colocacaoRaw})`);
+                continue;
+              }
+
+              if (Array.isArray(wins) && wins.length) {
+                for (const w of wins) {
+                  const amount = perNumber * payout;
+                  prize += amount;
+
+                  if (AUDIT_LOGS)
+                    console.log('[AUDIT WIN]', {
+                      betId: bet.id,
+                      resultId: id,
+                      colocacao: colocacaoRaw,
+                      palpite: w,
+                      palpitesCount: palpites.length,
+                      mod: modalNorm,
+                      stake: perNumber,
+                      payout,
+                      factor: 1,
+                      win: amount,
+                    });
+                }
+              }
+            }
           }
         }
 
         const finalPrize = Number(prize.toFixed(2));
-        const status = finalPrize > 0 ? 'won' : 'lost';
+
+        let status = 'lost';
+        if (finalPrize > 0) {
+          status = 'won';
+          if (requiresManualReview || finalPrize > MAX_AUTO_PAYOUT) {
+            status = 'pending_review';
+            console.warn(
+              `[BET ${bet.id}] Review: Prize=${finalPrize}, Reason=${requiresManualReview ? 'COMPLEX_MODAL' : 'HIGH_VALUE'}`
+            );
+          }
+        }
 
         const didSettle = await prisma.$transaction(async (tx) => {
           const updateBatch = await tx.bet.updateMany({
@@ -517,236 +684,211 @@ exports.settleBetsForResult = async (req, res) => {
 
           if (updateBatch.count === 0) return false;
 
-          if (finalPrize > 0) {
+          if (status === 'won' && finalPrize > 0) {
             await tx.user.update({
               where: { id: bet.userId },
               data: { balance: { increment: finalPrize } },
             });
             await tx.transaction.create({
-              data: { 
-                userId: bet.userId, 
-                type: 'prize', 
-                amount: finalPrize, 
-                description: `Prêmio (${bet.id})`
-              },
+              data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio (${bet.id})` },
             });
           }
           return true;
         });
 
         if (didSettle) {
-            summary.settled++;
-            if (finalPrize > 0) summary.wins++;
+          summary.settled++;
+          if (finalPrize > 0) summary.wins++;
         }
       } catch (innerErr) {
         summary.errors.push({ id: bet.id, msg: innerErr?.message || String(innerErr) });
       }
     }
-    
-    return res.json({ message: 'Processamento concluído', summary: { processed: bets.length, ...summary } });
 
+    return res.json({ message: 'Processamento concluído', summary: { processed: bets.length, ...summary } });
   } catch (err) {
     console.error('Erro fatal:', err);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 };
 
-// [RECHECK SINGLE BET - V22 UNIFICADO]
 exports.recheckSingleBet = async (req, res) => {
   const betId = Number(req.params.id);
-  console.log(`\n🕵️ [V22-RECHECK] Aposta ID: ${betId}`);
+  console.log(`\n🕵️ [V34B-RECHECK] Aposta ID: ${betId}`);
 
   try {
-    const bet = await prisma.bet.findUnique({
-      where: { id: betId },
-      include: { user: true }
-    });
-
+    const bet = await prisma.bet.findUnique({ where: { id: betId }, include: { user: true } });
     if (!bet) return res.status(404).json({ error: 'Aposta não encontrada' });
 
     const betDateISO = normalizeDate(bet.dataJogo);
     const betHour = extractHour(bet.codigoHorario);
-
-    if (!isValidISODate(betDateISO) || betHour === 'XX') {
-      return res.status(400).json({ error: 'Aposta com data/hora inválida.' });
-    }
+    if (!isValidISODate(betDateISO) || betHour === 'XX') return res.status(400).json({ error: 'Data inválida' });
 
     const betFamily = normalizeLotteryFamily(bet.loteria);
     const [ano, mes, dia] = betDateISO.split('-');
     const betDateBR = `${dia}/${mes}/${ano}`;
 
-    const candidates = await prisma.result.findMany({
-      where: {
-        OR: [
-          { dataJogo: { contains: betDateISO } },
-          { dataJogo: { contains: betDateBR } },
-          { dataJogo: String(bet.dataJogo) }
-        ]
-      },
-      orderBy: { createdAt: 'desc' }
+    const candidatesFull = await prisma.result.findMany({
+      where: { OR: [{ dataJogo: { contains: betDateISO } }, { dataJogo: { contains: betDateBR } }, { dataJogo: String(bet.dataJogo) }] },
+      orderBy: { createdAt: 'desc' },
     });
 
     let matchingResult = null;
-
-    for (const r of candidates) {
+    for (const r of candidatesFull) {
       const rDate = normalizeDate(r.dataJogo);
       const rHour = extractHour(r.codigoHorario);
       if (rDate !== betDateISO) continue;
       if (rHour !== betHour) continue;
 
       const rFamily = normalizeLotteryFamily(r.loteria);
-      const familyMatch = (betFamily !== 'UNKNOWN' && betFamily === rFamily);
-      
+      const familyMatch = betFamily !== 'UNKNOWN' && betFamily === rFamily;
+
       const betCanonical = getCanonicalName(bet.loteria);
       const rCanonical = getCanonicalName(r.loteria);
-      const fallbackMatch = (rCanonical === betCanonical) || rCanonical.includes(betCanonical) || betCanonical.includes(rCanonical);
 
-      if (familyMatch || fallbackMatch) {
+      if (familyMatch || rCanonical === betCanonical || rCanonical.includes(betCanonical) || betCanonical.includes(rCanonical)) {
         matchingResult = r;
         break;
       }
     }
 
-    if (!matchingResult) {
-      return res.status(404).json({ error: 'Resultado correspondente não encontrado.' });
-    }
+    if (!matchingResult) return res.status(404).json({ error: 'Resultado correspondente não encontrado.' });
 
     let numerosSorteados = [];
     try {
-      numerosSorteados = Array.isArray(matchingResult.numeros)
-        ? matchingResult.numeros
-        : JSON.parse(matchingResult.numeros);
-    } catch { numerosSorteados = []; }
+      numerosSorteados = Array.isArray(matchingResult.numeros) ? matchingResult.numeros : JSON.parse(matchingResult.numeros);
+    } catch {
+      numerosSorteados = [];
+    }
 
     const premios = (Array.isArray(numerosSorteados) ? numerosSorteados : [])
-      .map(n => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'))
+      .map((n) => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'))
       .filter(Boolean);
 
-    if (!premios.length) {
-      return res.status(400).json({ error: 'Resultado encontrado, mas sem números válidos.' });
-    }
+    if (!premios.length) return res.status(400).json({ error: 'Resultado sem números válidos.' });
 
     const apostas = parseApostasFromBet(bet);
     let prize = 0;
+    let requiresManualReview = false;
 
     for (const aposta of apostas) {
-      const modalRaw = aposta.modalidade || bet.modalidade || '';
-      const colocacaoRaw = aposta.colocacao || bet.colocacao || '';
-      const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-      const palpCount = palpites.length || 0;
+      const modalSrc = aposta.modalidade || bet.modalidade || '';
+      const modalNorm = normalizeModalidade(modalSrc);
 
-      const rawTotal = (aposta.total !== undefined && aposta.total !== null) ? aposta.total : bet.total;
+      const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
+      const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
+
+      const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
       const betTotalNum = toNumberSafe(rawTotal);
       const valPorNum = toNumberSafe(aposta.valorPorNumero);
+      const palpCount = palpites.length || 0;
+      const perNumber = valPorNum > 0 ? valPorNum : palpCount > 0 ? betTotalNum / palpCount : 0;
 
-      const perNumber = valPorNum > 0 ? valPorNum : (palpCount > 0 ? betTotalNum / palpCount : 0);
       if (!perNumber || perNumber <= 0 || !palpCount) continue;
 
+      if (modalNorm.includes('PASSE') || modalNorm.includes('PALPITAO')) {
+        requiresManualReview = true;
+      }
+
+      const { ok, payout, reason } = computeFinalPayout({ modalidadeRaw: modalNorm, colocacaoRaw });
+      if (!ok) {
+        console.warn(`[BET ${bet.id}] Ignorada: ${reason} (${modalNorm} @ ${colocacaoRaw})`);
+        continue;
+      }
+
       const allowedIdx = indicesFromColocacao(colocacaoRaw);
-      const premiosAllowed = allowedIdx.map(i => premios[i]).filter(Boolean);
+      if (!allowedIdx.length) {
+        console.warn(`[BET ${bet.id}] COLOCACAO_INVALIDA_FAIL_CLOSED (${colocacaoRaw})`);
+        continue;
+      }
+
+      const premiosAllowed = allowedIdx.map((i) => premios[i]).filter(Boolean);
       if (!premiosAllowed.length) continue;
 
-      const baseMods = expandModalidades(modalRaw);
+      const baseMods = expandModalidades(modalNorm);
 
       if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
         for (const palpite of palpites) {
           let best = 0;
           for (const base of baseMods) {
-            const payout = resolvePayout(base);
-            if (!payout) continue;
+            const sub = computeFinalPayout({ modalidadeRaw: base, colocacaoRaw });
+            if (!sub.ok) continue;
             const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
             if (factor > 0) {
-              const amount = perNumber * payout * factor;
+              const amount = perNumber * sub.payout * factor;
               if (amount > best) best = amount;
             }
           }
           prize += best;
         }
       } else {
-        const payout = resolvePayout(modalRaw);
-        if (!payout) continue;
-        const { factor } = checkVictory({ modal: modalRaw, palpites, premios: premiosAllowed });
-        if (factor > 0) prize += perNumber * payout * factor;
+        const isComposta = /DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/.test(modalNorm);
+
+        if (isComposta) {
+          const { factor } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
+          if (factor > 0) {
+            const amount = perNumber * payout * factor;
+            prize += amount;
+          }
+        } else {
+          const { factor, wins } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
+
+          if (factor > 0 && (!Array.isArray(wins) || wins.length === 0)) {
+            console.warn(`[BET ${bet.id}] WIN_WITHOUT_WINS_FAIL_CLOSED (${modalNorm} @ ${colocacaoRaw})`);
+            continue;
+          }
+
+          if (Array.isArray(wins) && wins.length) {
+            for (const w of wins) {
+              const amount = perNumber * payout;
+              prize += amount;
+            }
+          }
+        }
       }
     }
 
     const finalPrize = Number(prize.toFixed(2));
-    const newStatus = finalPrize > 0 ? 'won' : 'lost';
+
+    let newStatus = finalPrize > 0 ? 'won' : 'lost';
+    if (finalPrize > 0 && (requiresManualReview || finalPrize > MAX_AUTO_PAYOUT)) {
+      newStatus = 'pending_review';
+    }
 
     const oldStatus = bet.status;
     const oldPrize = toNumberSafe(String(bet.prize ?? 0));
 
     if (newStatus === oldStatus && Number(finalPrize.toFixed(2)) === Number(oldPrize.toFixed(2))) {
-      return res.json({
-        message: `Aposta já está correta (${newStatus}). Nenhuma alteração.`,
-        bet,
-        matchedResult: { id: matchingResult.id, loteria: matchingResult.loteria }
-      });
+      return res.json({ message: `Aposta correta.`, bet, matchedResult: { id: matchingResult.id } });
     }
 
     await prisma.$transaction(async (tx) => {
       if (oldStatus === 'won' && oldPrize > 0) {
-        await tx.user.update({
-          where: { id: bet.userId },
-          data: { balance: { decrement: oldPrize } }
-        });
-        await tx.transaction.create({
-          data: {
-            userId: bet.userId,
-            type: 'adjustment',
-            amount: -oldPrize,
-            description: `Estorno Correção (${bet.id})`
-          }
-        });
+        await tx.user.update({ where: { id: bet.userId }, data: { balance: { decrement: oldPrize } } });
+        await tx.transaction.create({ data: { userId: bet.userId, type: 'adjustment', amount: -oldPrize, description: `Estorno Correção (${bet.id})` } });
       }
 
-      const upd = await tx.bet.updateMany({
-        where: {
-          id: bet.id,
-          status: oldStatus,
-          // prize: bet.prize // Opcional
-        },
-        data: {
-          status: newStatus,
-          prize: finalPrize,
-          settledAt: new Date(),
-          resultId: matchingResult.id
-        }
+      await tx.bet.updateMany({
+        where: { id: bet.id },
+        data: { status: newStatus, prize: finalPrize, settledAt: new Date(), resultId: matchingResult.id },
       });
 
-      if (upd.count === 0) {
-        throw new Error('Aposta foi alterada por outro processo. Tente novamente.');
-      }
-
-      if (finalPrize > 0) {
-        await tx.user.update({
-          where: { id: bet.userId },
-          data: { balance: { increment: finalPrize } }
-        });
-        await tx.transaction.create({
-          data: {
-            userId: bet.userId,
-            type: 'prize',
-            amount: finalPrize,
-            description: `Prêmio Recalculado (${bet.id})`
-          }
-        });
+      if (newStatus === 'won' && finalPrize > 0) {
+        await tx.user.update({ where: { id: bet.userId }, data: { balance: { increment: finalPrize } } });
+        await tx.transaction.create({ data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio Recalculado (${bet.id})` } });
       }
     });
 
     return res.json({
-      message: 'Aposta corrigida com sucesso!',
+      message: 'Corrigido!',
       changes: { from: { status: oldStatus, prize: oldPrize }, to: { status: newStatus, prize: finalPrize } },
-      matchedResult: { id: matchingResult.id, loteria: matchingResult.loteria }
     });
-
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: err?.message || 'Erro interno ao reconferir.' });
+    return res.status(500).json({ error: err?.message || 'Erro interno.' });
   }
 };
 
-// ALIASES
 exports.getStats = exports.getDashboardStats;
 exports.getDashboard = exports.getDashboardStats;
 exports.getUsers = exports.listUsers;
@@ -754,3 +896,13 @@ exports.getBets = exports.listBets;
 exports.getWithdrawals = exports.listWithdrawals;
 exports.getResults = exports.listResults;
 exports.getSupervisors = exports.listSupervisors;
+exports.listCoupons = async (req, res) => {
+  res.json({ coupons: [] });
+};
+exports.createCoupon = async (req, res) => {
+  res.status(501).json({ error: 'Not implemented' });
+};
+exports.updateCoupon = async (req, res) => {
+  res.status(501).json({ error: 'Not implemented' });
+};
+exports.getCoupons = exports.listCoupons;
