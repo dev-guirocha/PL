@@ -94,7 +94,7 @@ exports.getSupervisorStats = async (req, res) => {
 
     const usersCount = await prisma.user.count({ where: { supervisorId: supervisor.id } });
     const deposits = await prisma.pixCharge.aggregate({
-      where: { user: { supervisorId: supervisor.id }, status: 'paid' },
+      where: { user: { supervisorId: supervisor.id }, status: { in: ['PAID', 'paid'] } },
       _sum: { amount: true },
     });
     const commissions = await prisma.supervisorCommission.aggregate({
