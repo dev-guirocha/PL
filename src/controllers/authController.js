@@ -5,20 +5,8 @@ const prisma = require('../prisma');
 const { sendRecoveryCode } = require('../services/whatsappService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
 const sendResetCodeInResponse = process.env.SEND_RESET_CODE_IN_RESPONSE === 'true' || process.env.NODE_ENV !== 'production';
-
-const isSecureEnv =
-  process.env.NODE_ENV === 'production' ||
-  process.env.RAILWAY_ENVIRONMENT === 'production' ||
-  (process.env.FRONTEND_URL && process.env.FRONTEND_URL.startsWith('https'));
-
-const getCookieOptions = () => ({
-  httpOnly: true,
-  secure: isSecureEnv,
-  sameSite: isSecureEnv ? 'none' : 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: '/',
-});
 
 const phoneSchema = z
   .string()
@@ -108,9 +96,14 @@ exports.register = async (req, res) => {
 
     // Gera token para login automático
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, getCookieOptions());
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
+      secure: true,
+      maxAge: COOKIE_MAX_AGE,
+    });
 
-    res.status(201).json({ user: toSafeUser(user), token });
+    res.status(201).json({ user, token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar conta.' });
   }
@@ -137,33 +130,17 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, getCookieOptions());
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
+      secure: true,
+      maxAge: COOKIE_MAX_AGE,
+    });
 
     res.json({ user: toSafeUser(user), token });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login.' });
   }
-};
-
-exports.refreshToken = async (req, res) => {
-  try {
-    const userId = req.userId;
-    const isAdmin = req.isAdmin || false;
-
-    if (!userId) return res.status(401).json({ error: 'Sessão inválida.' });
-
-    const token = jwt.sign({ userId, isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, getCookieOptions());
-    return res.json({ success: true, token });
-  } catch (error) {
-    return res.status(500).json({ error: 'Erro ao renovar sessão.' });
-  }
-};
-
-exports.logout = (req, res) => {
-  const { maxAge, ...clearOptions } = getCookieOptions();
-  res.clearCookie('token', clearOptions);
-  return res.json({ message: 'Logout realizado' });
 };
 
 exports.requestPasswordReset = async (req, res) => {
