@@ -65,7 +65,12 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(compression());
 app.use(cookieParser());
-app.use(express.json());
+// Preserva rawBody para validação de assinatura do webhook
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 // Webhook deve ficar antes do CSRF para não ser bloqueado
 app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);

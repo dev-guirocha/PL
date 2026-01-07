@@ -19,12 +19,36 @@ const isHex = (s) => /^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0;
 // Validação de Assinatura Robusta
 const validateSignature = (req) => {
   const secret = process.env.WOOVI_WEBHOOK_SECRET;
-  if (!secret) return false; // Fail-closed
+  const debug = process.env.WEBHOOK_DEBUG === 'true';
+
+  if (!secret) {
+    if (debug) {
+      console.error('⛔ DEBUG: WOOVI_WEBHOOK_SECRET não está definido.');
+    }
+    return false; // Fail-closed
+  }
 
   let signature = req.headers['x-openpix-signature'] || req.headers['x-webhook-signature'];
   const payload = req.rawBody; // Requer app.use(express.json({ verify: ... }))
 
-  if (!signature || !payload) return false;
+  if (debug) {
+    console.log('🔍 DEBUG Headers:', {
+      'x-openpix-signature': req.headers['x-openpix-signature'],
+      'x-webhook-signature': req.headers['x-webhook-signature'],
+      received: signature,
+    });
+    console.log('🔍 DEBUG rawBody:', payload ? `${payload.length} bytes` : 'undefined');
+  }
+
+  if (!signature || !payload) {
+    if (debug && !payload) {
+      console.error('⛔ DEBUG: req.rawBody está undefined. Middleware do app.js não salvou o buffer.');
+    }
+    if (debug && !signature) {
+      console.error('⛔ DEBUG: assinatura não veio no header.');
+    }
+    return false;
+  }
 
   signature = String(signature).trim();
 
