@@ -9,6 +9,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CouponType {
+  fixed
+  percent
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   name      String   // Apenas no Cadastro
@@ -27,6 +32,7 @@ model User {
   email     String?
   createdAt DateTime @default(now())
   pixCharges PixCharge[]
+  redemptions CouponRedemption[]
   transactions Transaction[]
   bets        Bet[]
   withdrawals WithdrawalRequest[]
@@ -38,20 +44,23 @@ model PixCharge {
   user          User      @relation(fields: [userId], references: [id])
   userId        Int
   amount        Decimal   @db.Decimal(18, 2)
-  status        String    @default("created") // created, pending, paid, failed, expired
-  txid          String    @unique
+  status        String    @default("created")
+  txid          String?   @unique
   locId         String?
   copyAndPaste  String?
   qrCodeImage   String?
-  coupon        Coupon?   @relation(fields: [couponId], references: [id])
-  couponId      Int?
-  couponCode    String?
-  bonusAmount   Decimal   @db.Decimal(18, 2) @default(0)
   expiresAt     DateTime?
   paidAt        DateTime?
   credited      Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  bonusAmount   Decimal   @default(0) @db.Decimal(18, 2)
+  couponCode    String?
+  couponId      Int?
+  coupon        Coupon?   @relation(fields: [couponId], references: [id])
+
+  // chave do gateway / webhook (expand step: nullable, sem unique)
+  correlationId String    @unique
 }
 
 model Transaction {
@@ -141,18 +150,39 @@ model WithdrawalRequest {
 }
 
 model Coupon {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
+  id          Int        @id @default(autoincrement())
+  code        String     @unique
   description String?
-  type       String   @default("fixed") // fixed ou percent
-  amount     Decimal  @db.Decimal(18, 2)
-  usageLimit Int?     // número máximo de usos
-  usedCount  Int      @default(0)
-  audience   String   @default("all")
-  active     Boolean  @default(true)
+
+  type       String     @default("fixed")
+  value      Decimal    @map("amount") @db.Decimal(18, 2)
+  minDeposit Decimal    @db.Decimal(18, 2) @default(0)
+
+  maxUses    Int        @default(1000)
+  usageLimit Int?
+  usedCount  Int        @default(0)
+  perUser    Int        @default(1)
+
+  audience   String     @default("all")
+  active     Boolean    @default(true)
   expiresAt  DateTime?
-  createdAt  DateTime @default(now())
-  pixCharges PixCharge[]
+  createdAt  DateTime   @default(now())
+  pixCharges    PixCharge[]
+  redemptions   CouponRedemption[]
+}
+
+model CouponRedemption {
+  id            Int      @id @default(autoincrement())
+  couponId      Int
+  userId        Int
+
+  depositId     String   @unique
+
+  amountApplied Decimal  @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
+
+  coupon        Coupon   @relation(fields: [couponId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
 }
 
 model SupervisorCommission {
@@ -167,4 +197,10 @@ model SupervisorCommission {
   basis        String?    // stake, loss etc.
   status       String     @default("pending") // pending, paid, canceled
   createdAt    DateTime   @default(now())
+}
+
+model playing_with_neon {
+  id    Int    @id @default(autoincrement())
+  name  String
+  value Float? @db.Real
 }

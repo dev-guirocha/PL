@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const couponController = require('../controllers/couponController');
 
 // Importa e RENOMEIA para evitar conflito se necessário, ou usa direto
 const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
@@ -25,6 +26,17 @@ function mustBeFn(name) {
     throw new Error(
       `🚨 [ERRO FATAL DE ROTA] A função 'adminController.${name}' não existe! \n` +
       `Verifique se você salvou/subiu o arquivo adminController.js correto.`
+    );
+  }
+  return fn;
+}
+
+function mustBeCouponFn(name) {
+  const fn = couponController[name];
+  if (typeof fn !== 'function') {
+    throw new Error(
+      `🚨 [ERRO FATAL DE ROTA] A função 'couponController.${name}' não existe! \n` +
+      `Verifique se você salvou/subiu o arquivo couponController.js correto.`
     );
   }
   return fn;
@@ -63,5 +75,12 @@ router.post('/results/:id/settle', mustBeFn('settleBetsForResult'));
 
 // Pule (Impressão)
 router.post('/results/:id/pule', mustBeFn('generatePule'));
+
+// Cupons
+router.get('/coupons', mustBeCouponFn('listCoupons'));
+router.post('/coupons', mustBeCouponFn('createCoupon'));
+router.put('/coupons/:id/toggle', mustBeCouponFn('toggleActive'));
+router.delete('/coupons/:id', mustBeCouponFn('deleteCoupon'));
+router.get('/coupons/stats', mustBeCouponFn('getCouponStats'));
 
 module.exports = router;
