@@ -63,7 +63,12 @@ app.use(
     optionsSuccessStatus: 204,
   }),
 ); // Deixa o Front-end falar com o Back-end
-app.use(express.json()); // Permite ler JSON no corpo da requisição
+// Preserva rawBody para validação de assinatura do webhook
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 // Webhook deve ficar antes do CSRF para não ser bloqueado
 app.post('/api/webhook/openpix', webhookController.handleOpenPixWebhook);
