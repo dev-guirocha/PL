@@ -97,16 +97,44 @@ const isValidISODate = (iso) => {
 };
 
 const normalizeModalidade = (raw) => {
-  return String(raw || '')
+  let m = String(raw || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
+    .split('@')[0]           // remove lixo da colocação (ex: " @ 1 PREMIO ...")
+    .replace(/[().]/g, '')   // remove pontuação
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 1) Expande abreviações relevantes ANTES de decidir MC
+  // (Isso evita perder variantes como "MILHAR E CT", "MILHAR CENT", etc.)
+  m = m
     .replace(/\bCT\b/g, 'CENTENA')
+    .replace(/\bCENT\b/g, 'CENTENA')
     .replace(/\bDZ\b/g, 'DEZENA')
     .replace(/\bGP\b/g, 'GRUPO')
     .replace(/\bUN\b/g, 'UNIDADE')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // 2) Alias diretos (tokens "limpos")
+  const ALIAS = {
+    'MILHAR/CENTENA': 'MILHAR E CENTENA',
+    'MILHAR E CENTENA': 'MILHAR E CENTENA',
+    'MILHAR E CENT': 'MILHAR E CENTENA',
+    'MILHAR E CT': 'MILHAR E CENTENA',
+    'MC': 'MILHAR E CENTENA',
+    'M C': 'MILHAR E CENTENA',
+  };
+  m = ALIAS[m] || m;
+
+  // 3) Heurística robusta: se contém as duas palavras, é MC
+  // Cobre: "MILHAR-CENTENA", "MILHAR / CENTENA", "MILHAR CENTENA", etc.
+  if (/\bMILHAR\b/.test(m) && /\bCENTENA\b/.test(m)) {
+    m = 'MILHAR E CENTENA';
+  }
+
+  return m;
 };
 
 const pad = (s, len) => String(s).replace(/\D/g, '').slice(-len).padStart(len, '0');
@@ -187,6 +215,15 @@ function resolvePayoutV2(m) {
   if (m.includes('TERNO') && m.includes('DEZ') && m.includes('SECO')) {
     return { type: 'fixed', value: 10000, allowedFractions: [{ a: 1, b: 3 }] };
   }
+
+  // Composta híbrida (MILHAR + CENTENA): deixa passar; cálculo real é pela expansão
+
+
+  if (m.includes('MILHAR') && m.includes('CENTENA')) return { type: 'base', value: 0 };
+
+
+  
+
 
   return { type: 'unknown', value: 0 };
 }
@@ -568,7 +605,15 @@ exports.settleBetsForResult = async (req, res) => {
 
           if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
             for (const palpite of palpites) {
-              let bestForThisPalpite = 0;
+              // Detecta híbrida MILHAR E CENTENA (MC)
+              const isHybridMC = baseMods.length === 2 &&
+                baseMods.includes('MILHAR') &&
+                baseMods.includes('CENTENA');
+
+              // MC: divide a stake 50/50; outras expansões seguem 100%
+              const stakeFactor = isHybridMC ? 0.5 : 1;
+
+              let amountForThisPalpite = 0;
               let bestMeta = null;
 
               for (const base of baseMods) {
@@ -577,28 +622,34 @@ exports.settleBetsForResult = async (req, res) => {
 
                 const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
                 if (factor > 0) {
-                  const amount = perNumber * sub.payout * factor;
-                  if (amount > bestForThisPalpite) {
-                    bestForThisPalpite = amount;
-                    bestMeta = {
-                      betId: bet.id,
-                      resultId: id,
-                      colocacao: colocacaoRaw,
-                      palpite: palpite,
-                      palpitesCount: palpites.length,
-                      mod: base,
-                      stake: perNumber,
-                      payout: sub.payout,
-                      factor,
-                      win: amount,
-                    };
+                  const winPart = (perNumber * stakeFactor) * sub.payout * factor;
+
+                  if (isHybridMC) {
+                    amountForThisPalpite += winPart;
+                    if (AUDIT_LOGS) console.log('[AUDIT MC PART]', { mod: base, win: winPart });
+                  } else {
+                    if (winPart > amountForThisPalpite) {
+                      amountForThisPalpite = winPart;
+                      bestMeta = {
+                        betId: bet.id,
+                        resultId: id,
+                        colocacao: colocacaoRaw,
+                        palpite,
+                        mod: base,
+                        stake: perNumber,
+                        payout: sub.payout,
+                        factor,
+                        win: winPart,
+                      };
+                    }
                   }
                 }
               }
 
-              if (bestForThisPalpite > 0) {
-                if (AUDIT_LOGS && bestMeta) console.log('[AUDIT WIN]', bestMeta);
-                prize += bestForThisPalpite;
+              if (amountForThisPalpite > 0) {
+                if (AUDIT_LOGS && bestMeta && !isHybridMC) console.log('[AUDIT WIN]', bestMeta);
+                if (AUDIT_LOGS && isHybridMC) console.log('[AUDIT WIN MC]', { betId: bet.id, win: amountForThisPalpite });
+                prize += amountForThisPalpite;
               }
             }
           } else {
@@ -808,18 +859,33 @@ exports.recheckSingleBet = async (req, res) => {
       const baseMods = expandModalidades(modalNorm);
 
       if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
+        // Detecta híbrida MILHAR E CENTENA
+        const isHybridMC = baseMods.length === 2 &&
+                           baseMods.includes('MILHAR') &&
+                           baseMods.includes('CENTENA');
+        const stakeFactor = isHybridMC ? 0.5 : 1;
+
         for (const palpite of palpites) {
-          let best = 0;
+          let amountForThisPalpite = 0;
+
           for (const base of baseMods) {
             const sub = computeFinalPayout({ modalidadeRaw: base, colocacaoRaw });
             if (!sub.ok) continue;
+
             const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
+
             if (factor > 0) {
-              const amount = perNumber * sub.payout * factor;
-              if (amount > best) best = amount;
+              const winPart = (perNumber * stakeFactor) * sub.payout * factor;
+
+              if (isHybridMC) {
+                amountForThisPalpite += winPart; // Soma (MC)
+              } else {
+                if (winPart > amountForThisPalpite) amountForThisPalpite = winPart; // Max (padrão)
+              }
             }
           }
-          prize += best;
+
+          prize += amountForThisPalpite;
         }
       } else {
         const isComposta = /DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/.test(modalNorm);
