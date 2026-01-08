@@ -53,6 +53,15 @@ const getHourFromCode = (codigoHorario) => {
   return Number.isNaN(h) ? null : h;
 };
 
+const normalizeCodigoHorario = (codigoHorario) => {
+  const s = String(codigoHorario || '').trim().toUpperCase();
+  const m = s.match(/(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return s;
+  const hh = String(m[1]).padStart(2, '0');
+  const mm = String(m[2] ?? '00').padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
 const getDayFromDateStr = (dateStr) => {
   if (!dateStr) return null;
   const parts = String(dateStr).split('-').map(Number);
@@ -139,6 +148,32 @@ const normalizePagination = (data) => {
 };
 
 exports.create = async (req, res) => {
+  // Normaliza payload antes do Zod (fallback de root + apostas como array)
+  let rawApostas = req.body?.apostas;
+  if (typeof rawApostas === 'string') {
+    try {
+      rawApostas = JSON.parse(rawApostas);
+    } catch {
+      rawApostas = [];
+    }
+  }
+  if (!Array.isArray(rawApostas)) rawApostas = [];
+
+  const a0 = rawApostas[0] || {};
+  const itemDate = a0.dataJogo ?? a0.data ?? a0.date ?? null;
+  const itemHour = a0.codigoHorario ?? a0.horario ?? a0.time ?? null;
+
+  const inferredRootDate = req.body.dataJogo ?? req.body.date ?? itemDate ?? null;
+
+  req.body.apostas = rawApostas.map((a) => ({
+    ...a,
+    data: a.data ?? a.dataJogo ?? a.date ?? inferredRootDate,
+  }));
+
+  req.body.dataJogo = inferredRootDate;
+  req.body.codigoHorario = req.body.codigoHorario ?? req.body.horario ?? req.body.time ?? itemHour ?? null;
+  req.body.codigoHorario = normalizeCodigoHorario(req.body.codigoHorario);
+
   const parsed = betPayloadSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.errors?.[0]?.message || 'Dados de aposta inválidos.' });
@@ -146,19 +181,24 @@ exports.create = async (req, res) => {
 
   const { loteria, codigoHorario, apostas, dataJogo: rootDataJogo } = parsed.data;
   const dataJogo = rootDataJogo || apostas?.[0]?.data;
+  const codigoHorarioNorm = normalizeCodigoHorario(codigoHorario);
 
-  console.log(
-    `[BET_CREATE] User: ${req.userId} | RootDate: ${rootDataJogo} | Aposta0Date: ${apostas?.[0]?.data} | Final: ${dataJogo}`,
-  );
+  console.log('[BET_CREATE]', {
+    userId: req.userId,
+    rootDataJogo: rootDataJogo ?? null,
+    itemData: apostas?.[0]?.data ?? null,
+    finalDataJogo: dataJogo ?? null,
+    rootCodigoHorario: codigoHorarioNorm ?? null,
+  });
 
   if (!dataJogo) {
     return res.status(400).json({ error: 'Data do jogo não identificada.' });
   }
 
   // Regras FEDERAL (UX + backend)
-  const isFederalBet = /FEDERAL/i.test(codigoHorario) || /FEDERAL/i.test(loteria);
+  const isFederalBet = /FEDERAL/i.test(loteria);
   const day = getDayFromDateStr(dataJogo);
-  const hour = getHourFromCode(codigoHorario);
+  const hour = getHourFromCode(codigoHorarioNorm);
   const isFederalDay = day !== null && FEDERAL_DAYS.includes(day);
 
   if (isFederalBet) {
@@ -171,8 +211,8 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: 'Em dia de Federal, use o horário das 20H (Federal) em vez de 18HS.' });
   }
 
-  if (!isBettingAllowed(codigoHorario, dataJogo)) {
-    return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorario} do dia ${dataJogo}.` });
+  if (!isBettingAllowed(codigoHorarioNorm, dataJogo)) {
+    return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorarioNorm} do dia ${dataJogo}.` });
   }
 
   const totalDebit = calculateTotal(apostas);
@@ -225,7 +265,7 @@ exports.create = async (req, res) => {
         data: {
           userId: req.userId,
           loteria,
-          codigoHorario,
+          codigoHorario: codigoHorarioNorm,
           dataJogo,
           modalidade: apostas.length === 1 ? apostas[0].modalidade : 'MULTIPLAS',
           colocacao: apostas.length === 1 ? apostas[0].colocacao : 'VARIADAS',
