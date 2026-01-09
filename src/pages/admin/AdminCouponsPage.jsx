@@ -16,6 +16,7 @@ const AdminCouponsPage = () => {
     value: '',
     type: 'fixed',
     minDeposit: '',
+    maxDeposit: '',
     maxUses: '',
     perUser: '',
     active: true,
@@ -58,6 +59,7 @@ const AdminCouponsPage = () => {
         type: form.type,
         value: Number(form.value),
         minDeposit: form.minDeposit !== '' ? Number(form.minDeposit) : undefined,
+        maxDeposit: form.maxDeposit !== '' ? Number(form.maxDeposit) : undefined,
         maxUses: form.maxUses !== '' ? Number(form.maxUses) : undefined,
         perUser: form.perUser !== '' ? Number(form.perUser) : undefined,
         active: form.active,
@@ -69,6 +71,7 @@ const AdminCouponsPage = () => {
         value: '',
         type: 'fixed',
         minDeposit: '',
+        maxDeposit: '',
         maxUses: '',
         perUser: '',
         active: true,
@@ -158,6 +161,18 @@ const AdminCouponsPage = () => {
               onChange={(e) => setForm({ ...form, minDeposit: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
               placeholder="Ex: 10.00"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Depósito máximo</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.maxDeposit}
+              onChange={(e) => setForm({ ...form, maxDeposit: e.target.value })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+              placeholder="Ex: 1000.00"
             />
           </div>
           <div>

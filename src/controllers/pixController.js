@@ -36,6 +36,9 @@ exports.createPixCharge = async (req, res) => {
     if (!Number.isFinite(valueNumber) || valueNumber < 10) {
       return res.status(400).json({ error: 'Depósito mínimo é R$ 10,00.' });
     }
+    if (valueNumber > 3000) {
+      return res.status(400).json({ error: 'Depósito máximo é R$ 3.000,00.' });
+    }
 
     // Decimal seguro (2 casas)
     const depositValue = new Prisma.Decimal(valueNumber.toFixed(2));
@@ -67,6 +70,11 @@ exports.createPixCharge = async (req, res) => {
           error: `Depósito mínimo para este cupom é R$ ${coupon.minDeposit.toFixed(2)}.`,
         });
       }
+      if (coupon.maxDeposit && depositValue.greaterThan(coupon.maxDeposit)) {
+        return res.status(400).json({
+          error: `Depósito máximo para este cupom é R$ ${coupon.maxDeposit.toFixed(2)}.`,
+        });
+      }
 
       const userUses = await prisma.couponRedemption.count({
         where: { couponId: coupon.id, userId: Number(userId) },
@@ -81,6 +89,10 @@ exports.createPixCharge = async (req, res) => {
         bonusPreview = depositValue.mul(coupon.value).div(HUNDRED);
       } else {
         bonusPreview = coupon.value;
+      }
+
+      if (coupon.type === 'percent' && Number(coupon.value) === 20 && depositValue.greaterThan(new Prisma.Decimal(1000))) {
+        return res.status(400).json({ error: 'Para este cupom, o depósito máximo é R$ 1.000,00.' });
       }
 
       if (!bonusPreview || !bonusPreview.greaterThan(ZERO)) {

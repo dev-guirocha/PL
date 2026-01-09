@@ -213,10 +213,18 @@ exports.handleOpenPixWebhook = async (req, res) => {
                 });
 
                 if (userUses < coupon.perUser) {
+                    if (coupon.maxDeposit && finalDepositValue.greaterThan(coupon.maxDeposit)) {
+                        bonusToApply = null;
+                    } else {
+                    if (coupon.type === 'percent' && Number(coupon.value) === 20 && finalDepositValue.greaterThan(new Prisma.Decimal(1000))) {
+                        bonusToApply = null;
+                    } else {
                     if (coupon.type === 'percent') {
                         bonusToApply = finalDepositValue.mul(coupon.value).div(HUNDRED);
                     } else {
                         bonusToApply = coupon.value;
+                    }
+                    }
                     }
 
                     if (bonusToApply.greaterThan(ZERO)) {

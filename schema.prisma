@@ -159,6 +159,7 @@ model Coupon {
   type       String     @default("fixed")
   value      Decimal    @map("amount") @db.Decimal(18, 2)
   minDeposit Decimal    @db.Decimal(18, 2) @default(0)
+  maxDeposit Decimal?   @db.Decimal(18, 2)
 
   maxUses    Int        @default(1000)
   usageLimit Int?

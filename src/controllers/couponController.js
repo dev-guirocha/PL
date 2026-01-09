@@ -19,6 +19,7 @@ const createCouponSchema = z.object({
   type: z.enum(['fixed', 'percent']),
   value: z.number().positive(),
   minDeposit: z.number().min(0).default(0),
+  maxDeposit: z.number().min(0).optional(),
   maxUses: z.number().int().positive().default(1000),
   perUser: z.number().int().positive().default(1),
   expiresAt: z.string().optional().nullable(), // ISO string
@@ -150,6 +151,14 @@ exports.validateCoupon = async (req, res) => {
         error: `Depósito mínimo: R$ ${coupon.minDeposit.toFixed(2)}`,
       });
     }
+    if (coupon.maxDeposit && depositValue.greaterThan(coupon.maxDeposit)) {
+      return res.status(400).json({
+        error: `Depósito máximo: R$ ${coupon.maxDeposit.toFixed(2)}`,
+      });
+    }
+    if (coupon.type === 'percent' && Number(coupon.value) === 20 && depositValue.greaterThan(new Prisma.Decimal(1000))) {
+      return res.status(400).json({ error: 'Para este cupom, o depósito máximo é R$ 1.000,00.' });
+    }
 
     // Preview Decimal-safe
     let bonusPreview = ZERO;
@@ -196,6 +205,7 @@ exports.createCoupon = async (req, res) => {
         type: data.type,
         value: new Prisma.Decimal(String(data.value)), // ✅ Decimal explícito
         minDeposit: new Prisma.Decimal(String(data.minDeposit)), // ✅ Decimal explícito
+        maxDeposit: data.maxDeposit !== undefined ? new Prisma.Decimal(String(data.maxDeposit)) : null,
         maxUses: data.maxUses,
         perUser: data.perUser,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
