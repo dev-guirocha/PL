@@ -392,11 +392,11 @@ function checkVictory({ modal, palpites, premios }) {
 exports.getDashboardStats = async (req, res) => {
   try {
     const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers] = await Promise.all([
-      prisma.user.aggregate({ _sum: { balance: true, bonus: true } }),
+      prisma.user.aggregate({ where: { deletedAt: null }, _sum: { balance: true, bonus: true } }),
       prisma.bet.aggregate({ _sum: { total: true } }),
       prisma.withdrawalRequest.aggregate({ where: { status: { in: ['pending', 'approved'] } }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.bet.count(),
-      prisma.user.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
     ]);
     res.json({
       totalUsers, betsCount,
@@ -411,13 +411,57 @@ exports.getDashboardStats = async (req, res) => {
 exports.listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const users = await prisma.user.findMany({ take: 50, skip: (page - 1) * 50, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true } });
-    const total = await prisma.user.count();
+    const users = await prisma.user.findMany({
+      where: { deletedAt: null },
+      take: 50,
+      skip: (page - 1) * 50,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
+    });
+    const total = await prisma.user.count({ where: { deletedAt: null } });
     res.json({ users, total, page });
   } catch(e) { res.status(500).json({error: 'Erro list users'}); }
 };
 
-exports.toggleUserBlock = async (req, res) => res.json({ message: 'Desativado.' });
+exports.toggleUserBlock = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const user = await prisma.user.findUnique({ where: { id }, select: { isBlocked: true, deletedAt: true } });
+    if (!user || user.deletedAt) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { isBlocked: !user.isBlocked },
+      select: { id: true, isBlocked: true },
+    });
+
+    return res.json(updated);
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao bloquear usuário.' });
+  }
+};
+
+exports.softDeleteUser = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const updated = await prisma.user.updateMany({
+      where: { id, deletedAt: null },
+      data: { deletedAt: new Date(), isAdmin: false },
+    });
+
+    if (!updated.count) {
+      return res.status(404).json({ error: 'Usuário não encontrado ou já removido.' });
+    }
+
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao remover usuário.' });
+  }
+};
 
 exports.listBets = async (req, res) => {
   try {

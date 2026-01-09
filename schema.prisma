@@ -22,6 +22,7 @@ model User {
   resetCode String?
   resetExpires DateTime?
   isAdmin   Boolean  @default(false)
+  isBlocked Boolean  @default(false)
   supervisor   Supervisor? @relation(fields: [supervisorId], references: [id])
   supervisorId Int?
   pendingSupCode String?
@@ -31,6 +32,7 @@ model User {
   birthDate String?
   email     String?
   createdAt DateTime @default(now())
+  deletedAt DateTime?
   pixCharges PixCharge[]
   redemptions CouponRedemption[]
   transactions Transaction[]

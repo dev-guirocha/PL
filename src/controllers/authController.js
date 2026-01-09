@@ -123,6 +123,12 @@ exports.login = async (req, res) => {
     if (!user) {
       return res.status(400).json({ error: 'telefone ou senha incorretos.' });
     }
+    if (user.deletedAt) {
+      return res.status(403).json({ error: 'Usuário removido.' });
+    }
+    if (user.isBlocked) {
+      return res.status(403).json({ error: 'Usuário bloqueado.' });
+    }
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
