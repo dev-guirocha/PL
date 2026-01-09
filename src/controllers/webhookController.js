@@ -206,7 +206,11 @@ exports.handleOpenPixWebhook = async (req, res) => {
             });
             
             // Valida mínimo com o valor FINAL depositado
-            if (!isExpired && priorPaid === 0 && finalDepositValue.greaterThanOrEqualTo(coupon.minDeposit)) {
+            if (
+                !isExpired &&
+                (!coupon.firstDepositOnly || priorPaid === 0) &&
+                finalDepositValue.greaterThanOrEqualTo(coupon.minDeposit)
+            ) {
                 
                 const userUses = await tx.couponRedemption.count({
                     where: { couponId: coupon.id, userId: pixCharge.userId }

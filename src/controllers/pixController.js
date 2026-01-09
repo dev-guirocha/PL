@@ -84,6 +84,15 @@ exports.createPixCharge = async (req, res) => {
         return res.status(400).json({ error: 'Você já atingiu o limite de uso deste cupom.' });
       }
 
+      if (coupon.firstDepositOnly) {
+        const priorPaid = await prisma.pixCharge.count({
+          where: { userId: Number(userId), status: { in: ['PAID', 'paid'] } },
+        });
+        if (priorPaid > 0) {
+          return res.status(400).json({ error: 'Cupom válido apenas para o primeiro depósito.' });
+        }
+      }
+
       // Preview (aplicação real só no webhook)
       if (coupon.type === 'percent') {
         bonusPreview = depositValue.mul(coupon.value).div(HUNDRED);

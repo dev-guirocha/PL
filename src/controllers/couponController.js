@@ -22,6 +22,7 @@ const createCouponSchema = z.object({
   maxDeposit: z.number().min(0).optional(),
   maxUses: z.number().int().positive().default(1000),
   perUser: z.number().int().positive().default(1),
+  firstDepositOnly: z.boolean().optional().default(false),
   expiresAt: z.string().optional().nullable(), // ISO string
 });
 
@@ -132,11 +133,13 @@ exports.validateCoupon = async (req, res) => {
     }
 
     // Primeiro depósito apenas: bloqueia se já existe Pix pago
-    const priorPaid = await prisma.pixCharge.count({
-      where: { userId, status: { in: ['PAID', 'paid'] } },
-    });
-    if (priorPaid > 0) {
-      return res.status(400).json({ error: 'Cupom válido apenas para o primeiro depósito.' });
+    if (coupon.firstDepositOnly) {
+      const priorPaid = await prisma.pixCharge.count({
+        where: { userId, status: { in: ['PAID', 'paid'] } },
+      });
+      if (priorPaid > 0) {
+        return res.status(400).json({ error: 'Cupom válido apenas para o primeiro depósito.' });
+      }
     }
 
     const amountNum = Number(amount);
@@ -208,6 +211,7 @@ exports.createCoupon = async (req, res) => {
         maxDeposit: data.maxDeposit !== undefined ? new Prisma.Decimal(String(data.maxDeposit)) : null,
         maxUses: data.maxUses,
         perUser: data.perUser,
+        firstDepositOnly: data.firstDepositOnly,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
         active: true,
       },

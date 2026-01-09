@@ -165,6 +165,7 @@ model Coupon {
   usageLimit Int?
   usedCount  Int        @default(0)
   perUser    Int        @default(1)
+  firstDepositOnly Boolean @default(false)
 
   audience   String     @default("all")
   active     Boolean    @default(true)

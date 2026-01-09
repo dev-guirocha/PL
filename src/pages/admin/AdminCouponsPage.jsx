@@ -19,6 +19,7 @@ const AdminCouponsPage = () => {
     maxDeposit: '',
     maxUses: '',
     perUser: '',
+    firstDepositOnly: false,
     active: true,
   });
 
@@ -62,6 +63,7 @@ const AdminCouponsPage = () => {
         maxDeposit: form.maxDeposit !== '' ? Number(form.maxDeposit) : undefined,
         maxUses: form.maxUses !== '' ? Number(form.maxUses) : undefined,
         perUser: form.perUser !== '' ? Number(form.perUser) : undefined,
+        firstDepositOnly: form.firstDepositOnly,
         active: form.active,
       };
       await api.post('/admin/coupons', payload);
@@ -74,6 +76,7 @@ const AdminCouponsPage = () => {
         maxDeposit: '',
         maxUses: '',
         perUser: '',
+        firstDepositOnly: false,
         active: true,
       });
       fetchCoupons();
@@ -198,6 +201,18 @@ const AdminCouponsPage = () => {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
               placeholder="Ex: 1"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="firstDepositOnly"
+              checked={form.firstDepositOnly}
+              onChange={(e) => setForm({ ...form, firstDepositOnly: e.target.checked })}
+              className="h-4 w-4 text-emerald-600 rounded border-slate-300"
+            />
+            <label htmlFor="firstDepositOnly" className="text-sm text-slate-700">
+              Apenas primeiro depósito
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <input
