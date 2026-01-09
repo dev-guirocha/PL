@@ -12,6 +12,7 @@ const { z } = require('zod');
 // Constantes Decimal
 const ZERO = new Prisma.Decimal(0);
 const HUNDRED = new Prisma.Decimal(100);
+const COUPON_DEBUG = process.env.COUPON_DEBUG === 'true';
 
 // Schema de Validação (entrada do Admin)
 const createCouponSchema = z.object({
@@ -102,22 +103,37 @@ exports.validateCoupon = async (req, res) => {
   const { code, amount } = req.body;
   const userId = req.userId;
 
-  if (!code) return res.status(400).json({ error: 'Código obrigatório.' });
+  if (COUPON_DEBUG) {
+    console.log('[COUPON_VALIDATE]', { userId, code, amount });
+  }
+
+  if (!code) {
+    if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] missing_code');
+    return res.status(400).json({ error: 'Código obrigatório.' });
+  }
 
   try {
     const coupon = await prisma.coupon.findUnique({
       where: { code: String(code).toUpperCase().trim() },
     });
 
-    if (!coupon) return res.status(404).json({ error: 'Cupom inválido.' });
-    if (!coupon.active) return res.status(400).json({ error: 'Cupom inativo.' });
+    if (!coupon) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] invalid_code');
+      return res.status(404).json({ error: 'Cupom inválido.' });
+    }
+    if (!coupon.active) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] inactive');
+      return res.status(400).json({ error: 'Cupom inativo.' });
+    }
 
     const now = new Date();
     if (coupon.expiresAt && now > coupon.expiresAt) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] expired');
       return res.status(400).json({ error: 'Cupom expirado.' });
     }
 
     if (coupon.usedCount >= coupon.maxUses) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] max_uses');
       return res.status(400).json({ error: 'Cupom esgotado.' });
     }
 
@@ -127,6 +143,7 @@ exports.validateCoupon = async (req, res) => {
     });
 
     if (userUsage >= coupon.perUser) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] per_user_limit');
       return res
         .status(400)
         .json({ error: 'Você já usou este cupom o máximo de vezes permitido.' });
@@ -138,28 +155,43 @@ exports.validateCoupon = async (req, res) => {
         where: { userId, status: { in: ['PAID', 'paid'] } },
       });
       if (priorPaid > 0) {
+        if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] first_deposit_only');
         return res.status(400).json({ error: 'Cupom válido apenas para o primeiro depósito.' });
       }
     }
 
+    const amountProvided = amount !== undefined && amount !== null && String(amount).trim() !== '';
+    if (!amountProvided) {
+      return res.json({
+        valid: true,
+        code: coupon.code,
+        bonusPreview: null,
+        message: 'Cupom válido. Informe um valor para calcular o bônus.',
+      });
+    }
+
     const amountNum = Number(amount);
     if (!Number.isFinite(amountNum) || amountNum < 0) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] invalid_amount');
       return res.status(400).json({ error: 'Valor inválido.' });
     }
 
     const depositValue = new Prisma.Decimal(amountNum.toFixed(2));
 
     if (!depositValue.greaterThanOrEqualTo(coupon.minDeposit)) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] below_min_deposit');
       return res.status(400).json({
         error: `Depósito mínimo: R$ ${coupon.minDeposit.toFixed(2)}`,
       });
     }
     if (coupon.maxDeposit && depositValue.greaterThan(coupon.maxDeposit)) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] above_max_deposit');
       return res.status(400).json({
         error: `Depósito máximo: R$ ${coupon.maxDeposit.toFixed(2)}`,
       });
     }
     if (coupon.type === 'percent' && Number(coupon.value) === 20 && depositValue.greaterThan(new Prisma.Decimal(1000))) {
+      if (COUPON_DEBUG) console.warn('[COUPON_VALIDATE_FAIL] max_20pct');
       return res.status(400).json({ error: 'Para este cupom, o depósito máximo é R$ 1.000,00.' });
     }
 
@@ -178,6 +210,7 @@ exports.validateCoupon = async (req, res) => {
       message: `Cupom válido! Bônus estimado: R$ ${bonusPreview.toFixed(2)}`,
     });
   } catch (error) {
+    if (COUPON_DEBUG) console.error('[COUPON_VALIDATE_ERROR]', error);
     console.error('Erro validateCoupon:', error);
     return res.status(500).json({ error: 'Erro ao validar cupom.' });
   }
@@ -219,6 +252,13 @@ exports.createCoupon = async (req, res) => {
 
     return res.status(201).json(coupon);
   } catch (error) {
+    if (COUPON_DEBUG) {
+      console.error('[COUPON_CREATE_ERROR]', {
+        message: error?.message,
+        zod: error?.errors,
+        body: req.body,
+      });
+    }
     return res.status(400).json({
       error: error?.errors?.[0]?.message || 'Erro ao criar.',
     });
