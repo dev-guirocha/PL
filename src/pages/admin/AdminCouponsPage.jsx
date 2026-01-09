@@ -13,10 +13,11 @@ const AdminCouponsPage = () => {
   const [form, setForm] = useState({
     code: '',
     description: '',
-    amount: '',
+    value: '',
     type: 'fixed',
-    usageLimit: '',
-    audience: 'all',
+    minDeposit: '',
+    maxUses: '',
+    perUser: '',
     active: true,
   });
 
@@ -39,7 +40,7 @@ const AdminCouponsPage = () => {
 
   const toggleStatus = async (couponId, current) => {
     try {
-      await api.put(`/admin/coupons/${couponId}`, { active: !current });
+      await api.put(`/admin/coupons/${couponId}/toggle`);
       fetchCoupons();
     } catch (err) {
       setError('Erro ao atualizar status do cupom.');
@@ -51,8 +52,27 @@ const AdminCouponsPage = () => {
     setSaving(true);
     setError('');
     try {
-      await api.post('/admin/coupons', form);
-      setForm({ code: '', description: '', amount: '', type: 'fixed', usageLimit: '', audience: 'all', active: true });
+      const payload = {
+        code: form.code,
+        description: form.description,
+        type: form.type,
+        value: Number(form.value),
+        minDeposit: form.minDeposit !== '' ? Number(form.minDeposit) : undefined,
+        maxUses: form.maxUses !== '' ? Number(form.maxUses) : undefined,
+        perUser: form.perUser !== '' ? Number(form.perUser) : undefined,
+        active: form.active,
+      };
+      await api.post('/admin/coupons', payload);
+      setForm({
+        code: '',
+        description: '',
+        value: '',
+        type: 'fixed',
+        minDeposit: '',
+        maxUses: '',
+        perUser: '',
+        active: true,
+      });
       fetchCoupons();
     } catch (err) {
       setError('Erro ao criar cupom.');
@@ -122,35 +142,47 @@ const AdminCouponsPage = () => {
               type="number"
               min="0"
               step="0.01"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              value={form.value}
+              onChange={(e) => setForm({ ...form, value: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
               required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Depósito mínimo</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.minDeposit}
+              onChange={(e) => setForm({ ...form, minDeposit: e.target.value })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
+              placeholder="Ex: 10.00"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Limite de usos</label>
             <input
               type="number"
-              min="0"
+              min="1"
               step="1"
-              value={form.usageLimit}
-              onChange={(e) => setForm({ ...form, usageLimit: e.target.value })}
+              value={form.maxUses}
+              onChange={(e) => setForm({ ...form, maxUses: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-              placeholder="Ex: 100 (vazio = ilimitado)"
+              placeholder="Ex: 1000"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Público</label>
-            <select
-              value={form.audience}
-              onChange={(e) => setForm({ ...form, audience: e.target.value })}
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Limite por usuário</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={form.perUser}
+              onChange={(e) => setForm({ ...form, perUser: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
-            >
-              <option value="all">Todos</option>
-              <option value="new">Novos usuários</option>
-              <option value="existing">Usuários atuais</option>
-            </select>
+              placeholder="Ex: 1"
+            />
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -184,7 +216,7 @@ const AdminCouponsPage = () => {
         <AdminTable headers={['ID', 'Código', 'Descrição', 'Valor', 'Tipo', 'Usos', 'Público', 'Status']}>
           {coupons.length === 0 ? (
             <AdminTableRow>
-              <AdminTableCell className="text-center text-slate-500" colSpan={7}>
+              <AdminTableCell className="text-center text-slate-500" colSpan={8}>
                 Nenhum cupom cadastrado.
               </AdminTableCell>
             </AdminTableRow>
@@ -195,13 +227,15 @@ const AdminCouponsPage = () => {
                 <AdminTableCell className="font-semibold">{c.code || '—'}</AdminTableCell>
                 <AdminTableCell>{c.description || '—'}</AdminTableCell>
                 <AdminTableCell>
-                  {c.type === 'percent' ? `${c.amount || c.valor || 0}%` : `R$ ${(Number(c.amount || c.valor) || 0).toFixed(2).replace('.', ',')}`}
+                  {c.type === 'percent'
+                    ? `${c.value || 0}%`
+                    : `R$ ${(Number(c.value) || 0).toFixed(2).replace('.', ',')}`}
                 </AdminTableCell>
                 <AdminTableCell className="uppercase text-xs font-semibold text-slate-700">
                   {c.type === 'percent' ? 'PERCENTUAL' : 'FIXO'}
                 </AdminTableCell>
                 <AdminTableCell className="text-sm font-semibold text-slate-700">
-                  {`${c.usedCount || 0}${c.usageLimit ? `/${c.usageLimit}` : ''}`}
+                  {`${c.usedCount || 0}${c.maxUses ? `/${c.maxUses}` : c.usageLimit ? `/${c.usageLimit}` : ''}`}
                 </AdminTableCell>
                 <AdminTableCell className="capitalize">{c.audience || 'Todos'}</AdminTableCell>
                 <AdminTableCell className="flex items-center gap-2">

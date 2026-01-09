@@ -53,6 +53,7 @@ router.get('/stats', mustBeFn('getDashboardStats'));
 // Usuários
 router.get('/users', mustBeFn('listUsers'));
 router.post('/users/:id/block', mustBeFn('toggleUserBlock'));
+router.delete('/users/:id', mustBeFn('softDeleteUser'));
 
 // Apostas
 router.get('/bets', mustBeFn('listBets'));

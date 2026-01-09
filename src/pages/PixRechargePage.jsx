@@ -12,7 +12,10 @@ const PixRechargePage = () => {
   const [amountCents, setAmountCents] = useState(0);
   const [qrCode, setQrCode] = useState('');
   const [copyCode, setCopyCode] = useState('');
-  const [coupon] = useState('PANDA15');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponInfo, setCouponInfo] = useState(null);
+  const [couponError, setCouponError] = useState('');
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [appliedBonus, setAppliedBonus] = useState(0);
   const [watchingDeposit, setWatchingDeposit] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
@@ -39,6 +42,33 @@ const PixRechargePage = () => {
   }, [user]);
 
   const sanitizeCpf = (value) => (value || '').replace(/\D/g, '').slice(0, 11);
+
+  const handleValidateCoupon = async () => {
+    const code = String(couponCode || '').trim();
+    const val = amountCents / 100;
+    if (!code) {
+      setCouponError('Informe um cupom para validar.');
+      setCouponInfo(null);
+      return;
+    }
+    if (!amountCents || Number.isNaN(val) || val <= 0) {
+      setCouponError('Informe um valor válido para validar o cupom.');
+      setCouponInfo(null);
+      return;
+    }
+    setCouponError('');
+    setCouponInfo(null);
+    setValidatingCoupon(true);
+    try {
+      const res = await api.post('/pix/validate-coupon', { code, amount: val });
+      setCouponInfo(res.data || null);
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Cupom inválido.';
+      setCouponError(msg);
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
 
   const handleGenerate = async () => {
     const cleanCpf = sanitizeCpf(cpf);
@@ -99,7 +129,7 @@ const PixRechargePage = () => {
 
       const res = await api.post('/pix/charge', {
         amount: val,
-        coupon, // bônus fixo de 15% (rótulo Panda15)
+        couponCode: couponCode || undefined,
         cpf: cleanCpf,
         nome: name,
         email,
@@ -199,8 +229,37 @@ const PixRechargePage = () => {
         </div>
 
         <div className="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3">
-          <p className="text-xs font-semibold text-emerald-800">PANDA15</p>
-          <p className="text-xs text-emerald-700">Bônus de 15% em qualquer depósito.</p>
+          <p className="text-xs font-semibold text-emerald-800">Bônus padrão</p>
+          <p className="text-xs text-emerald-700">15% aplicado automaticamente se não usar cupom.</p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Cupom (opcional)</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              placeholder="Ex: BEMVINDO10"
+            />
+            <button
+              type="button"
+              disabled={validatingCoupon}
+              onClick={handleValidateCoupon}
+              className="whitespace-nowrap rounded-xl border border-emerald-200 px-3 py-3 text-xs font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:opacity-60"
+            >
+              {validatingCoupon ? 'Validando...' : 'Validar'}
+            </button>
+          </div>
+          {couponError ? (
+            <p className="text-xs text-red-600">{couponError}</p>
+          ) : null}
+          {couponInfo?.valid ? (
+            <p className="text-xs text-emerald-700">
+              Cupom válido. Bônus estimado: R$ {String(couponInfo.bonusPreview || '0').replace('.', ',')}
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">

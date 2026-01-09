@@ -200,9 +200,13 @@ exports.handleOpenPixWebhook = async (req, res) => {
         if (coupon && coupon.active) {
             const now = new Date();
             const isExpired = coupon.expiresAt && coupon.expiresAt < now;
+
+            const priorPaid = await tx.pixCharge.count({
+                where: { userId: pixCharge.userId, status: { in: ['PAID', 'paid'] } },
+            });
             
             // Valida mínimo com o valor FINAL depositado
-            if (!isExpired && finalDepositValue.greaterThanOrEqualTo(coupon.minDeposit)) {
+            if (!isExpired && priorPaid === 0 && finalDepositValue.greaterThanOrEqualTo(coupon.minDeposit)) {
                 
                 const userUses = await tx.couponRedemption.count({
                     where: { couponId: coupon.id, userId: pixCharge.userId }

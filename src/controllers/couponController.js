@@ -130,6 +130,14 @@ exports.validateCoupon = async (req, res) => {
         .json({ error: 'Você já usou este cupom o máximo de vezes permitido.' });
     }
 
+    // Primeiro depósito apenas: bloqueia se já existe Pix pago
+    const priorPaid = await prisma.pixCharge.count({
+      where: { userId, status: { in: ['PAID', 'paid'] } },
+    });
+    if (priorPaid > 0) {
+      return res.status(400).json({ error: 'Cupom válido apenas para o primeiro depósito.' });
+    }
+
     const amountNum = Number(amount);
     if (!Number.isFinite(amountNum) || amountNum < 0) {
       return res.status(400).json({ error: 'Valor inválido.' });
