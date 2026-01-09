@@ -17,6 +17,7 @@ const PixRechargePage = () => {
   const [couponError, setCouponError] = useState('');
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [appliedBonus, setAppliedBonus] = useState(0);
+  const [bonusLabel, setBonusLabel] = useState('Bônus aplicado');
   const [watchingDeposit, setWatchingDeposit] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
   const baselineRef = useRef(0);
@@ -51,16 +52,15 @@ const PixRechargePage = () => {
       setCouponInfo(null);
       return;
     }
-    if (!amountCents || Number.isNaN(val) || val <= 0) {
-      setCouponError('Informe um valor válido para validar o cupom.');
-      setCouponInfo(null);
-      return;
-    }
     setCouponError('');
     setCouponInfo(null);
     setValidatingCoupon(true);
     try {
-      const res = await api.post('/pix/validate-coupon', { code, amount: val });
+      const payload = { code };
+      if (amountCents && Number.isFinite(val) && val > 0) {
+        payload.amount = val;
+      }
+      const res = await api.post('/pix/validate-coupon', payload);
       setCouponInfo(res.data || null);
     } catch (err) {
       const msg = err.response?.data?.error || 'Cupom inválido.';
@@ -137,7 +137,13 @@ const PixRechargePage = () => {
       // OpenPix/Woovi retornam brCode (copia e cola) e qrCodeImage (URL)
       setCopyCode(res.data?.brCode || '');
       setQrCode(res.data?.qrCodeImage || '');
-      setAppliedBonus(res.data?.bonusAmount || 0);
+      const bonusValue = res.data?.bonusAmount ?? res.data?.bonusPreview ?? 0;
+      setAppliedBonus(bonusValue);
+      if (res.data?.couponApplied && res.data?.bonusAmount == null) {
+        setBonusLabel('Bônus estimado');
+      } else {
+        setBonusLabel('Bônus aplicado');
+      }
       // guarda baseline para detectar crédito (saldo + bônus)
       baselineRef.current = Number(user?.balance || 0) + Number(user?.bonus || 0);
       startPollingDeposit();
@@ -257,7 +263,9 @@ const PixRechargePage = () => {
           ) : null}
           {couponInfo?.valid ? (
             <p className="text-xs text-emerald-700">
-              Cupom válido. Bônus estimado: R$ {String(couponInfo.bonusPreview || '0').replace('.', ',')}
+              {couponInfo.bonusPreview
+                ? `Cupom válido. Bônus estimado: R$ ${String(couponInfo.bonusPreview).replace('.', ',')}`
+                : 'Cupom válido. Informe um valor para calcular o bônus.'}
             </p>
           ) : null}
         </div>
@@ -290,9 +298,9 @@ const PixRechargePage = () => {
         {loading ? 'Gerando...' : 'Gerar QR Code Pix'}
       </button>
 
-      {appliedBonus > 0 && (
+      {Number(appliedBonus) > 0 && (
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
-          Bônus aplicado: R$ {Number(appliedBonus).toFixed(2).replace('.', ',')} (será creditado como bônus)
+          {bonusLabel}: R$ {Number(appliedBonus).toFixed(2).replace('.', ',')} (será creditado como bônus)
         </div>
       )}
 
