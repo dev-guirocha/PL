@@ -5,7 +5,11 @@ if (!connectionString) {
   throw new Error('DATABASE_URL não definido. Configure o .env antes de iniciar o servidor.');
 }
 
-if (process.env.NODE_ENV === 'staging' && !connectionString.startsWith('file:')) {
+const isStagingEnv = process.env.NODE_ENV === 'staging'
+  || process.env.RAILWAY_ENVIRONMENT === 'staging'
+  || process.env.RAILWAY_ENVIRONMENT_NAME === 'staging';
+
+if (isStagingEnv && !connectionString.startsWith('file:')) {
   try {
     const host = new URL(connectionString).host;
     if (host) {
