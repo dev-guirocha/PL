@@ -9,10 +9,10 @@ if (process.env.NODE_ENV === 'staging' && !connectionString.startsWith('file:'))
   try {
     const host = new URL(connectionString).host;
     if (host) {
-      console.log(`[DB] host=${host}`);
+      console.log(`[Prisma][staging] DB host: ${host}`);
     }
   } catch {
-    console.log('[DB] host=unknown');
+    console.log('[Prisma][staging] DB host: unknown');
   }
 }
 
