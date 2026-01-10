@@ -6,7 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // pooled (-pooler)
+  directUrl = env("DIRECT_URL")     // direct (sem -pooler)
 }
 
 enum CouponType {
