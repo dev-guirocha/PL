@@ -5,6 +5,17 @@ if (!connectionString) {
   throw new Error('DATABASE_URL não definido. Configure o .env antes de iniciar o servidor.');
 }
 
+if (process.env.NODE_ENV === 'staging' && !connectionString.startsWith('file:')) {
+  try {
+    const host = new URL(connectionString).host;
+    if (host) {
+      console.log(`[DB] host=${host}`);
+    }
+  } catch {
+    console.log('[DB] host=unknown');
+  }
+}
+
 const isSqlite = connectionString.startsWith('file:');
 const globalForPrisma = global.prisma || {};
 

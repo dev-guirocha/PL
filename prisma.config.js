@@ -5,7 +5,7 @@ module.exports = defineConfig({
   schema: './schema.prisma',
   datasource: {
     url: env('DATABASE_URL'),
-    directUrl: env('DIRECT_DATABASE_URL'),
+    directUrl: process.env.DIRECT_URL || process.env.DIRECT_DATABASE_URL,
     shadowDatabaseUrl: env('SHADOW_DATABASE_URL'),
   },
 });
