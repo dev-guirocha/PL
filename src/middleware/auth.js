@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
+const AUTH_DEBUG = process.env.AUTH_DEBUG === 'true';
 
 function getTokenFromCookie(req) {
   const cookieHeader = req.headers?.cookie;
@@ -20,7 +21,10 @@ module.exports = async (req, res, next) => {
     if (type === 'Bearer' && value) token = value;
   }
   if (!token) token = getTokenFromCookie(req);
-  if (!token) return res.status(401).json({ error: 'Token não fornecido.' });
+  if (!token) {
+    if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] missing_token', { path: req.path });
+    return res.status(401).json({ error: 'Token não fornecido.' });
+  }
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -33,14 +37,17 @@ module.exports = async (req, res, next) => {
     });
 
     if (!user || user.deletedAt) {
+      if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] user_removed', { userId: req.userId });
       return res.status(403).json({ error: 'Usuário removido.' });
     }
     if (user.isBlocked) {
+      if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] user_blocked', { userId: req.userId });
       return res.status(403).json({ error: 'Usuário bloqueado.' });
     }
 
     return next();
   } catch (err) {
+    if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] invalid_token', { message: err.message });
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
 };
