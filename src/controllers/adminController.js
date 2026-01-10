@@ -5,11 +5,26 @@
 // - FIX: expandModalidades reconhece PALPITAO (já normalizado) e compostas são consistentes.
 // - CORE: Engine V3.3 (Hybrid Logic, Synced Recheck, Reconstitutable Audit).
 
+const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prismaClient');
 
 // --- CONSTANTES ---
 const MAX_AUTO_PAYOUT = 10000; // Teto para aprovação automática
 const AUDIT_LOGS = process.env.AUDIT_LOGS === '1'; // Controlado por ENV
+const ZERO_DECIMAL = new Prisma.Decimal(0);
+const MAX_AUTO_PAYOUT_DEC = new Prisma.Decimal(MAX_AUTO_PAYOUT);
+
+const toDecimalSafe = (value) => {
+  if (value instanceof Prisma.Decimal) return value;
+  if (value === null || value === undefined || value === '') return ZERO_DECIMAL;
+  try {
+    return new Prisma.Decimal(String(value));
+  } catch {
+    return ZERO_DECIMAL;
+  }
+};
+
+const toDecimalMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 
 // --- FUNÇÕES AUXILIARES ---
 const extractHour = (str) => {
@@ -608,7 +623,7 @@ exports.settleBetsForResult = async (req, res) => {
           continue;
         }
 
-        let prize = 0;
+        let prize = ZERO_DECIMAL;
         let requiresManualReview = false;
 
         for (const aposta of apostas) {
@@ -619,12 +634,16 @@ exports.settleBetsForResult = async (req, res) => {
           const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
 
           const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
-          const betTotalNum = toNumberSafe(rawTotal);
-          const valPorNum = toNumberSafe(aposta.valorPorNumero);
+          const betTotalNum = toDecimalMoney(rawTotal);
+          const valPorNum = toDecimalMoney(aposta.valorPorNumero);
           const palpCount = palpites.length || 0;
-          const perNumber = valPorNum > 0 ? valPorNum : palpCount > 0 ? betTotalNum / palpCount : 0;
+          const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
+            ? valPorNum
+            : palpCount > 0
+              ? betTotalNum.div(new Prisma.Decimal(palpCount))
+              : ZERO_DECIMAL;
 
-          if (!perNumber || perNumber <= 0 || !palpCount) continue;
+          if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) continue;
 
           if (modalNorm.includes('PASSE') || modalNorm.includes('PALPITAO')) {
             requiresManualReview = true;
@@ -655,9 +674,9 @@ exports.settleBetsForResult = async (req, res) => {
                 baseMods.includes('CENTENA');
 
               // MC: divide a stake 50/50; outras expansões seguem 100%
-              const stakeFactor = isHybridMC ? 0.5 : 1;
+              const stakeFactor = isHybridMC ? new Prisma.Decimal('0.5') : new Prisma.Decimal(1);
 
-              let amountForThisPalpite = 0;
+              let amountForThisPalpite = ZERO_DECIMAL;
               let bestMeta = null;
 
               for (const base of baseMods) {
@@ -666,13 +685,16 @@ exports.settleBetsForResult = async (req, res) => {
 
                 const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
                 if (factor > 0) {
-                  const winPart = (perNumber * stakeFactor) * sub.payout * factor;
+                  const winPart = perNumber
+                    .mul(stakeFactor)
+                    .mul(new Prisma.Decimal(String(sub.payout || 0)))
+                    .mul(new Prisma.Decimal(factor));
 
                   if (isHybridMC) {
-                    amountForThisPalpite += winPart;
-                    if (AUDIT_LOGS) console.log('[AUDIT MC PART]', { mod: base, win: winPart });
+                    amountForThisPalpite = amountForThisPalpite.add(winPart);
+                    if (AUDIT_LOGS) console.log('[AUDIT MC PART]', { mod: base, win: winPart.toFixed(2) });
                   } else {
-                    if (winPart > amountForThisPalpite) {
+                    if (winPart.greaterThan(amountForThisPalpite)) {
                       amountForThisPalpite = winPart;
                       bestMeta = {
                         betId: bet.id,
@@ -680,20 +702,20 @@ exports.settleBetsForResult = async (req, res) => {
                         colocacao: colocacaoRaw,
                         palpite,
                         mod: base,
-                        stake: perNumber,
+                        stake: perNumber.toFixed(2),
                         payout: sub.payout,
                         factor,
-                        win: winPart,
+                        win: winPart.toFixed(2),
                       };
                     }
                   }
                 }
               }
 
-              if (amountForThisPalpite > 0) {
+              if (amountForThisPalpite.greaterThan(ZERO_DECIMAL)) {
                 if (AUDIT_LOGS && bestMeta && !isHybridMC) console.log('[AUDIT WIN]', bestMeta);
-                if (AUDIT_LOGS && isHybridMC) console.log('[AUDIT WIN MC]', { betId: bet.id, win: amountForThisPalpite });
-                prize += amountForThisPalpite;
+                if (AUDIT_LOGS && isHybridMC) console.log('[AUDIT WIN MC]', { betId: bet.id, win: amountForThisPalpite.toFixed(2) });
+                prize = prize.add(amountForThisPalpite);
               }
             }
           } else {
@@ -707,8 +729,10 @@ exports.settleBetsForResult = async (req, res) => {
               });
 
               if (factor > 0) {
-                const amount = perNumber * payout * factor;
-                prize += amount;
+                const amount = perNumber
+                  .mul(new Prisma.Decimal(String(payout || 0)))
+                  .mul(new Prisma.Decimal(factor));
+                prize = prize.add(amount);
 
                 if (AUDIT_LOGS)
                   console.log('[AUDIT WIN]', {
@@ -720,10 +744,10 @@ exports.settleBetsForResult = async (req, res) => {
                     domain: domain || null,
                     palpitesCount: palpites.length,
                     mod: modalNorm,
-                    stake: perNumber,
+                    stake: perNumber.toFixed(2),
                     payout,
                     factor,
-                    win: amount,
+                    win: amount.toFixed(2),
                   });
               }
             } else {
@@ -736,8 +760,8 @@ exports.settleBetsForResult = async (req, res) => {
 
               if (Array.isArray(wins) && wins.length) {
                 for (const w of wins) {
-                  const amount = perNumber * payout;
-                  prize += amount;
+                  const amount = perNumber.mul(new Prisma.Decimal(String(payout || 0)));
+                  prize = prize.add(amount);
 
                   if (AUDIT_LOGS)
                     console.log('[AUDIT WIN]', {
@@ -747,10 +771,10 @@ exports.settleBetsForResult = async (req, res) => {
                       palpite: w,
                       palpitesCount: palpites.length,
                       mod: modalNorm,
-                      stake: perNumber,
+                      stake: perNumber.toFixed(2),
                       payout,
                       factor: 1,
-                      win: amount,
+                      win: amount.toFixed(2),
                     });
                 }
               }
@@ -758,42 +782,48 @@ exports.settleBetsForResult = async (req, res) => {
           }
         }
 
-        const finalPrize = Number(prize.toFixed(2));
+        const finalPrize = prize.toDecimalPlaces(2);
 
         let status = 'lost';
-        if (finalPrize > 0) {
+        if (finalPrize.greaterThan(ZERO_DECIMAL)) {
           status = 'won';
-          if (requiresManualReview || finalPrize > MAX_AUTO_PAYOUT) {
+          if (requiresManualReview || finalPrize.greaterThan(MAX_AUTO_PAYOUT_DEC)) {
             status = 'pending_review';
             console.warn(
-              `[BET ${bet.id}] Review: Prize=${finalPrize}, Reason=${requiresManualReview ? 'COMPLEX_MODAL' : 'HIGH_VALUE'}`
+              `[BET ${bet.id}] Review: Prize=${finalPrize.toFixed(2)}, Reason=${requiresManualReview ? 'COMPLEX_MODAL' : 'HIGH_VALUE'}`
             );
           }
         }
 
         const didSettle = await prisma.$transaction(async (tx) => {
           const updateBatch = await tx.bet.updateMany({
-            where: { id: bet.id, status: 'open', resultId: null },
+            where: { id: bet.id, status: 'open', resultId: null, recheckedAt: null },
             data: { status, prize: finalPrize, settledAt: new Date(), resultId: id },
           });
 
           if (updateBatch.count === 0) return false;
 
-          if (status === 'won' && finalPrize > 0) {
-            await tx.user.update({
-              where: { id: bet.userId },
-              data: { balance: { increment: finalPrize } },
+          if (status === 'won' && finalPrize.greaterThan(ZERO_DECIMAL)) {
+            const creditLock = await tx.bet.updateMany({
+              where: { id: bet.id, prizeCreditedAt: null, status: 'won', prize: finalPrize },
+              data: { prizeCreditedAt: new Date() },
             });
-            await tx.transaction.create({
-              data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio (${bet.id})` },
-            });
+            if (creditLock.count) {
+              await tx.user.update({
+                where: { id: bet.userId },
+                data: { balance: { increment: finalPrize } },
+              });
+              await tx.transaction.create({
+                data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio (${bet.id})` },
+              });
+            }
           }
           return true;
         });
 
         if (didSettle) {
           summary.settled++;
-          if (finalPrize > 0) summary.wins++;
+          if (finalPrize.greaterThan(ZERO_DECIMAL)) summary.wins++;
         }
       } catch (innerErr) {
         summary.errors.push({ id: bet.id, msg: innerErr?.message || String(innerErr) });
@@ -814,6 +844,7 @@ exports.recheckSingleBet = async (req, res) => {
   try {
     const bet = await prisma.bet.findUnique({ where: { id: betId }, include: { user: true } });
     if (!bet) return res.status(404).json({ error: 'Aposta não encontrada' });
+    if (bet.recheckedAt) return res.status(409).json({ error: 'Recheck já processado.' });
 
     const betDateISO = normalizeDate(bet.dataJogo);
     const betHour = extractHour(bet.codigoHorario);
@@ -863,7 +894,7 @@ exports.recheckSingleBet = async (req, res) => {
     if (!premios.length) return res.status(400).json({ error: 'Resultado sem números válidos.' });
 
     const apostas = parseApostasFromBet(bet);
-    let prize = 0;
+    let prize = ZERO_DECIMAL;
     let requiresManualReview = false;
 
     for (const aposta of apostas) {
@@ -874,12 +905,16 @@ exports.recheckSingleBet = async (req, res) => {
       const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
 
       const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
-      const betTotalNum = toNumberSafe(rawTotal);
-      const valPorNum = toNumberSafe(aposta.valorPorNumero);
+      const betTotalNum = toDecimalMoney(rawTotal);
+      const valPorNum = toDecimalMoney(aposta.valorPorNumero);
       const palpCount = palpites.length || 0;
-      const perNumber = valPorNum > 0 ? valPorNum : palpCount > 0 ? betTotalNum / palpCount : 0;
+      const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
+        ? valPorNum
+        : palpCount > 0
+          ? betTotalNum.div(new Prisma.Decimal(palpCount))
+          : ZERO_DECIMAL;
 
-      if (!perNumber || perNumber <= 0 || !palpCount) continue;
+      if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) continue;
 
       if (modalNorm.includes('PASSE') || modalNorm.includes('PALPITAO')) {
         requiresManualReview = true;
@@ -907,10 +942,10 @@ exports.recheckSingleBet = async (req, res) => {
         const isHybridMC = baseMods.length === 2 &&
                            baseMods.includes('MILHAR') &&
                            baseMods.includes('CENTENA');
-        const stakeFactor = isHybridMC ? 0.5 : 1;
+        const stakeFactor = isHybridMC ? new Prisma.Decimal('0.5') : new Prisma.Decimal(1);
 
         for (const palpite of palpites) {
-          let amountForThisPalpite = 0;
+          let amountForThisPalpite = ZERO_DECIMAL;
 
           for (const base of baseMods) {
             const sub = computeFinalPayout({ modalidadeRaw: base, colocacaoRaw });
@@ -919,17 +954,20 @@ exports.recheckSingleBet = async (req, res) => {
             const { factor } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
 
             if (factor > 0) {
-              const winPart = (perNumber * stakeFactor) * sub.payout * factor;
+              const winPart = perNumber
+                .mul(stakeFactor)
+                .mul(new Prisma.Decimal(String(sub.payout || 0)))
+                .mul(new Prisma.Decimal(factor));
 
               if (isHybridMC) {
-                amountForThisPalpite += winPart; // Soma (MC)
+                amountForThisPalpite = amountForThisPalpite.add(winPart); // Soma (MC)
               } else {
-                if (winPart > amountForThisPalpite) amountForThisPalpite = winPart; // Max (padrão)
+                if (winPart.greaterThan(amountForThisPalpite)) amountForThisPalpite = winPart; // Max (padrão)
               }
             }
           }
 
-          prize += amountForThisPalpite;
+          prize = prize.add(amountForThisPalpite);
         }
       } else {
         const isComposta = /DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/.test(modalNorm);
@@ -937,8 +975,10 @@ exports.recheckSingleBet = async (req, res) => {
         if (isComposta) {
           const { factor } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
           if (factor > 0) {
-            const amount = perNumber * payout * factor;
-            prize += amount;
+            const amount = perNumber
+              .mul(new Prisma.Decimal(String(payout || 0)))
+              .mul(new Prisma.Decimal(factor));
+            prize = prize.add(amount);
           }
         } else {
           const { factor, wins } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
@@ -950,48 +990,86 @@ exports.recheckSingleBet = async (req, res) => {
 
           if (Array.isArray(wins) && wins.length) {
             for (const w of wins) {
-              const amount = perNumber * payout;
-              prize += amount;
+              const amount = perNumber.mul(new Prisma.Decimal(String(payout || 0)));
+              prize = prize.add(amount);
             }
           }
         }
       }
     }
 
-    const finalPrize = Number(prize.toFixed(2));
+    const finalPrize = prize.toDecimalPlaces(2);
 
-    let newStatus = finalPrize > 0 ? 'won' : 'lost';
-    if (finalPrize > 0 && (requiresManualReview || finalPrize > MAX_AUTO_PAYOUT)) {
+    let newStatus = finalPrize.greaterThan(ZERO_DECIMAL) ? 'won' : 'lost';
+    if (finalPrize.greaterThan(ZERO_DECIMAL) && (requiresManualReview || finalPrize.greaterThan(MAX_AUTO_PAYOUT_DEC))) {
       newStatus = 'pending_review';
     }
 
     const oldStatus = bet.status;
-    const oldPrize = toNumberSafe(String(bet.prize ?? 0));
+    const oldPrize = toDecimalMoney(bet.prize ?? 0);
+    const hadPrizeCredit = Boolean(bet.prizeCreditedAt);
 
-    if (newStatus === oldStatus && Number(finalPrize.toFixed(2)) === Number(oldPrize.toFixed(2))) {
-      return res.json({ message: `Aposta correta.`, bet, matchedResult: { id: matchingResult.id } });
-    }
+    const recheckAt = new Date();
+    const outcome = await prisma.$transaction(async (tx) => {
+      const lock = await tx.bet.updateMany({
+        where: { id: bet.id, recheckedAt: null, status: bet.status, prize: bet.prize, settledAt: bet.settledAt },
+        data: { recheckedAt: recheckAt },
+      });
+      if (!lock.count) return { already: true };
 
-    await prisma.$transaction(async (tx) => {
-      if (oldStatus === 'won' && oldPrize > 0) {
+      if (newStatus === oldStatus && finalPrize.equals(oldPrize)) {
+        return { noChange: true };
+      }
+
+      if (oldStatus === 'won' && oldPrize.greaterThan(ZERO_DECIMAL) && hadPrizeCredit) {
         await tx.user.update({ where: { id: bet.userId }, data: { balance: { decrement: oldPrize } } });
-        await tx.transaction.create({ data: { userId: bet.userId, type: 'adjustment', amount: -oldPrize, description: `Estorno Correção (${bet.id})` } });
+        await tx.transaction.create({
+          data: {
+            userId: bet.userId,
+            type: 'adjustment',
+            amount: oldPrize.negated(),
+            description: `Estorno Correção (${bet.id})`,
+          },
+        });
       }
 
       await tx.bet.updateMany({
         where: { id: bet.id },
-        data: { status: newStatus, prize: finalPrize, settledAt: new Date(), resultId: matchingResult.id },
+        data: {
+          status: newStatus,
+          prize: finalPrize,
+          settledAt: new Date(),
+          resultId: matchingResult.id,
+          recheckedAt: recheckAt,
+          prizeCreditedAt: null,
+        },
       });
 
-      if (newStatus === 'won' && finalPrize > 0) {
-        await tx.user.update({ where: { id: bet.userId }, data: { balance: { increment: finalPrize } } });
-        await tx.transaction.create({ data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio Recalculado (${bet.id})` } });
+      if (newStatus === 'won' && finalPrize.greaterThan(ZERO_DECIMAL)) {
+        const creditLock = await tx.bet.updateMany({
+          where: { id: bet.id, prizeCreditedAt: null, status: 'won', prize: finalPrize },
+          data: { prizeCreditedAt: new Date() },
+        });
+        if (creditLock.count) {
+          await tx.user.update({ where: { id: bet.userId }, data: { balance: { increment: finalPrize } } });
+          await tx.transaction.create({
+            data: { userId: bet.userId, type: 'prize', amount: finalPrize, description: `Prêmio Recalculado (${bet.id})` },
+          });
+        }
       }
+
+      return { updated: true };
     });
+
+    if (outcome?.already) return res.status(409).json({ error: 'Recheck já processado.' });
+    if (outcome?.noChange) return res.json({ message: `Aposta correta.`, bet, matchedResult: { id: matchingResult.id } });
 
     return res.json({
       message: 'Corrigido!',
-      changes: { from: { status: oldStatus, prize: oldPrize }, to: { status: newStatus, prize: finalPrize } },
+      changes: {
+        from: { status: oldStatus, prize: oldPrize.toFixed(2) },
+        to: { status: newStatus, prize: finalPrize.toFixed(2) },
+      },
     });
   } catch (err) {
     console.error(err);

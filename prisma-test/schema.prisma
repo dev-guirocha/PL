@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 enum CouponType {
@@ -26,8 +26,8 @@ model User {
   supervisor   Supervisor? @relation(fields: [supervisorId], references: [id])
   supervisorId Int?
   pendingSupCode String?
-  balance   Decimal  @db.Decimal(18, 2) @default(0)
-  bonus     Decimal  @db.Decimal(18, 2) @default(0)
+  balance   Decimal   @default(0)
+  bonus     Decimal   @default(0)
   cpf       String?  @unique
   birthDate String?
   email     String?
@@ -46,7 +46,7 @@ model PixCharge {
   id            Int       @id @default(autoincrement())
   user          User      @relation(fields: [userId], references: [id])
   userId        Int
-  amount        Decimal   @db.Decimal(18, 2)
+  amount        Decimal   
   status        String    @default("created")
   txid          String?   @unique
   locId         String?
@@ -57,7 +57,7 @@ model PixCharge {
   credited      Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  bonusAmount   Decimal   @default(0) @db.Decimal(18, 2)
+  bonusAmount   Decimal   @default(0) 
   couponCode    String?
   couponId      Int?
   coupon        Coupon?   @relation(fields: [couponId], references: [id])
@@ -72,7 +72,7 @@ model Transaction {
   user        User     @relation(fields: [userId], references: [id])
   userId      Int
   type        String   // deposit, debit, prize, adjustment
-  amount      Decimal  @db.Decimal(18, 2) // valores positivos ou negativos
+  amount      Decimal   // valores positivos ou negativos
   description String?
   createdAt   DateTime @default(now())
 
@@ -86,13 +86,13 @@ model Bet {
   userId      Int
   loteria     String?
   codigoHorario String?
-  total       Decimal  @db.Decimal(18, 2)
+  total       Decimal  
   dataJogo    String?
   modalidade  String?
   colocacao   String?
   palpites    String   // JSON string de palpites/apostas
   status      String   @default("open") // open, won, lost, settled
-  prize       Decimal  @db.Decimal(18, 2) @default(0)
+  prize       Decimal   @default(0)
   prizeCreditedAt DateTime?
   settledAt   DateTime?
   recheckedAt DateTime?
@@ -183,7 +183,7 @@ model WithdrawalRequest {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  amount    Decimal  @db.Decimal(18, 2)
+  amount    Decimal  
   status    String   @default("pending") // pending, approved, rejected, paid
   pixKey    String?
   pixType   String?  @default("cpf")
@@ -198,9 +198,9 @@ model Coupon {
   description String?
 
   type       String     @default("fixed")
-  value      Decimal    @map("amount") @db.Decimal(18, 2)
-  minDeposit Decimal    @db.Decimal(18, 2) @default(0)
-  maxDeposit Decimal?   @db.Decimal(18, 2)
+  value      Decimal    @map("amount") 
+  minDeposit Decimal     @default(0)
+  maxDeposit Decimal?   
 
   maxUses    Int        @default(1000)
   usageLimit Int?
@@ -223,7 +223,7 @@ model CouponRedemption {
 
   depositId     String   @unique
 
-  amountApplied Decimal  @db.Decimal(18, 2)
+  amountApplied Decimal  
   createdAt     DateTime @default(now())
 
   coupon        Coupon   @relation(fields: [couponId], references: [id])
@@ -238,7 +238,7 @@ model SupervisorCommission {
   userId       Int
   bet          Bet?       @relation(fields: [betId], references: [id])
   betId        Int?
-  amount       Decimal    @db.Decimal(18, 2)
+  amount       Decimal    
   basis        String?    // stake, loss etc.
   status       String     @default("pending") // pending, paid, canceled
   createdAt    DateTime   @default(now())
@@ -247,5 +247,5 @@ model SupervisorCommission {
 model playing_with_neon {
   id    Int    @id @default(autoincrement())
   name  String
-  value Float? @db.Real
+  value Float? 
 }

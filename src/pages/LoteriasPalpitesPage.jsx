@@ -6,6 +6,8 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { formatDateBR } from '../utils/date';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import SmartBetInput from '../components/Betting/SmartBetInput';
+import { isSmartInputSupported } from '../utils/betParser';
 
 const LoteriasPalpitesPage = () => {
   const navigate = useNavigate();
@@ -29,6 +31,7 @@ const LoteriasPalpitesPage = () => {
           ? 1
           : null;
   const isSupportedModalidade = Boolean(expectedDigits);
+  const showSmartInput = isSmartInputSupported(modalidade);
 
   useEffect(() => {
     const d = getDraft();
@@ -152,6 +155,18 @@ const LoteriasPalpitesPage = () => {
     prevLength.current = limited.length;
   };
 
+  const handleSmartAdd = (novosPalpites) => {
+    if (!Array.isArray(novosPalpites) || novosPalpites.length === 0) return;
+    setPalpiteError('');
+    const signature = `${draft?.jogo || ''}|${draft?.data || ''}|${draft?.modalidade || ''}|${draft?.colocacao || ''}`;
+    setPalpites((prev) => {
+      const next = [...prev, ...novosPalpites];
+      updateDraft({ palpites: next, palpitesSignature: signature });
+      return next;
+    });
+    prevLength.current = 0;
+  };
+
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -182,6 +197,11 @@ const LoteriasPalpitesPage = () => {
         )}
         {draft?.colocacao && (
           <div style={styles.subtitle}>Colocação: {draft.colocacao}</div>
+        )}
+        {showSmartInput && (
+          <div style={{ marginTop: '4px' }}>
+            <SmartBetInput modalidadeSelecionada={modalidade} onAddPalpites={handleSmartAdd} />
+          </div>
         )}
         {isSupportedModalidade ? (
           <>
@@ -236,7 +256,9 @@ const LoteriasPalpitesPage = () => {
           </>
         ) : (
           <div style={styles.placeholder}>
-            Modalidade ainda não configurada para palpites. Selecione uma centena.
+            {showSmartInput
+              ? 'Use o campo "Copiar e Colar" para adicionar palpites desta modalidade.'
+              : 'Modalidade ainda não configurada para palpites. Selecione uma centena.'}
           </div>
         )}
       </div>

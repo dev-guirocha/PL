@@ -1,4 +1,8 @@
 const { z } = require('zod');
+const { DateTime } = require('luxon');
+const { Prisma } = require('@prisma/client');
+const crypto = require('crypto');
+const { formatMoney } = require('../utils/money');
 const { recordTransaction } = require('../services/financeService');
 const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
@@ -6,6 +10,8 @@ const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || '
 const TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_GRACE_MINUTES = 10;
 const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
+const ZERO = new Prisma.Decimal(0);
+const HUNDRED = new Prisma.Decimal(100);
 
 const betPayloadSchema = z.object({
   loteria: z.string().min(1, 'Loteria é obrigatória'),
@@ -18,32 +24,50 @@ const betPayloadSchema = z.object({
         data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve ser YYYY-MM-DD'),
         modalidade: z.string(),
         colocacao: z.string(),
-        palpites: z.array(z.union([z.string(), z.number()])).min(1, 'Palpites obrigatórios'),
+        palpites: z.array(z.union([z.string(), z.number()])).min(1, 'Palpites obrigatórios').max(500, 'Limite de palpites excedido.'),
         modoValor: z.enum(['cada', 'todos']).optional(),
         valorAposta: z.preprocess((val) => Number(val), z.number().positive('Valor deve ser positivo.')),
       }),
     )
-    .min(1, 'Envie ao menos uma aposta.'),
+    .min(1, 'Envie ao menos uma aposta.')
+    .max(200, 'Limite de apostas excedido.'),
 });
+
+const toDecimalSafe = (value) => {
+  if (value instanceof Prisma.Decimal) return value;
+  if (value === null || value === undefined || value === '') return ZERO;
+  try {
+    return new Prisma.Decimal(String(value));
+  } catch {
+    return ZERO;
+  }
+};
+
+const toMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 
 // Calcula o valor total de forma confiável no backend
 function calculateTotal(apostas) {
   return apostas.reduce((acc, ap) => {
-    const valor = Number(ap.valorAposta);
-    const qtd = ap.palpites.length;
-    const subtotal = ap.modoValor === 'cada' ? valor * qtd : valor;
-    return acc + subtotal;
-  }, 0);
+    const valor = toMoney(ap.valorAposta);
+    const qtd = Array.isArray(ap.palpites) ? ap.palpites.length : 0;
+    const subtotal = ap.modoValor === 'cada' ? valor.mul(qtd) : valor;
+    return acc.add(subtotal);
+  }, ZERO);
 }
 
 const getBrazilTodayStr = () =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: TIMEZONE }).format(new Date()); // YYYY-MM-DD
 
-const parseNowInTimezone = () => {
-  const now = new Date();
-  const tzString = now.toLocaleString('en-US', { timeZone: TIMEZONE });
-  return new Date(tzString);
+const nowInTimezone = () => DateTime.now().setZone(TIMEZONE);
+
+const buildIdempotencyRoute = (req) => {
+  const base = req.baseUrl || req.originalUrl || '';
+  const clean = String(base).split('?')[0];
+  return `${String(req.method || '').toUpperCase()} ${clean}`.trim();
 };
+
+const hashPayload = (payload) =>
+  crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
 const getHourFromCode = (codigoHorario) => {
   if (!codigoHorario) return null;
@@ -62,6 +86,26 @@ const normalizeCodigoHorario = (codigoHorario) => {
   return `${hh}:${mm}`;
 };
 
+const parseTimeFromCode = (codigoHorario) => {
+  if (!codigoHorario) return null;
+  const match = String(codigoHorario).match(/(\d{1,2})(?::(\d{2}))?/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2] ?? 0);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
+const buildSlotDateTime = (dataJogoStr, codigoHorario) => {
+  const date = DateTime.fromISO(String(dataJogoStr), { zone: TIMEZONE });
+  if (!date.isValid) return null;
+  const time = parseTimeFromCode(codigoHorario);
+  if (!time) return null;
+  const slot = date.set({ hour: time.hour, minute: time.minute, second: 0, millisecond: 0 });
+  return slot.isValid ? slot : null;
+};
+
 const getDayFromDateStr = (dateStr) => {
   if (!dateStr) return null;
   const parts = String(dateStr).split('-').map(Number);
@@ -75,16 +119,11 @@ const getDayFromDateStr = (dateStr) => {
 
 const isBettingAllowed = (codigoHorario, dataJogoStr) => {
   if (!codigoHorario || !dataJogoStr) return true;
-  // Tenta extrair HH:mm do código/horário
-  const match = String(codigoHorario).match(/(\d{1,2}):(\d{2})/);
-  if (!match) return true;
-  const [_, hh, mm] = match;
-  const slotStr = `${dataJogoStr}T${hh.padStart(2, '0')}:${mm}:00`;
-  const slot = new Date(`${slotStr}-03:00`); // TZ Brasil fixa; simplificação
-  if (Number.isNaN(slot.getTime())) return true;
-  const deadline = new Date(slot.getTime() - DEFAULT_GRACE_MINUTES * 60 * 1000);
-  const now = parseNowInTimezone();
-  return now <= deadline;
+  const slot = buildSlotDateTime(dataJogoStr, codigoHorario);
+  if (!slot) return true;
+  const deadline = slot.minus({ minutes: DEFAULT_GRACE_MINUTES });
+  const now = nowInTimezone();
+  return now.toMillis() <= deadline.toMillis();
 };
 
 const serializeBet = (bet) => {
@@ -109,6 +148,15 @@ const serializeBet = (bet) => {
     colocacao: bet.colocacao,
     apostas,
     betRef,
+  };
+};
+
+const serializeBetResponse = (bet) => {
+  const base = serializeBet(bet);
+  return {
+    ...base,
+    total: formatMoney(bet.total),
+    prize: formatMoney(bet.prize || 0),
   };
 };
 
@@ -148,6 +196,11 @@ const normalizePagination = (data) => {
 };
 
 exports.create = async (req, res) => {
+  const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+  if (!idempotencyKey) {
+    return res.status(400).json({ error: 'Idempotency-Key é obrigatório.' });
+  }
+
   // Normaliza payload antes do Zod (fallback de root + apostas como array)
   let rawApostas = req.body?.apostas;
   if (typeof rawApostas === 'string') {
@@ -182,6 +235,13 @@ exports.create = async (req, res) => {
   const { loteria, codigoHorario, apostas, dataJogo: rootDataJogo } = parsed.data;
   const dataJogo = rootDataJogo || apostas?.[0]?.data;
   const codigoHorarioNorm = normalizeCodigoHorario(codigoHorario);
+  const idempotencyRoute = buildIdempotencyRoute(req) || 'POST /api/bets';
+  const requestHash = hashPayload({
+    loteria,
+    codigoHorario: codigoHorarioNorm,
+    dataJogo,
+    apostas,
+  });
 
   console.log('[BET_CREATE]', {
     userId: req.userId,
@@ -215,10 +275,40 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorarioNorm} do dia ${dataJogo}.` });
   }
 
-  const totalDebit = calculateTotal(apostas);
+  const totalDebit = calculateTotal(apostas).toDecimalPlaces(2);
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      let idempotencyRecord = null;
+      try {
+        idempotencyRecord = await tx.idempotencyKey.create({
+          data: {
+            key: idempotencyKey,
+            userId: req.userId,
+            route: idempotencyRoute,
+            requestHash,
+          },
+        });
+      } catch (err) {
+        if (err?.code === 'P2002') {
+          const existing = await tx.idempotencyKey.findUnique({
+            where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
+          });
+          if (existing?.requestHash && existing.requestHash !== requestHash) {
+            return { idempotentError: { status: 409, payload: { error: 'Idempotency-Key usada com payload diferente.' } } };
+          }
+          if (existing?.response) {
+            return { idempotentResponse: existing.response };
+          }
+          return { idempotentError: { status: 409, payload: { error: 'Requisição em processamento.' } } };
+        }
+        throw err;
+      }
+
+      if (!idempotencyRecord) {
+        return { idempotentError: { status: 500, payload: { error: 'Erro ao registrar idempotência.' } } };
+      }
+
       const userWallet = await tx.user.findUnique({
         where: { id: req.userId },
         select: { balance: true, bonus: true, supervisorId: true },
@@ -230,18 +320,18 @@ exports.create = async (req, res) => {
         throw err;
       }
 
-      const availableBalance = Number(userWallet.balance || 0);
-      const availableBonus = Number(userWallet.bonus || 0);
-      const totalAvailable = availableBalance + availableBonus;
+      const availableBalance = toMoney(userWallet.balance);
+      const availableBonus = toMoney(userWallet.bonus);
+      const totalAvailable = availableBalance.add(availableBonus);
 
-      if (totalAvailable < totalDebit) {
+      if (totalAvailable.lessThan(totalDebit)) {
         const err = new Error('Saldo insuficiente.');
         err.code = 'ERR_NO_BALANCE';
         throw err;
       }
 
-      const debitFromBalance = Math.min(availableBalance, totalDebit);
-      const debitFromBonus = Number((totalDebit - debitFromBalance).toFixed(2));
+      const debitFromBalance = availableBalance.lessThan(totalDebit) ? availableBalance : totalDebit;
+      const debitFromBonus = totalDebit.sub(debitFromBalance).toDecimalPlaces(2);
 
       const updated = await tx.user.updateMany({
         where: {
@@ -250,8 +340,8 @@ exports.create = async (req, res) => {
           bonus: { gte: debitFromBonus },
         },
         data: {
-          balance: debitFromBalance > 0 ? { decrement: debitFromBalance } : undefined,
-          bonus: debitFromBonus > 0 ? { decrement: debitFromBonus } : undefined,
+          balance: debitFromBalance.greaterThan(ZERO) ? { decrement: debitFromBalance } : undefined,
+          bonus: debitFromBonus.greaterThan(ZERO) ? { decrement: debitFromBonus } : undefined,
         },
       });
 
@@ -283,7 +373,7 @@ exports.create = async (req, res) => {
       await recordTransaction({
         userId: req.userId,
         type: 'bet',
-        amount: -totalDebit,
+        amount: totalDebit.negated(),
         description: `Aposta ${bet.id} - ${loteria} (Saldo: ${debitFromBalance.toFixed(
           2,
         )}, Bônus: ${debitFromBonus.toFixed(2)})`,
@@ -292,8 +382,11 @@ exports.create = async (req, res) => {
       });
 
       if (user?.supervisorId && SUPERVISOR_COMMISSION_PCT > 0) {
-        const commissionAmount = Number(((totalDebit * SUPERVISOR_COMMISSION_PCT) / 100).toFixed(2));
-        if (commissionAmount > 0) {
+        const commissionAmount = totalDebit
+          .mul(new Prisma.Decimal(SUPERVISOR_COMMISSION_PCT))
+          .div(HUNDRED)
+          .toDecimalPlaces(2);
+        if (commissionAmount.greaterThan(ZERO)) {
           try {
             await tx.supervisorCommission.create({
               data: {
@@ -311,16 +404,29 @@ exports.create = async (req, res) => {
         }
       }
 
-      return { bet, user };
+      const responsePayload = {
+        message: 'Aposta realizada com sucesso!',
+        bet: serializeBetResponse(bet),
+        balance: formatMoney(user?.balance),
+        bonus: formatMoney(user?.bonus),
+        debited: formatMoney(totalDebit),
+      };
+
+      await tx.idempotencyKey.update({
+        where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
+        data: { betId: bet.id, response: responsePayload },
+      });
+
+      return { bet, user, responsePayload };
     });
 
-    return res.status(201).json({
-      message: 'Aposta realizada com sucesso!',
-      bet: serializeBet(result.bet),
-      balance: result.user?.balance,
-      bonus: result.user?.bonus,
-      debited: totalDebit,
-    });
+    if (result?.idempotentResponse) {
+      return res.status(200).json(result.idempotentResponse);
+    }
+    if (result?.idempotentError) {
+      return res.status(result.idempotentError.status).json(result.idempotentError.payload);
+    }
+    return res.status(201).json(result.responsePayload);
   } catch (err) {
     if (err?.code === 'ERR_NO_BALANCE' || err?.message === 'ERR_NO_BALANCE' || err?.message === 'Saldo insuficiente.') {
       return res.status(400).json({ error: 'Saldo insuficiente.' });

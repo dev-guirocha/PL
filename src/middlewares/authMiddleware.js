@@ -2,6 +2,11 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../utils/prismaClient');
 
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET não configurado.');
+}
+
 const verifyToken = async (req, res, next) => {
   let token;
 
@@ -11,7 +16,7 @@ const verifyToken = async (req, res, next) => {
   ) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sua_chave_secreta_aqui');
+      const decoded = jwt.verify(token, JWT_SECRET);
 
       req.user = await prisma.user.findUnique({
         where: { id: decoded.id || decoded.userId },

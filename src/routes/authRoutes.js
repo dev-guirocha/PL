@@ -13,13 +13,29 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const forgotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Muitas tentativas de recuperação. Tente novamente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Define os endereços: localhost:3000/api/auth/register
 router.post('/register', authController.register);
 router.post('/login', loginLimiter, authController.login);
 router.put('/password', authMiddleware, authController.changePassword);
-router.post('/forgot', authController.requestPasswordReset);
-router.post('/reset', authController.resetPassword);
-router.post('/forgot-password', authController.requestPasswordReset);
-router.post('/reset-password', authController.resetPassword);
+router.post('/forgot', forgotLimiter, authController.requestPasswordReset);
+router.post('/reset', resetLimiter, authController.resetPassword);
+router.post('/forgot-password', forgotLimiter, authController.requestPasswordReset);
+router.post('/reset-password', resetLimiter, authController.resetPassword);
 
 module.exports = router;

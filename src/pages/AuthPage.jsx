@@ -112,17 +112,13 @@ const AuthPage = () => {
       setFieldErrors({ name: '', phone: '', password: '', resetCode: '' });
       const payload = isLogin ? formData : { ...formData, supervisorCode };
       const response = await api.post(endpoint, payload);
-      const { user, token } = response.data;
+      const { user } = response.data;
 
       // Persist only a non-sensível flag; o token fica em cookie HttpOnly
       const storage = rememberMe || !isLogin ? localStorage : sessionStorage;
       storage.setItem('loggedIn', 'true');
-      if (token) {
-        storage.setItem('token', token);
-      } else {
-        localStorage.removeItem('token');
-        sessionStorage.removeItem('token');
-      }
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       storage.setItem('user', JSON.stringify(user));
       
       toast.success(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);

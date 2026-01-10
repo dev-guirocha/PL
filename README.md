@@ -86,6 +86,13 @@ Siga os passos abaixo para rodar o projeto localmente.
     SUITPAY_CLIENT_ID="seu_client_id"
     SUITPAY_CLIENT_SECRET="seu_client_secret"
     SUITPAY_WEBHOOK_TOKEN="token_para_seguranca_do_webhook"
+
+    # Limpeza de idempotency/webhook (opcional)
+    CLEANUP_TTL_DAYS=7
+    CLEANUP_INTERVAL_MS=21600000
+    CLEANUP_BATCH_SIZE=500
+    CLEANUP_BOOT_GUARD_MS=900000
+    CLEANUP_STATE_PATH="/tmp/pl-cleanup-state.json"
     ```
 
 4.  **Configure o Banco de Dados**
@@ -107,6 +114,46 @@ Siga os passos abaixo para rodar o projeto localmente.
     ```
 
 6.  Acesse `http://localhost:5173` no seu navegador.
+
+---
+
+## 🔒 Idempotência e Segurança Financeira
+
+- `Idempotency-Key` é obrigatório em `POST /api/bets` para evitar dupla cobrança em retries.
+- Mesma key + mesmo payload retorna a resposta salva (sem novo débito).
+- Mesma key + payload diferente retorna `409`.
+- Webhook Pix usa dedupe por `provider + eventId` e trava crédito com `credited=false`.
+- Autenticação via cookie HttpOnly; token não é persistido em `localStorage`.
+
+---
+
+## ✅ Variáveis obrigatórias em produção
+
+- `JWT_SECRET` (nunca usar fallback).
+- `WOOVI_WEBHOOK_SECRET` (assinatura do webhook OpenPix/Woovi).
+- `ALLOW_MANUAL_DEPOSIT=false` (manter desabilitado).
+- `ALLOW_ANY_ORIGIN=false` (evitar CORS permissivo).
+- `ALLOW_WOOVI_TEST=false` (desabilita endpoint de diagnóstico).
+- `NODE_ENV=production`.
+
+---
+
+## 🧭 Fluxos Críticos
+
+- **Aposta:** valida payload, debita saldo/bônus e salva resposta de idempotência.
+- **Depósito Pix:** cria cobrança, recebe webhook, credita saldo e registra transação.
+- **Saque:** valida saldo e debita em transação atômica.
+- **Recheck:** reprocessa resultado com guardas para evitar dupla atualização.
+
+---
+
+## 🚢 Checklist de Deploy
+
+- [ ] `npm test`
+- [ ] Variáveis de produção definidas
+- [ ] Migrations aplicadas
+- [ ] Webhook configurado e validando assinatura
+- [ ] Logs/flags sensíveis revisados (debug off)
 
 ---
 

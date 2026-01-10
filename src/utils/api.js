@@ -14,17 +14,6 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Anexa Bearer token (fallback para navegadores que bloqueiam cookies third-party)
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
 if (import.meta?.env?.MODE !== 'production') {
   // Ajuda a diagnosticar baseURL em preview/local
   console.log('API baseURL =>', baseURL);

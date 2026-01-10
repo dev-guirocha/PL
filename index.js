@@ -13,6 +13,7 @@ const betRoutes = require('./src/routes/betRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
 const webhookController = require('./src/controllers/webhookController');
 const createCsrfProtection = require('./src/middleware/csrf');
+const { startCleanupJobs } = require('./src/services/cleanupService');
 
 const app = express();
 
@@ -105,6 +106,10 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  startCleanupJobs();
+}
 
 // Só sobe o servidor localmente (Railway/localhost). Em serverless (Vercel), apenas exportamos o app.
 if (!process.env.VERCEL) {
