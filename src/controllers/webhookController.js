@@ -345,7 +345,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
       return { alreadyProcessed: false };
     });
 
-    if (dedupe?.alreadyProcessed) return res.status(200).send('OK');
+    if (dedupe?.alreadyProcessed) return res.status(200).send('already processed');
     return res.status(200).send('OK');
 
   } catch (error) {
