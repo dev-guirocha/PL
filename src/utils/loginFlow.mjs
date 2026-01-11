@@ -1,4 +1,4 @@
-const SESSION_ERROR_MESSAGE = 'cookie bloqueado ou API URL incorreta';
+export const SESSION_ERROR_MESSAGE = 'cookie bloqueado ou API URL incorreta';
 
 const selectStorage = ({ rememberMe, isLogin }) =>
   (rememberMe || !isLogin ? localStorage : sessionStorage);
@@ -11,7 +11,7 @@ const persistLoginState = ({ rememberMe, isLogin, user }) => {
   sessionStorage.removeItem('token');
 };
 
-const completeLogin = async ({
+export const completeLogin = async ({
   apiClient,
   rememberMe,
   isLogin,
@@ -54,9 +54,4 @@ const completeLogin = async ({
   }
 
   persistLoginState({ rememberMe, isLogin, user });
-};
-
-module.exports = {
-  completeLogin,
-  SESSION_ERROR_MESSAGE,
 };

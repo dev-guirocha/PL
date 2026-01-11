@@ -5,7 +5,7 @@
     "generate": "npx prisma generate",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "jest --runInBand",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "postinstall": "npx prisma generate",
     "smoke:staging": "node scripts/smoke-staging.js"
   },
