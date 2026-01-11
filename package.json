@@ -6,7 +6,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "jest",
-    "postinstall": "npx prisma generate"
+    "postinstall": "npx prisma generate",
+    "smoke:staging": "node scripts/smoke-staging.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.18.0",
