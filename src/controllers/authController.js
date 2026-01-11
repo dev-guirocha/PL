@@ -12,6 +12,18 @@ const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
 const allowResetCodeInResponse = () =>
   process.env.NODE_ENV === 'development' ||
   process.env.RESET_DEBUG === 'true';
+const isSecureCookieEnv = ['production', 'staging'].includes(process.env.NODE_ENV);
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: isSecureCookieEnv ? 'none' : 'lax',
+  secure: isSecureCookieEnv,
+  maxAge: COOKIE_MAX_AGE,
+};
+const shouldReturnBearerToken = (req) => {
+  if (process.env.ALLOW_BEARER_FALLBACK !== 'true') return false;
+  const client = String(req.headers['x-client'] || '').trim().toLowerCase();
+  return client === 'web';
+};
 
 const phoneSchema = z
   .string()
@@ -101,14 +113,11 @@ exports.register = async (req, res) => {
 
     // Gera token para login automático
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, {
-      httpOnly: true,
-      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
-      secure: true,
-      maxAge: COOKIE_MAX_AGE,
-    });
+    res.cookie('token', token, sessionCookieOptions);
 
-    res.status(201).json({ user, token });
+    const payload = { user };
+    if (shouldReturnBearerToken(req)) payload.token = token;
+    res.status(201).json(payload);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar conta.' });
   }
@@ -141,14 +150,11 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, {
-      httpOnly: true,
-      sameSite: 'none', // permitir cross-site (Vercel -> Railway)
-      secure: true,
-      maxAge: COOKIE_MAX_AGE,
-    });
+    res.cookie('token', token, sessionCookieOptions);
 
-    res.json({ user: toSafeUser(user), token });
+    const payload = { user: toSafeUser(user) };
+    if (shouldReturnBearerToken(req)) payload.token = token;
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao fazer login.' });
   }

@@ -25,7 +25,7 @@ module.exports = async (req, res, next) => {
   }
   if (!token) token = getTokenFromCookie(req);
   if (!token) {
-    if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] missing_token', { path: req.path });
+    if (AUTH_DEBUG) console.debug('[AUTH_DEBUG] missing_token', { path: req.path });
     return res.status(401).json({ error: 'Token não fornecido.' });
   }
 
