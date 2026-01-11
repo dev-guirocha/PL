@@ -68,10 +68,13 @@ const ensureSqliteSchema = ({ databaseUrl, resetDatabase }) => {
     migrationDirs.forEach((dir) => {
       const migrationFile = path.join(migrationsDir, dir, 'migration.sql');
       if (fs.existsSync(migrationFile)) {
-        execSync(`npx prisma db execute --file ${migrationFile} --config ${configPath}`, {
+        execSync(
+          `npx prisma db execute --file ${migrationFile} --schema ${schemaPath} --config ${configPath}`,
+          {
           stdio: 'inherit',
           env: process.env,
-        });
+          },
+        );
       }
     });
   }
