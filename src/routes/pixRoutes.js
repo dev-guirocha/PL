@@ -33,7 +33,4 @@ router.get('/woovi-test', auth, async (req, res) => {
   }
 });
 
-// Webhook OpenPix - cadastre esta URL no painel: /api/webhook/openpix
-router.post('/webhook/openpix', webhookController.handleOpenPixWebhook);
-
 module.exports = router;

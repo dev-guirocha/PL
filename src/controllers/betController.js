@@ -7,6 +7,7 @@ const { recordTransaction } = require('../services/financeService');
 const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
+const BET_DEBUG = process.env.BET_DEBUG === 'true';
 const TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_GRACE_MINUTES = 10;
 const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
@@ -243,13 +244,15 @@ exports.create = async (req, res) => {
     apostas,
   });
 
-  console.log('[BET_CREATE]', {
-    userId: req.userId,
-    rootDataJogo: rootDataJogo ?? null,
-    itemData: apostas?.[0]?.data ?? null,
-    finalDataJogo: dataJogo ?? null,
-    rootCodigoHorario: codigoHorarioNorm ?? null,
-  });
+  if (BET_DEBUG) {
+    console.log('[BET_CREATE]', {
+      userId: req.userId,
+      rootDataJogo: rootDataJogo ?? null,
+      itemData: apostas?.[0]?.data ?? null,
+      finalDataJogo: dataJogo ?? null,
+      rootCodigoHorario: codigoHorarioNorm ?? null,
+    });
+  }
 
   if (!dataJogo) {
     return res.status(400).json({ error: 'Data do jogo não identificada.' });

@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
 const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
+const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
 
 exports.createPixCharge = async (req, res) => {
   try {
@@ -113,7 +114,9 @@ exports.createPixCharge = async (req, res) => {
     const valueInCents = Math.round(valueNumber * 100);
     const correlationID = `pix-${crypto.randomUUID()}`;
 
-    console.log('🚀 [OpenPix/Woovi] Criando cobrança:', correlationID, valueInCents);
+    if (PIX_DEBUG) {
+      console.log('🚀 [OpenPix/Woovi] Criando cobrança:', correlationID, valueInCents);
+    }
 
     const created = await woovi.charge.create({
       correlationID,

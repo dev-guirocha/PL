@@ -11,6 +11,7 @@ const prisma = require('../utils/prismaClient');
 // --- CONSTANTES ---
 const MAX_AUTO_PAYOUT = 10000; // Teto para aprovação automática
 const AUDIT_LOGS = process.env.AUDIT_LOGS === '1'; // Controlado por ENV
+const ADMIN_DEBUG = process.env.ADMIN_DEBUG === 'true';
 const ZERO_DECIMAL = new Prisma.Decimal(0);
 const MAX_AUTO_PAYOUT_DEC = new Prisma.Decimal(MAX_AUTO_PAYOUT);
 
@@ -557,7 +558,9 @@ exports.generatePule = async (req, res) => {
 
 exports.settleBetsForResult = async (req, res) => {
   const id = Number(req.params.id);
-  console.log(`\n🚀 [V34B-SETTLE] LIQUIDANDO RESULTADO ID: ${id}`);
+  if (ADMIN_DEBUG) {
+    console.log(`\n🚀 [V34B-SETTLE] LIQUIDANDO RESULTADO ID: ${id}`);
+  }
 
   try {
     const result = await prisma.result.findUnique({ where: { id } });
@@ -839,7 +842,9 @@ exports.settleBetsForResult = async (req, res) => {
 
 exports.recheckSingleBet = async (req, res) => {
   const betId = Number(req.params.id);
-  console.log(`\n🕵️ [V34B-RECHECK] Aposta ID: ${betId}`);
+  if (ADMIN_DEBUG) {
+    console.log(`\n🕵️ [V34B-RECHECK] Aposta ID: ${betId}`);
+  }
 
   try {
     const bet = await prisma.bet.findUnique({ where: { id: betId }, include: { user: true } });

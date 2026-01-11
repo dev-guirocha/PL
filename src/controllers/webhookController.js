@@ -8,6 +8,8 @@ const prisma = require('../utils/prismaClient');
 const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
 
+const WEBHOOK_DEBUG = process.env.WEBHOOK_DEBUG === 'true' || process.env.PIX_DEBUG === 'true';
+
 // Constantes Decimal
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
@@ -169,7 +171,9 @@ exports.handleOpenPixWebhook = async (req, res) => {
       });
 
       if (!pixCharge) {
-        console.warn(`⚠️ PixCharge não encontrada: ${correlationID}`);
+        if (WEBHOOK_DEBUG) {
+          console.warn(`⚠️ PixCharge não encontrada: ${correlationID}`);
+        }
         return { missingCharge: true };
       }
 
@@ -199,7 +203,9 @@ exports.handleOpenPixWebhook = async (req, res) => {
                   throw new Error(`Sanity Check Failed: Pago=${paidValue.toFixed(2)} > 2x Esperado=${pixCharge.amount.toFixed(2)}`);
               }
 
-              console.warn(`⚠️ Valor Divergente [${correlationID}]: Esperado ${pixCharge.amount.toFixed(2)} / Pago ${paidValue.toFixed(2)}`);
+              if (WEBHOOK_DEBUG) {
+                console.warn(`⚠️ Valor Divergente [${correlationID}]: Esperado ${pixCharge.amount.toFixed(2)} / Pago ${paidValue.toFixed(2)}`);
+              }
               finalDepositValue = paidValue;
           }
       }
@@ -340,8 +346,10 @@ exports.handleOpenPixWebhook = async (req, res) => {
           }
       });
 
-      const bonusLog = bonusToApply ? bonusToApply.toFixed(2) : '0.00';
-      console.log(`✅ Pix ${correlationID} processado. Valor: ${finalDepositValue.toFixed(2)} | Bônus: ${bonusLog}`);
+      if (WEBHOOK_DEBUG) {
+        const bonusLog = bonusToApply ? bonusToApply.toFixed(2) : '0.00';
+        console.log(`✅ Pix ${correlationID} processado. Valor: ${finalDepositValue.toFixed(2)} | Bônus: ${bonusLog}`);
+      }
       return { alreadyProcessed: false };
     });
 
@@ -349,7 +357,11 @@ exports.handleOpenPixWebhook = async (req, res) => {
     return res.status(200).send('OK');
 
   } catch (error) {
-    console.error('❌ Erro Webhook:', error.message); // Log apenas a mensagem para não sujar com stack
+    if (WEBHOOK_DEBUG) {
+      console.error('❌ Erro Webhook:', error.message);
+    } else {
+      console.error('❌ Erro Webhook.');
+    }
     return res.status(500).send('Internal Error'); 
   }
 };
