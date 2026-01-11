@@ -1,4 +1,9 @@
-const { completeLogin, SESSION_ERROR_MESSAGE } = require('../src/utils/loginFlow');
+let completeLogin;
+let SESSION_ERROR_MESSAGE;
+
+beforeAll(async () => {
+  ({ completeLogin, SESSION_ERROR_MESSAGE } = await import('../src/utils/loginFlow.mjs'));
+});
 
 const makeStorage = () => {
   let store = {};
