@@ -10,9 +10,8 @@ describe('frontend token storage', () => {
     expect(authPage).not.toMatch(/getItem\(['"]token['"]/);
   });
 
-  test('api client does not inject Authorization from localStorage', () => {
+  test('api client does not inject Authorization from storage', () => {
     const apiFile = readFile('src', 'utils', 'api.js');
-    expect(apiFile).not.toMatch(/Authorization/);
     expect(apiFile).not.toMatch(/getItem\(['"]token['"]/);
   });
 });

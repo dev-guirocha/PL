@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import api from '../utils/api';
+import api, { setBearerEnabled, setBearerToken } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -9,6 +9,17 @@ export const AuthProvider = ({ children }) => {
   const [bonus, setBonus] = useState(0);
   const [loadingUser, setLoadingUser] = useState(true);
   const [authError, setAuthError] = useState('');
+  const [authToken, setAuthTokenState] = useState(null);
+
+  const setAuthToken = useCallback((token) => {
+    const normalized = token || null;
+    setAuthTokenState(normalized);
+    setBearerToken(normalized);
+  }, []);
+
+  const setBearerFallback = useCallback((enabled) => {
+    setBearerEnabled(Boolean(enabled));
+  }, []);
 
   const refreshUser = useCallback(async () => {
     const loggedIn = typeof window !== 'undefined' ? localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn') : null;
@@ -28,6 +39,21 @@ export const AuthProvider = ({ children }) => {
       setBalance(Number(payload.balance ?? 0));
       setBonus(Number(payload.bonus ?? 0));
     } catch (err) {
+      const status = err.response?.status;
+      if (status === 401 && authToken) {
+        try {
+          setBearerFallback(true);
+          const retry = await api.get('/wallet/me');
+          const payload = retry.data || {};
+          setUser(payload || null);
+          setBalance(Number(payload.balance ?? 0));
+          setBonus(Number(payload.bonus ?? 0));
+          setLoadingUser(false);
+          return;
+        } catch (retryErr) {
+          setBearerFallback(false);
+        }
+      }
       setAuthError(err.response?.data?.error || 'Erro ao buscar usuário.');
       setUser(null);
       setBalance(0);
@@ -35,7 +61,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoadingUser(false);
     }
-  }, []);
+  }, [authToken, setBearerFallback]);
 
   useEffect(() => {
     refreshUser();
@@ -53,6 +79,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    setAuthToken(null);
+    setBearerFallback(false);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
       sessionStorage.removeItem('token');
@@ -78,6 +106,9 @@ export const AuthProvider = ({ children }) => {
         updateBalances,
         setAuthUser,
         logout,
+        authToken,
+        setAuthToken,
+        setBearerFallback,
         isAuthenticated: !!user,
       }}
     >

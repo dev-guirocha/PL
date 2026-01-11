@@ -77,6 +77,7 @@ Siga os passos abaixo para rodar o projeto localmente.
     PORT=4000
     DATABASE_URL="file:./dev.db"
     JWT_SECRET="sua_chave_secreta_super_segura"
+    ALLOW_BEARER_FALLBACK=false
     
     # Frontend
     VITE_API_BASE_URL="/api"
@@ -123,7 +124,7 @@ Siga os passos abaixo para rodar o projeto localmente.
 - Mesma key + mesmo payload retorna a resposta salva (sem novo débito).
 - Mesma key + payload diferente retorna `409`.
 - Webhook Pix usa dedupe por `provider + eventId` e trava crédito com `credited=false`.
-- Autenticação via cookie HttpOnly; token não é persistido em `localStorage`.
+- Autenticação via cookie HttpOnly; fallback Bearer só se `ALLOW_BEARER_FALLBACK=true` (token em memória).
 
 ---
 
@@ -134,6 +135,7 @@ Siga os passos abaixo para rodar o projeto localmente.
 - `ALLOW_MANUAL_DEPOSIT=false` (manter desabilitado).
 - `ALLOW_ANY_ORIGIN=false` (evitar CORS permissivo).
 - `ALLOW_WOOVI_TEST=false` (desabilita endpoint de diagnóstico).
+- `ALLOW_BEARER_FALLBACK=false` (fallback Bearer somente se necessário em staging).
 - `NODE_ENV=production`.
 
 ---

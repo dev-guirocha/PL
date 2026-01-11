@@ -100,15 +100,18 @@ const ensurePostgresClient = () => {
 
 (async () => {
   process.env.VERCEL = '1';
-  process.env.NODE_ENV = process.env.NODE_ENV || 'production';
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-secret';
   process.env.RESET_DEBUG = process.env.RESET_DEBUG || 'false';
   process.env.SEND_RESET_CODE_IN_RESPONSE = process.env.SEND_RESET_CODE_IN_RESPONSE || 'false';
   process.env.CSRF_TRUSTED_CLIENTS = process.env.CSRF_TRUSTED_CLIENTS || 'mobile';
   process.env.ALLOW_WOOVI_TEST = process.env.ALLOW_WOOVI_TEST || 'false';
   process.env.WOOVI_WEBHOOK_SECRET = process.env.WOOVI_WEBHOOK_SECRET || 'smoke-webhook-secret';
+  process.env.SMOKE = process.env.SMOKE || '1';
 
   const dbUrl = process.env.DATABASE_URL;
+  if (!process.env.NODE_ENV) {
+    process.env.NODE_ENV = dbUrl && !dbUrl.startsWith('file:') ? 'staging' : 'test';
+  }
   if (!dbUrl) {
     ensureSqliteSchema({ resetDatabase: true });
   } else if (dbUrl.startsWith('file:')) {
@@ -172,22 +175,61 @@ const ensurePostgresClient = () => {
     await run('auth register/login + cookie', async () => {
       const phone = randomPhone();
       const password = 'Teste!123';
-      const registerRes = await request(app)
+      const registerAgent = request.agent(app);
+      const registerRes = await registerAgent
         .post('/api/auth/register')
         .set('Origin', origin)
+        .set('X-Client', 'web')
         .send({ name: 'Smoke User', phone, password });
 
       assert(registerRes.status === 201, `register status ${registerRes.status}`);
       assert(hasTokenCookie(getCookies(registerRes)), 'register set-cookie token');
       if (registerRes.body?.user?.id) created.userIds.add(registerRes.body.user.id);
 
-      const loginRes = await request(app)
+      const registerMe = await registerAgent.get('/api/wallet/me');
+      assert(registerMe.status === 200, `register /wallet/me status ${registerMe.status}`);
+
+      const loginAgent = request.agent(app);
+      const loginRes = await loginAgent
         .post('/api/auth/login')
         .set('Origin', origin)
+        .set('X-Client', 'web')
         .send({ phone, password });
 
       assert(loginRes.status === 200, `login status ${loginRes.status}`);
       assert(hasTokenCookie(getCookies(loginRes)), 'login set-cookie token');
+      const loginMe = await loginAgent.get('/api/wallet/me');
+      assert(loginMe.status === 200, `login /wallet/me status ${loginMe.status}`);
+    });
+
+    await run('auth bearer fallback', async () => {
+      const phone = randomPhone();
+      const password = 'Teste!123';
+      const registerRes = await request(app)
+        .post('/api/auth/register')
+        .set('Origin', origin)
+        .set('X-Client', 'web')
+        .send({ name: 'Bearer Smoke', phone, password });
+
+      assert(registerRes.status === 201, `register status ${registerRes.status}`);
+      if (registerRes.body?.user?.id) created.userIds.add(registerRes.body.user.id);
+
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .set('Origin', origin)
+        .set('X-Client', 'web')
+        .send({ phone, password });
+
+      assert(loginRes.status === 200, `login status ${loginRes.status}`);
+      if (process.env.ALLOW_BEARER_FALLBACK === 'true') {
+        assert(loginRes.body?.token, 'login should return token when fallback enabled');
+        const meRes = await request(app)
+          .get('/api/wallet/me')
+          .set('Authorization', `Bearer ${loginRes.body.token}`);
+        assert(meRes.status === 200, `bearer /wallet/me status ${meRes.status}`);
+      } else {
+        assert(!loginRes.body?.token, 'token should be omitted when fallback disabled');
+      }
     });
 
     await run('auth forgot no enum + no code', async () => {
@@ -342,7 +384,7 @@ const ensurePostgresClient = () => {
           status: 'PAID',
           correlationID: pixCharge.correlationId,
           value: 1000,
-          paymentMethods: { pix: { txId: 'TX-SMOKE' } },
+          paymentMethods: { pix: { txId: `TX-SMOKE-${Date.now()}` } },
         },
       };
 

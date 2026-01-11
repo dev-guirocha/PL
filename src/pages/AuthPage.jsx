@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
+import * as loginFlow from '../utils/loginFlow';
+import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
 import icon from '../assets/images/icon.png';
 
@@ -20,6 +22,7 @@ const AuthPage = () => {
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
   const isReset = mode === 'reset';
+  const { setAuthToken, setBearerFallback } = useAuth();
   const passwordChecks = {
     length: formData.password.length >= 8,
     number: /\d/.test(formData.password),
@@ -106,20 +109,32 @@ const AuthPage = () => {
     }
 
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
+    setAuthToken(null);
+    setBearerFallback(false);
 
     try {
       if (!validateForm({ checkName: isRegister, checkPhone: true, checkPassword: !isLogin })) return;
       setFieldErrors({ name: '', phone: '', password: '', resetCode: '' });
       const payload = isLogin ? formData : { ...formData, supervisorCode };
       const response = await api.post(endpoint, payload);
-      const { user } = response.data;
+      const { user, token: fallbackToken } = response.data || {};
 
-      // Persist only a non-sensível flag; o token fica em cookie HttpOnly
-      const storage = rememberMe || !isLogin ? localStorage : sessionStorage;
-      storage.setItem('loggedIn', 'true');
-      localStorage.removeItem('token');
-      sessionStorage.removeItem('token');
-      storage.setItem('user', JSON.stringify(user));
+      try {
+        await loginFlow.completeLogin({
+          apiClient: api,
+          rememberMe,
+          isLogin,
+          user,
+          fallbackToken,
+          setAuthToken,
+          setBearerFallback,
+        });
+      } catch (sessionErr) {
+        const message = sessionErr?.message || loginFlow.SESSION_ERROR_MESSAGE;
+        setError(message);
+        toast.error(message);
+        return;
+      }
       
       toast.success(`Bem-vindo, ${user.name || 'Usuário'}! Login realizado.`);
       localStorage.removeItem('pendingSupCode');
