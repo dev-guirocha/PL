@@ -4,11 +4,18 @@
  */
 function createCsrfProtection(allowedOrigins = [], wildcardOrigins = []) {
   const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+  const trustedClients = (process.env.CSRF_TRUSTED_CLIENTS || 'mobile,trusted')
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+  const allowEmptyOrigin = process.env.CSRF_ALLOW_EMPTY_ORIGIN === 'true';
   return (req, res, next) => {
     if (safeMethods.includes(req.method)) return next();
 
     const origin = req.headers.origin;
     const referer = req.headers.referer;
+    const client = String(req.headers['x-client'] || '').trim().toLowerCase();
+    const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
 
     const isAllowedOrigin = (value) => {
       if (!value) return false;
@@ -16,10 +23,12 @@ function createCsrfProtection(allowedOrigins = [], wildcardOrigins = []) {
       return wildcardOrigins.some((re) => re.test(value));
     };
 
-    // Quando não há header (ex.: apps móveis ou curl), permitimos para não quebrar integrações confiáveis.
+    // Quando não há header, permitimos somente se for cliente confiável autenticado.
+    const allowEmpty =
+      allowEmptyOrigin || (hasBearer && trustedClients.includes(client));
     const isTrusted =
       !origin && !referer
-        ? true
+        ? allowEmpty
         : (origin && isAllowedOrigin(origin)) || (referer && isAllowedOrigin(referer));
 
     if (!isTrusted) {

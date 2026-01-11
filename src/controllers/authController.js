@@ -4,9 +4,14 @@ const { z } = require('zod');
 const prisma = require('../prisma');
 const { sendRecoveryCode } = require('../services/whatsappService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET não configurado.');
+}
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
-const sendResetCodeInResponse = process.env.SEND_RESET_CODE_IN_RESPONSE === 'true' || process.env.NODE_ENV !== 'production';
+const allowResetCodeInResponse = () =>
+  process.env.NODE_ENV === 'development' ||
+  process.env.RESET_DEBUG === 'true';
 
 const phoneSchema = z
   .string()
@@ -155,11 +160,12 @@ exports.requestPasswordReset = async (req, res) => {
     return res.status(400).json({ error: 'Informe seu telefone.', field: 'phone' });
   }
   const cleanPhone = phone.replace(/\D/g, '');
+  const genericMessage = 'Se o telefone estiver cadastrado, enviaremos o código.';
 
   try {
     const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
     if (!user) {
-      return res.status(404).json({ error: 'Telefone não cadastrado.', field: 'phone' });
+      return res.status(200).json({ message: genericMessage });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -170,21 +176,18 @@ exports.requestPasswordReset = async (req, res) => {
       data: { resetCode: code, resetExpires: expires },
     });
 
-    // Log de contingência (plano B) para o Admin ver nos logs do servidor
-    console.log(`🔑 RECUPERAÇÃO DE SENHA | User: ${cleanPhone} | Código: ${code}`);
+    if (process.env.RESET_DEBUG === 'true') {
+      console.log(`🔑 RECUPERAÇÃO DE SENHA | User: ${cleanPhone} | Código: ${code}`);
+    }
 
     // Tenta enviar via WhatsApp
     const sendResult = await sendRecoveryCode(cleanPhone, code);
 
     // Se o envio falhar, ou se estivermos fora de produção, retornamos o código para não travar o usuário
-    const shouldExposeCode = !sendResult?.success || process.env.NODE_ENV !== 'production' || sendResetCodeInResponse;
+    const payload = { message: genericMessage };
 
-    const payload = {
-      message: sendResult?.success ? 'Código enviado para seu WhatsApp.' : 'Não foi possível enviar SMS automaticamente.',
-    };
-
-    if (shouldExposeCode) {
-      payload.detail = 'Use este código provisoriamente (Z-API indisponível ou ambiente de testes).';
+    if (allowResetCodeInResponse()) {
+      payload.detail = 'Use este código provisoriamente (ambiente de testes).';
       payload.code = code;
     }
 

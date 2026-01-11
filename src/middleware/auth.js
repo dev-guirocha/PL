@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET não configurado.');
+}
 const AUTH_DEBUG = process.env.AUTH_DEBUG === 'true';
 
 function getTokenFromCookie(req) {

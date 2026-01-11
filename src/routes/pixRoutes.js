@@ -13,7 +13,13 @@ router.post('/charge', auth, pixController.createPixCharge);
 router.post('/validate-coupon', auth, couponController.validateCoupon);
 
 // Rota de teste para validar credencial Woovi
-router.get('/woovi-test', async (req, res) => {
+router.get('/woovi-test', auth, async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_WOOVI_TEST !== 'true') {
+    return res.status(404).json({ error: 'Rota indisponível.' });
+  }
+  if (!req.isAdmin) {
+    return res.status(403).json({ error: 'Acesso restrito.' });
+  }
   try {
     const r = await woovi.charge.list();
     return res.json({ ok: true, data: r });
@@ -26,8 +32,5 @@ router.get('/woovi-test', async (req, res) => {
     });
   }
 });
-
-// Webhook OpenPix - cadastre esta URL no painel: /api/webhook/openpix
-router.post('/webhook/openpix', webhookController.handleOpenPixWebhook);
 
 module.exports = router;

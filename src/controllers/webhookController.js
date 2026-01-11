@@ -8,6 +8,8 @@ const prisma = require('../utils/prismaClient');
 const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
 
+const WEBHOOK_DEBUG = process.env.WEBHOOK_DEBUG === 'true' || process.env.PIX_DEBUG === 'true';
+
 // Constantes Decimal
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
@@ -84,6 +86,21 @@ const validateSignature = (req) => {
   return false;
 };
 
+const getEventId = (req, charge, correlationID, signatureHash) => {
+  const headerEventId =
+    req.headers['x-openpix-event-id'] ||
+    req.headers['x-webhook-event-id'] ||
+    req.headers['x-event-id'];
+  const payloadEventId =
+    charge?.eventId ||
+    charge?.identifier ||
+    charge?.transactionID ||
+    charge?.transactionId;
+
+  const raw = headerEventId || payloadEventId || correlationID || signatureHash;
+  return String(raw || '').trim();
+};
+
 exports.handleOpenPixWebhook = async (req, res) => {
   try {
     // 1. Segurança Primeiro
@@ -108,6 +125,15 @@ exports.handleOpenPixWebhook = async (req, res) => {
       return res.status(200).send('OK');
     }
 
+    const signatureHash = crypto.createHash('sha256').update(req.rawBody || '').digest('hex');
+    const eventId = getEventId(req, charge, correlationID, signatureHash);
+    if (!eventId) {
+      console.warn('⚠️ Webhook sem eventId válido. Ignorando.');
+      return res.status(200).send('OK');
+    }
+    const providerHeader = String(req.headers['x-webhook-provider'] || '').trim().toLowerCase();
+    const provider = providerHeader || 'openpix';
+
     // Extração Segura de Dados do Gateway
     const pixData = charge.paymentMethods?.pix || charge.pix || {};
     const gatewayTxId = pixData.txId || charge.transactionID || null;
@@ -127,7 +153,17 @@ exports.handleOpenPixWebhook = async (req, res) => {
     }
 
     // Transação Atômica
-    await prisma.$transaction(async (tx) => {
+    const dedupe = await prisma.$transaction(async (tx) => {
+      let webhookEvent = null;
+      try {
+        webhookEvent = await tx.webhookEvent.create({
+          data: { provider, eventId, signatureHash, correlationId: correlationID },
+        });
+      } catch (err) {
+        if (err?.code === 'P2002') return { alreadyProcessed: true };
+        throw err;
+      }
+
       // 2. Busca PixCharge
       const pixCharge = await tx.pixCharge.findUnique({
         where: { correlationId: correlationID },
@@ -135,8 +171,17 @@ exports.handleOpenPixWebhook = async (req, res) => {
       });
 
       if (!pixCharge) {
-        console.warn(`⚠️ PixCharge não encontrada: ${correlationID}`);
-        return;
+        if (WEBHOOK_DEBUG) {
+          console.warn(`⚠️ PixCharge não encontrada: ${correlationID}`);
+        }
+        return { missingCharge: true };
+      }
+
+      if (webhookEvent?.id) {
+        await tx.webhookEvent.update({
+          where: { id: webhookEvent.id },
+          data: { pixChargeId: pixCharge.id },
+        });
       }
 
       // 3. Atualiza TXID (Idempotência de Dados - roda sempre, fora do lock financeiro)
@@ -158,7 +203,9 @@ exports.handleOpenPixWebhook = async (req, res) => {
                   throw new Error(`Sanity Check Failed: Pago=${paidValue.toFixed(2)} > 2x Esperado=${pixCharge.amount.toFixed(2)}`);
               }
 
-              console.warn(`⚠️ Valor Divergente [${correlationID}]: Esperado ${pixCharge.amount.toFixed(2)} / Pago ${paidValue.toFixed(2)}`);
+              if (WEBHOOK_DEBUG) {
+                console.warn(`⚠️ Valor Divergente [${correlationID}]: Esperado ${pixCharge.amount.toFixed(2)} / Pago ${paidValue.toFixed(2)}`);
+              }
               finalDepositValue = paidValue;
           }
       }
@@ -177,7 +224,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
         },
       });
 
-      if (lock.count === 0) return; // Já creditado, para aqui.
+      if (lock.count === 0) return { alreadyProcessed: true }; // Já creditado, para aqui.
 
       // 6. Credita Saldo Real
       await tx.user.update({
@@ -299,14 +346,22 @@ exports.handleOpenPixWebhook = async (req, res) => {
           }
       });
 
-      const bonusLog = bonusToApply ? bonusToApply.toFixed(2) : '0.00';
-      console.log(`✅ Pix ${correlationID} processado. Valor: ${finalDepositValue.toFixed(2)} | Bônus: ${bonusLog}`);
+      if (WEBHOOK_DEBUG) {
+        const bonusLog = bonusToApply ? bonusToApply.toFixed(2) : '0.00';
+        console.log(`✅ Pix ${correlationID} processado. Valor: ${finalDepositValue.toFixed(2)} | Bônus: ${bonusLog}`);
+      }
+      return { alreadyProcessed: false };
     });
 
+    if (dedupe?.alreadyProcessed) return res.status(200).send('already processed');
     return res.status(200).send('OK');
 
   } catch (error) {
-    console.error('❌ Erro Webhook:', error.message); // Log apenas a mensagem para não sujar com stack
+    if (WEBHOOK_DEBUG) {
+      console.error('❌ Erro Webhook:', error.message);
+    } else {
+      console.error('❌ Erro Webhook.');
+    }
     return res.status(500).send('Internal Error'); 
   }
 };

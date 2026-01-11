@@ -8,10 +8,12 @@ const couponController = require('../controllers/couponController');
 const { verifyToken, isAdmin } = require('../middlewares/authMiddleware');
 
 // --- BLINDAGEM 1: Verificar Middleware (CRÍTICO) ---
-console.log('--- DEBUG MIDDLEWARE ---');
-console.log('verifyToken é:', typeof verifyToken);
-console.log('isAdmin é:', typeof isAdmin);
-console.log('------------------------');
+if (process.env.ADMIN_DEBUG === 'true') {
+  console.log('--- DEBUG MIDDLEWARE ---');
+  console.log('verifyToken é:', typeof verifyToken);
+  console.log('isAdmin é:', typeof isAdmin);
+  console.log('------------------------');
+}
 if (typeof verifyToken !== 'function' || typeof isAdmin !== 'function') {
   throw new Error(
     `🚨 [ERRO FATAL DE MIDDLEWARE] verifyToken ou isAdmin não são funções!\n` +
