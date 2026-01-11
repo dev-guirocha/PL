@@ -24,9 +24,13 @@ const isSqlite = connectionString.startsWith('file:');
 const globalForPrisma = global.prisma || {};
 
 if (isSqlite) {
-  const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
+  const adapterLib = require('@prisma/adapter-better-sqlite3');
+  const PrismaBetterSQLite3 = adapterLib.PrismaBetterSQLite3 || adapterLib.PrismaBetterSqlite3;
+  if (!PrismaBetterSQLite3) {
+    throw new Error('Prisma BetterSQLite3 adapter não encontrado.');
+  }
 
-  const adapter = globalForPrisma.adapter || new PrismaBetterSqlite3({ url: connectionString });
+  const adapter = globalForPrisma.adapter || new PrismaBetterSQLite3({ url: connectionString });
 
   const prisma = globalForPrisma.client || new PrismaClient({
     adapter,
