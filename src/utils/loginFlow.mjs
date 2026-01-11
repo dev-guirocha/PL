@@ -35,6 +35,9 @@ export const completeLogin = async ({
     await ensureSession();
   } catch (err) {
     if (fallbackToken && typeof setBearerFallback === 'function') {
+      if (typeof setAuthToken === 'function') {
+        setAuthToken(fallbackToken);
+      }
       setBearerFallback(true);
       try {
         await ensureSession();
