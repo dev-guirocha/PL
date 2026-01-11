@@ -13,10 +13,17 @@ const allowResetCodeInResponse = () =>
   process.env.NODE_ENV === 'development' ||
   process.env.RESET_DEBUG === 'true';
 const isSecureCookieEnv = ['production', 'staging'].includes(process.env.NODE_ENV);
+const cookieSecureOverride = process.env.COOKIE_SECURE;
+const cookieSecure =
+  cookieSecureOverride === 'true'
+    ? true
+    : cookieSecureOverride === 'false'
+      ? false
+      : isSecureCookieEnv;
 const sessionCookieOptions = {
   httpOnly: true,
-  sameSite: isSecureCookieEnv ? 'none' : 'lax',
-  secure: isSecureCookieEnv,
+  sameSite: cookieSecure ? 'none' : 'lax',
+  secure: cookieSecure,
   maxAge: COOKIE_MAX_AGE,
 };
 const shouldReturnBearerToken = (req) => {
