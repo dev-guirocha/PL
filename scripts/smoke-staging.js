@@ -88,6 +88,16 @@ const getCookies = (res) => res.headers['set-cookie'] || [];
 const hasTokenCookie = (cookies) =>
   cookies.some((cookie) => cookie.startsWith('token=') && cookie.includes('HttpOnly'));
 
+const ensurePostgresClient = () => {
+  const schemaPath = path.resolve(__dirname, '../schema.prisma');
+  const configPath = path.resolve(__dirname, '../prisma.config.js');
+
+  execSync(`npx prisma generate --schema ${schemaPath} --config ${configPath}`, {
+    stdio: 'inherit',
+    env: process.env,
+  });
+};
+
 (async () => {
   process.env.VERCEL = '1';
   process.env.NODE_ENV = process.env.NODE_ENV || 'production';
@@ -103,6 +113,8 @@ const hasTokenCookie = (cookies) =>
     ensureSqliteSchema({ resetDatabase: true });
   } else if (dbUrl.startsWith('file:')) {
     ensureSqliteSchema({ databaseUrl: dbUrl, resetDatabase: false });
+  } else {
+    ensurePostgresClient();
   }
 
   let app;
