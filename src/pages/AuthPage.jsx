@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
-import loginFlow from '../utils/loginFlow';
+import * as loginFlow from '../utils/loginFlow';
 import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
 import icon from '../assets/images/icon.png';
