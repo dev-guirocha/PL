@@ -10,9 +10,8 @@ if (!JWT_SECRET) {
 }
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias
 const allowResetCodeInResponse = () =>
-  process.env.NODE_ENV !== 'production' ||
-  process.env.RESET_DEBUG === 'true' ||
-  process.env.SEND_RESET_CODE_IN_RESPONSE === 'true';
+  process.env.NODE_ENV === 'development' ||
+  process.env.RESET_DEBUG === 'true';
 
 const phoneSchema = z
   .string()

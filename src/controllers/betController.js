@@ -277,38 +277,34 @@ exports.create = async (req, res) => {
 
   const totalDebit = calculateTotal(apostas).toDecimalPlaces(2);
 
+  let idempotencyRecord = null;
+  try {
+    idempotencyRecord = await prisma.idempotencyKey.create({
+      data: {
+        key: idempotencyKey,
+        userId: req.userId,
+        route: idempotencyRoute,
+        requestHash,
+      },
+    });
+  } catch (err) {
+    if (err?.code === 'P2002') {
+      const existing = await prisma.idempotencyKey.findUnique({
+        where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
+      });
+      if (existing?.requestHash && existing.requestHash !== requestHash) {
+        return res.status(409).json({ error: 'Idempotency-Key usada com payload diferente.' });
+      }
+      if (existing?.response) {
+        return res.status(200).json(existing.response);
+      }
+      return res.status(409).json({ error: 'Requisição em processamento.' });
+    }
+    return res.status(500).json({ error: 'Erro ao registrar idempotência.' });
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
-      let idempotencyRecord = null;
-      try {
-        idempotencyRecord = await tx.idempotencyKey.create({
-          data: {
-            key: idempotencyKey,
-            userId: req.userId,
-            route: idempotencyRoute,
-            requestHash,
-          },
-        });
-      } catch (err) {
-        if (err?.code === 'P2002') {
-          const existing = await tx.idempotencyKey.findUnique({
-            where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
-          });
-          if (existing?.requestHash && existing.requestHash !== requestHash) {
-            return { idempotentError: { status: 409, payload: { error: 'Idempotency-Key usada com payload diferente.' } } };
-          }
-          if (existing?.response) {
-            return { idempotentResponse: existing.response };
-          }
-          return { idempotentError: { status: 409, payload: { error: 'Requisição em processamento.' } } };
-        }
-        throw err;
-      }
-
-      if (!idempotencyRecord) {
-        return { idempotentError: { status: 500, payload: { error: 'Erro ao registrar idempotência.' } } };
-      }
-
       const userWallet = await tx.user.findUnique({
         where: { id: req.userId },
         select: { balance: true, bonus: true, supervisorId: true },
@@ -413,21 +409,22 @@ exports.create = async (req, res) => {
       };
 
       await tx.idempotencyKey.update({
-        where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
+        where: { id: idempotencyRecord.id },
         data: { betId: bet.id, response: responsePayload },
       });
 
       return { bet, user, responsePayload };
     });
 
-    if (result?.idempotentResponse) {
-      return res.status(200).json(result.idempotentResponse);
-    }
-    if (result?.idempotentError) {
-      return res.status(result.idempotentError.status).json(result.idempotentError.payload);
-    }
     return res.status(201).json(result.responsePayload);
   } catch (err) {
+    if (idempotencyRecord?.id) {
+      try {
+        await prisma.idempotencyKey.delete({ where: { id: idempotencyRecord.id } });
+      } catch (cleanupErr) {
+        console.warn('Erro ao limpar idempotência:', cleanupErr.message);
+      }
+    }
     if (err?.code === 'ERR_NO_BALANCE' || err?.message === 'ERR_NO_BALANCE' || err?.message === 'Saldo insuficiente.') {
       return res.status(400).json({ error: 'Saldo insuficiente.' });
     }
