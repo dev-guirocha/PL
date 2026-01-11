@@ -106,7 +106,7 @@ const ensurePostgresClient = () => {
   process.env.CSRF_TRUSTED_CLIENTS = process.env.CSRF_TRUSTED_CLIENTS || 'mobile';
   process.env.ALLOW_WOOVI_TEST = process.env.ALLOW_WOOVI_TEST || 'false';
   process.env.WOOVI_WEBHOOK_SECRET = process.env.WOOVI_WEBHOOK_SECRET || 'smoke-webhook-secret';
-  process.env.COOKIE_SECURE = process.env.COOKIE_SECURE || 'false';
+  process.env.SMOKE = process.env.SMOKE || '1';
 
   const dbUrl = process.env.DATABASE_URL;
   if (!process.env.NODE_ENV) {
