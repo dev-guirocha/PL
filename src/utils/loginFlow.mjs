@@ -27,8 +27,20 @@ export const completeLogin = async ({
     setAuthToken(fallbackToken || null);
   }
 
-  const ensureSession = async () => {
-    await apiClient.get('/wallet/me');
+  const ensureSession = async (attempts = 2) => {
+    let lastErr;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        await apiClient.get('/wallet/me');
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+      }
+    }
+    throw lastErr;
   };
 
   try {
