@@ -27,7 +27,8 @@ const sessionCookieOptions = {
 const shouldReturnBearerToken = (req) => {
   if (process.env.ALLOW_BEARER_FALLBACK !== 'true') return false;
   const client = String(req.headers['x-client'] || '').trim().toLowerCase();
-  return client === 'web';
+  if (client === 'web') return true;
+  return true;
 };
 
 const phoneSchema = z

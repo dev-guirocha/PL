@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import api, { setBearerEnabled, setBearerToken } from '../utils/api';
+import { clearStoredSession, getStoredLoggedIn, getWalletMeSkipReason } from '../utils/authSession.mjs';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [authError, setAuthError] = useState('');
   const [authToken, setAuthTokenState] = useState(null);
+  const authCooldownRef = useRef(0);
 
   const setAuthToken = useCallback((token) => {
     const normalized = token || null;
@@ -22,37 +24,48 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const loggedIn = typeof window !== 'undefined' ? localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn') : null;
-    if (!loggedIn) {
+    const loggedIn = getStoredLoggedIn();
+    const skipReason = getWalletMeSkipReason({ loggedIn, user, cooldownUntil: authCooldownRef.current });
+    if (skipReason === 'no-session') {
       setUser(null);
       setBalance(0);
       setBonus(0);
       setLoadingUser(false);
       return;
     }
+    if (skipReason === 'cooldown') {
+      setLoadingUser(false);
+      return;
+    }
     setAuthError('');
     setLoadingUser(true);
     try {
-      const res = await api.get('/wallet/me');
+      const res = await api.get('/wallet/me', { skipAuthRedirect: true });
       const payload = res.data || {};
       setUser(payload || null);
       setBalance(Number(payload.balance ?? 0));
       setBonus(Number(payload.bonus ?? 0));
+      authCooldownRef.current = 0;
     } catch (err) {
       const status = err.response?.status;
       if (status === 401 && authToken) {
         try {
           setBearerFallback(true);
-          const retry = await api.get('/wallet/me');
+          const retry = await api.get('/wallet/me', { skipAuthRedirect: true });
           const payload = retry.data || {};
           setUser(payload || null);
           setBalance(Number(payload.balance ?? 0));
           setBonus(Number(payload.bonus ?? 0));
+          authCooldownRef.current = 0;
           setLoadingUser(false);
           return;
         } catch (retryErr) {
           setBearerFallback(false);
         }
+      }
+      if (status === 401 || status === 403) {
+        clearStoredSession();
+        authCooldownRef.current = Date.now() + 30000;
       }
       setAuthError(err.response?.data?.error || 'Erro ao buscar usuário.');
       setUser(null);
@@ -61,7 +74,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoadingUser(false);
     }
-  }, [authToken, setBearerFallback]);
+  }, [authToken, setBearerFallback, user]);
 
   useEffect(() => {
     refreshUser();

@@ -7,6 +7,7 @@ const isDev = import.meta?.env?.DEV;
 const defaultBase = isDev ? '/api' : fallbackProd;
 const baseCandidate = envBase || defaultBase;
 const baseURL = baseCandidate.endsWith('/api') ? baseCandidate : `${baseCandidate.replace(/\/$/, '')}/api`;
+const frontAuthDebug = import.meta?.env?.VITE_AUTH_DEBUG === 'true' || import.meta?.env?.AUTH_DEBUG === 'true';
 
 let bearerToken = null;
 let bearerEnabled = false;
@@ -29,7 +30,10 @@ const api = axios.create({
   withCredentials: true,
 });
 
-if (import.meta?.env?.MODE !== 'production') {
+if (frontAuthDebug) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+  console.log('[AUTH_DEBUG][frontend] baseURL', baseURL, 'origin', origin);
+} else if (import.meta?.env?.MODE !== 'production') {
   // Ajuda a diagnosticar baseURL em preview/local
   console.log('API baseURL =>', baseURL);
 }
@@ -51,7 +55,8 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     const status = error?.response?.status;
-    if (status === 401 || status === 403) {
+    const skipAuthRedirect = error?.config?.skipAuthRedirect === true;
+    if ((status === 401 || status === 403) && !skipAuthRedirect) {
       bearerToken = null;
       localStorage.removeItem('loggedIn');
       sessionStorage.removeItem('loggedIn');
