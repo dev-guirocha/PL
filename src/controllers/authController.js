@@ -21,34 +21,11 @@ const sessionCookieOptions = {
   secure: cookieSecure,
   maxAge: COOKIE_MAX_AGE,
 };
-const getAllowedOrigins = () => {
-  const defaults = ['https://www.pandaloterias.com', 'https://pandaloterias.com'];
-  const envOrigins = (process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return new Set([...defaults, ...envOrigins].map((origin) => origin.toLowerCase()));
-};
-
-const extractOrigin = (req) => {
-  const rawOrigin = String(req.headers.origin || '').trim();
-  if (rawOrigin) return rawOrigin;
-  const rawReferer = String(req.headers.referer || '').trim();
-  if (!rawReferer) return '';
-  try {
-    return new URL(rawReferer).origin;
-  } catch {
-    return '';
-  }
-};
-
 const shouldReturnBearerToken = (req) => {
   if (process.env.ALLOW_BEARER_FALLBACK !== 'true') return false;
   const client = String(req.headers['x-client'] || '').trim().toLowerCase();
   if (client === 'web') return true;
-  const origin = extractOrigin(req).toLowerCase();
-  if (!origin) return false;
-  return getAllowedOrigins().has(origin);
+  return true;
 };
 
 const phoneSchema = z
