@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }) => {
     setAuthError('');
     setLoadingUser(true);
     try {
-      const res = await api.get('/wallet/me');
+      const res = await api.get('/wallet/me', { skipAuthRedirect: true });
       const payload = res.data || {};
       setUser(payload || null);
       setBalance(Number(payload.balance ?? 0));
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
       if (status === 401 && authToken) {
         try {
           setBearerFallback(true);
-          const retry = await api.get('/wallet/me');
+          const retry = await api.get('/wallet/me', { skipAuthRedirect: true });
           const payload = retry.data || {};
           setUser(payload || null);
           setBalance(Number(payload.balance ?? 0));
@@ -52,6 +52,14 @@ export const AuthProvider = ({ children }) => {
           return;
         } catch (retryErr) {
           setBearerFallback(false);
+        }
+      }
+      if (status === 401 || status === 403) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('loggedIn');
+          sessionStorage.removeItem('loggedIn');
+          localStorage.removeItem('user');
+          sessionStorage.removeItem('user');
         }
       }
       setAuthError(err.response?.data?.error || 'Erro ao buscar usuário.');

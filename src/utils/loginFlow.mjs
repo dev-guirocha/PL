@@ -31,7 +31,7 @@ export const completeLogin = async ({
     let lastErr;
     for (let i = 0; i < attempts; i += 1) {
       try {
-        await apiClient.get('/wallet/me');
+        await apiClient.get('/wallet/me', { skipAuthRedirect: true });
         return;
       } catch (err) {
         lastErr = err;

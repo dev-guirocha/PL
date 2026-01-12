@@ -51,7 +51,8 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     const status = error?.response?.status;
-    if (status === 401 || status === 403) {
+    const skipAuthRedirect = error?.config?.skipAuthRedirect === true;
+    if ((status === 401 || status === 403) && !skipAuthRedirect) {
       bearerToken = null;
       localStorage.removeItem('loggedIn');
       sessionStorage.removeItem('loggedIn');
