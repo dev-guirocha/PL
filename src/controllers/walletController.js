@@ -41,6 +41,7 @@ exports.me = async (req, res) => {
       select: {
         id: true,
         name: true,
+        isAdmin: true,
         balance: true,
         bonus: true,
         supervisorId: true,
@@ -62,6 +63,7 @@ exports.me = async (req, res) => {
         select: {
           id: true,
           name: true,
+          isAdmin: true,
           balance: true,
           bonus: true,
           supervisorId: true,
