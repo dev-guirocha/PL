@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
+import { getStoredLoggedIn } from '../utils/authSession.mjs';
 import { useAuth } from '../context/AuthContext';
 
 const PixRechargePage = () => {
@@ -158,6 +159,10 @@ const PixRechargePage = () => {
 
   const startPollingDeposit = () => {
     if (pollRef.current) clearInterval(pollRef.current);
+    if (!getStoredLoggedIn() && !user) {
+      setWatchingDeposit(false);
+      return;
+    }
     setWatchingDeposit(true);
     let attempts = 0;
     pollRef.current = setInterval(async () => {
@@ -169,7 +174,13 @@ const PixRechargePage = () => {
         return;
       }
       try {
-        const res = await api.get('/wallet/me');
+        if (!getStoredLoggedIn() && !user) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setWatchingDeposit(false);
+          return;
+        }
+        const res = await api.get('/wallet/me', { skipAuthRedirect: true });
         const total = Number(res.data?.balance || 0) + Number(res.data?.bonus || 0);
         if (total > baselineRef.current) {
           clearInterval(pollRef.current);

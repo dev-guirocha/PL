@@ -32,6 +32,7 @@ const resetLimiter = rateLimit({
 // Define os endereços: localhost:3000/api/auth/register
 router.post('/register', authController.register);
 router.post('/login', loginLimiter, authController.login);
+router.post('/logout', authController.logout);
 router.put('/password', authMiddleware, authController.changePassword);
 router.post('/forgot', forgotLimiter, authController.requestPasswordReset);
 router.post('/reset', resetLimiter, authController.resetPassword);
