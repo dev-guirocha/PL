@@ -8,6 +8,13 @@ import PAYOUTS from '../constants/payouts.json';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR } from '../utils/date';
 
+const createIdempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `bet_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
 const LoteriasFinalPage = () => {
   const navigate = useNavigate();
   const { balance, bonus, refreshUser, loadingUser, authError, updateBalances, isAuthenticated } = useAuth();
@@ -323,11 +330,16 @@ const LoteriasFinalPage = () => {
                 let totalDebited = 0;
                 const betsCreated = [];
                 for (const sel of selecoes) {
-                  const res = await api.post('/bets', {
-                    loteria: sel.nome || draft?.loteria,
-                    codigoHorario: sel.horario,
-                    apostas: draft?.apostas || [],
-                  });
+                  const idempotencyKey = createIdempotencyKey();
+                  const res = await api.post(
+                    '/bets',
+                    {
+                      loteria: sel.nome || draft?.loteria,
+                      codigoHorario: sel.horario,
+                      apostas: draft?.apostas || [],
+                    },
+                    { headers: { 'Idempotency-Key': idempotencyKey } },
+                  );
                   const debited = res.data?.debited ?? 0;
                   totalDebited += debited;
                   if (res.data?.bet?.id) {
