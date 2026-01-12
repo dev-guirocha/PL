@@ -12,6 +12,11 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState('');
   const [authToken, setAuthTokenState] = useState(null);
   const authCooldownRef = useRef(0);
+  const userRef = useRef(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const setAuthToken = useCallback((token) => {
     const normalized = token || null;
@@ -25,7 +30,11 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUser = useCallback(async () => {
     const loggedIn = getStoredLoggedIn();
-    const skipReason = getWalletMeSkipReason({ loggedIn, user, cooldownUntil: authCooldownRef.current });
+    const skipReason = getWalletMeSkipReason({
+      loggedIn,
+      user: userRef.current,
+      cooldownUntil: authCooldownRef.current,
+    });
     if (skipReason === 'no-session') {
       setUser(null);
       setBalance(0);
@@ -74,7 +83,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoadingUser(false);
     }
-  }, [authToken, setBearerFallback, user]);
+  }, [authToken, setBearerFallback]);
 
   useEffect(() => {
     refreshUser();
