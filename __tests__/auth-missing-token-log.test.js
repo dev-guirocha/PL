@@ -47,12 +47,11 @@ describe('auth missing token logging', () => {
     expect(payload).toMatchObject({
       method: 'GET',
       originalUrl: '/api/wallet/me',
-      path: '/me',
       host: 'api.pandaloterias.com',
       origin: 'https://www.pandaloterias.com',
       hasCookieHeader: true,
       hasAuthorizationHeader: false,
-      ua: 'jest-agent',
+      userAgent: 'jest-agent',
     });
     expect(payload.cookieNames).toEqual(['foo']);
     logSpy.mockRestore();

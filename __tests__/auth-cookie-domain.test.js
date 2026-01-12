@@ -45,6 +45,7 @@ describe('auth cookie domain (production config)', () => {
     const cookieHeader = cookies.join(' | ');
     expect(cookieHeader).toContain('Domain=.pandaloterias.com');
     expect(cookieHeader).toContain('Path=/');
+    expect(cookieHeader).toMatch(/HttpOnly/);
     expect(cookieHeader).toMatch(/SameSite=None/);
     expect(cookieHeader).toMatch(/Secure/);
   });

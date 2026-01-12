@@ -54,19 +54,18 @@ module.exports = async (req, res, next) => {
   if (!token) {
     if (AUTH_DEBUG && shouldLogMissingToken(req)) {
       const cookieHeader = req.headers?.cookie;
+      const rawUa = req.headers['user-agent'];
+      const userAgent = rawUa ? String(rawUa).slice(0, 160) : undefined;
       console.info('[AUTH_DEBUG] missing_token', {
         method: req.method,
         originalUrl: req.originalUrl,
-        path: req.path,
         host: req.headers?.host,
-        xForwardedHost: req.headers['x-forwarded-host'],
-        xForwardedProto: req.headers['x-forwarded-proto'],
         origin: req.headers?.origin,
         referer: req.headers?.referer,
         hasCookieHeader: Boolean(cookieHeader),
         cookieNames: getCookieNames(cookieHeader),
         hasAuthorizationHeader: Boolean(req.headers?.authorization),
-        ua: req.headers['user-agent'],
+        userAgent,
       });
     }
     return res.status(401).json({ error: 'Não autenticado' });

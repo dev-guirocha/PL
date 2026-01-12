@@ -32,7 +32,7 @@ const api = axios.create({
 
 if (frontAuthDebug) {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-  console.log('[AUTH_DEBUG][frontend] baseURL', baseURL, 'origin', origin);
+  console.log('[AUTH_DEBUG][frontend] baseURL', baseURL, 'origin', origin, 'withCredentials', true);
 } else if (import.meta?.env?.MODE !== 'production') {
   // Ajuda a diagnosticar baseURL em preview/local
   console.log('API baseURL =>', baseURL);
