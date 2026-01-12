@@ -116,7 +116,7 @@ const AuthPage = () => {
       if (!validateForm({ checkName: isRegister, checkPhone: true, checkPassword: !isLogin })) return;
       setFieldErrors({ name: '', phone: '', password: '', resetCode: '' });
       const payload = isLogin ? formData : { ...formData, supervisorCode };
-      const response = await api.post(endpoint, payload);
+      const response = await api.post(endpoint, payload, { headers: { 'X-Client': 'web' } });
       const { user, token: fallbackToken } = response.data || {};
 
       try {
