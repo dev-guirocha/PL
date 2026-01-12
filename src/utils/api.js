@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Garante que o baseURL sempre aponte para o backend + /api
-const fallbackProd = 'https://pl-production.up.railway.app/api'; // fallback para produção caso a env não esteja setada
+const fallbackProd = 'https://api.pandaloterias.com/api'; // fallback para produção caso a env não esteja setada
 const envBase = import.meta?.env?.VITE_API_BASE_URL;
 const isDev = import.meta?.env?.DEV;
 const defaultBase = isDev ? '/api' : fallbackProd;

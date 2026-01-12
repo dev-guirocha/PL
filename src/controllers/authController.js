@@ -15,11 +15,14 @@ const allowResetCodeInResponse = () =>
 const isSecureCookieEnv = ['production', 'staging'].includes(process.env.NODE_ENV);
 const isSmoke = process.env.SMOKE === '1';
 const cookieSecure = isSmoke ? false : isSecureCookieEnv;
+const cookieDomain = !isSmoke && isSecureCookieEnv ? '.pandaloterias.com' : undefined;
 const sessionCookieOptions = {
   httpOnly: true,
   sameSite: cookieSecure ? 'none' : 'lax',
   secure: cookieSecure,
   maxAge: COOKIE_MAX_AGE,
+  path: '/',
+  ...(cookieDomain ? { domain: cookieDomain } : {}),
 };
 const shouldReturnBearerToken = (req) => {
   if (process.env.ALLOW_BEARER_FALLBACK !== 'true') return false;
@@ -258,4 +261,9 @@ exports.changePassword = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao alterar senha.' });
   }
+};
+
+exports.logout = (req, res) => {
+  res.clearCookie('token', sessionCookieOptions);
+  return res.json({ message: 'Logout realizado.' });
 };

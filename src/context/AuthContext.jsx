@@ -79,6 +79,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    api.post('/auth/logout').catch(() => {});
     setAuthToken(null);
     setBearerFallback(false);
     if (typeof window !== 'undefined') {
