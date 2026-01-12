@@ -12,7 +12,10 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState('');
   const [authToken, setAuthTokenState] = useState(null);
   const authCooldownRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
   const userRef = useRef(null);
+  const MIN_REFRESH_INTERVAL_MS = 5000;
 
   useEffect(() => {
     userRef.current = user;
@@ -46,8 +49,11 @@ export const AuthProvider = ({ children }) => {
       setLoadingUser(false);
       return;
     }
+    const now = Date.now();
+    if (refreshInFlightRef.current || now - lastRefreshAtRef.current < MIN_REFRESH_INTERVAL_MS) return;
     setAuthError('');
     setLoadingUser(true);
+    refreshInFlightRef.current = true;
     try {
       const res = await api.get('/wallet/me', { skipAuthRedirect: true });
       const payload = res.data || {};
@@ -57,6 +63,11 @@ export const AuthProvider = ({ children }) => {
       authCooldownRef.current = 0;
     } catch (err) {
       const status = err.response?.status;
+      if (status === 429) {
+        authCooldownRef.current = Date.now() + 15000;
+        setAuthError('Muitas requisições. Aguarde alguns segundos.');
+        return;
+      }
       if (status === 401 && authToken) {
         try {
           setBearerFallback(true);
@@ -81,6 +92,8 @@ export const AuthProvider = ({ children }) => {
       setBalance(0);
       setBonus(0);
     } finally {
+      lastRefreshAtRef.current = Date.now();
+      refreshInFlightRef.current = false;
       setLoadingUser(false);
     }
   }, [authToken, setBearerFallback]);
