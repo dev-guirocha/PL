@@ -14,6 +14,7 @@ const LoteriasModalidadesPage = () => {
   const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [draft, setDraft] = useState({});
   const [showBalance, setShowBalance] = useState(true);
+  const [showValendoBaseModal, setShowValendoBaseModal] = useState(false);
 
   const isValendoFlow = Boolean(draft?.isValendoFlow);
   const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
@@ -131,6 +132,57 @@ const LoteriasModalidadesPage = () => {
     fontWeight: 700,
     color: '#065f46',
   };
+  const valendoLinkBtnStyles = {
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    cursor: 'pointer',
+    fontWeight: 900,
+    color: '#047857',
+    textDecoration: 'underline',
+  };
+  const modalOverlayStyles = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: '16px',
+  };
+  const modalCardStyles = {
+    width: '100%',
+    maxWidth: '640px',
+    background: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+  };
+  const modalHeaderStyles = {
+    padding: '14px 16px',
+    background: '#ecfdf5',
+    borderBottom: '1px solid #a7f3d0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+  };
+  const modalBodyStyles = {
+    padding: '14px 16px',
+    maxHeight: '60vh',
+    overflow: 'auto',
+  };
+  const modalCloseBtnStyles = {
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    cursor: 'pointer',
+    fontWeight: 900,
+    color: '#0f172a',
+  };
   const valendoPillStyles = {
     border: '1px solid #a7f3d0',
     background: '#f0fdf4',
@@ -161,6 +213,55 @@ const LoteriasModalidadesPage = () => {
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
+      {isValendoFlow && showValendoBaseModal && (
+        <div
+          style={modalOverlayStyles}
+          onClick={() => setShowValendoBaseModal(false)}
+          role="presentation"
+        >
+          <div style={modalCardStyles} onClick={(e) => e.stopPropagation()} role="presentation">
+            <div style={modalHeaderStyles}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 1000, color: '#065f46' }}>
+                  Base do VALENDO
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
+                  {valendoBaseLabel} • {normalizedBasePalpites.length} numero(s)
+                </div>
+              </div>
+              <button style={modalCloseBtnStyles} onClick={() => setShowValendoBaseModal(false)}>
+                Fechar
+              </button>
+            </div>
+            <div style={modalBodyStyles}>
+              {normalizedBasePalpites.length ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                  {normalizedBasePalpites.map((n, idx) => (
+                    <span
+                      key={`${n}-${idx}`}
+                      style={{
+                        ...valendoPillStyles,
+                        borderColor: '#bbf7d0',
+                        background: '#f0fdf4',
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        color: '#065f46',
+                      }}
+                    >
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                  Nenhum palpite base encontrado.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isValendoFlow && (
         <div style={valendoBannerStyles}>
           <div style={{ fontSize: '14px', letterSpacing: '0.3px' }}>
@@ -175,6 +276,13 @@ const LoteriasModalidadesPage = () => {
                 <span style={{ fontWeight: 900, color: '#047857' }}>{valendoPreview.extra}</span>
               ) : null}
             </span>
+            <button
+              type="button"
+              style={valendoLinkBtnStyles}
+              onClick={() => setShowValendoBaseModal(true)}
+            >
+              ver todos
+            </button>
           </div>
         </div>
       )}
