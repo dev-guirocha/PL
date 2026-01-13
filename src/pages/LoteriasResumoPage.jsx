@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { FiTrash2 } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
@@ -78,6 +79,17 @@ const LoteriasResumoPage = () => {
       setDraft(d);
     }
   }, []);
+
+  const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+  const getBaseKind = (ap) => {
+    const mod = String(ap?.modalidade || '').toUpperCase();
+    const pals = Array.isArray(ap?.palpites) ? ap.palpites : [];
+    const all4 = pals.length > 0 && pals.every((p) => onlyDigits(p).length === 4);
+    const all3 = pals.length > 0 && pals.every((p) => onlyDigits(p).length === 3);
+    if (mod.includes('MILHAR') || all4) return 'MILHAR';
+    if (mod.startsWith('CENTENA') || all3) return 'CENTENA';
+    return null;
+  };
 
   const styles = {
     container: {
@@ -322,13 +334,28 @@ const LoteriasResumoPage = () => {
               style={{ ...styles.actionBtn, ...styles.secondary }}
               onClick={() => {
                 const d = getDraft();
-                const base = Array.isArray(d?.apostas) && d.apostas.length ? d.apostas[d.apostas.length - 1] : null;
-                if (!base?.palpites?.length) return;
-                // Inicia fluxo VALENDO: reaproveita os números da última aposta e cria uma nova linha derivada.
+                const base =
+                  Array.isArray(d?.apostas) && d.apostas.length ? d.apostas[d.apostas.length - 1] : null;
+                if (!base) {
+                  toast.error('Nenhuma aposta base encontrada para usar o VALENDO.');
+                  return;
+                }
+                const baseKind = getBaseKind(base);
+                if (!baseKind) {
+                  toast.error(
+                    'VALENDO disponível apenas quando a aposta base é MILHAR (4 dígitos) ou CENTENA (3 dígitos).',
+                  );
+                  return;
+                }
+                if (!Array.isArray(base?.palpites) || !base.palpites.length) {
+                  toast.error('Aposta base sem palpites. Não é possível usar VALENDO.');
+                  return;
+                }
                 updateDraft({
                   isValendoFlow: true,
                   valendoBasePalpites: base.palpites,
                   valendoBaseModalidade: base.modalidade,
+                  valendoBaseKind: baseKind,
                   // limpa apenas os campos da nova linha
                   modalidade: null,
                   colocacao: null,

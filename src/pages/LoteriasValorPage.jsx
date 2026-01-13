@@ -58,6 +58,7 @@ const LoteriasValorPage = () => {
       isValendoFlow: false,
       valendoBasePalpites: null,
       valendoBaseModalidade: null,
+      valendoBaseKind: null,
     });
     navigate(`/loterias/${jogo}/resumo`);
   };

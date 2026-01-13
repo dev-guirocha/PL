@@ -16,7 +16,9 @@ const LoteriasModalidadesPage = () => {
   const [showBalance, setShowBalance] = useState(true);
 
   const isValendoFlow = Boolean(draft?.isValendoFlow);
+  const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
   const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
+  const baseIsCentena = baseKind === 'CENTENA' || baseModalidade.startsWith('CENTENA');
   const valendoAllowList = [
     'MILHAR',
     'MILHAR INV',
@@ -37,7 +39,7 @@ const LoteriasModalidadesPage = () => {
         const up = String(m || '').toUpperCase();
         if (!valendoAllowList.includes(up)) return false;
         // Regra 7.2: se base=centena, o menu do Valendo exclui milhar
-        if (baseModalidade.startsWith('CENTENA') && up.startsWith('MILHAR')) return false;
+        if (baseIsCentena && up.startsWith('MILHAR')) return false;
         return true;
       })
     : MODALIDADES;
