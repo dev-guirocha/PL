@@ -23,6 +23,13 @@ const AdminCouponsPage = () => {
     active: true,
   });
 
+  const parseNumberInput = (value) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    const normalized = String(value).replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
   const fetchCoupons = async () => {
     setLoading(true);
     setError('');
@@ -54,15 +61,21 @@ const AdminCouponsPage = () => {
     setSaving(true);
     setError('');
     try {
+      const parsedValue = parseNumberInput(form.value);
+      if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+        setError('Valor inválido. Use ponto ou vírgula.');
+        setSaving(false);
+        return;
+      }
       const payload = {
         code: form.code,
         description: form.description,
         type: form.type,
-        value: Number(form.value),
-        minDeposit: form.minDeposit !== '' ? Number(form.minDeposit) : undefined,
-        maxDeposit: form.maxDeposit !== '' ? Number(form.maxDeposit) : undefined,
-        maxUses: form.maxUses !== '' ? Number(form.maxUses) : undefined,
-        perUser: form.perUser !== '' ? Number(form.perUser) : undefined,
+        value: parsedValue,
+        minDeposit: parseNumberInput(form.minDeposit),
+        maxDeposit: parseNumberInput(form.maxDeposit),
+        maxUses: parseNumberInput(form.maxUses),
+        perUser: parseNumberInput(form.perUser),
         firstDepositOnly: form.firstDepositOnly,
         active: form.active,
       };
@@ -81,7 +94,7 @@ const AdminCouponsPage = () => {
       });
       fetchCoupons();
     } catch (err) {
-      setError('Erro ao criar cupom.');
+      setError(err.response?.data?.error || 'Erro ao criar cupom.');
     } finally {
       setSaving(false);
     }
@@ -139,6 +152,7 @@ const AdminCouponsPage = () => {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
             >
               <option value="fixed">Valor fixo</option>
+              <option value="bonus">Bônus</option>
               <option value="percent">Percentual</option>
             </select>
           </div>
@@ -262,7 +276,7 @@ const AdminCouponsPage = () => {
                     : `R$ ${(Number(c.value) || 0).toFixed(2).replace('.', ',')}`}
                 </AdminTableCell>
                 <AdminTableCell className="uppercase text-xs font-semibold text-slate-700">
-                  {c.type === 'percent' ? 'PERCENTUAL' : 'FIXO'}
+                  {c.type === 'percent' ? 'PERCENTUAL' : c.type === 'bonus' ? 'BÔNUS' : 'FIXO'}
                 </AdminTableCell>
                 <AdminTableCell className="text-sm font-semibold text-slate-700">
                   {`${c.usedCount || 0}${c.maxUses ? `/${c.maxUses}` : c.usageLimit ? `/${c.usageLimit}` : ''}`}
