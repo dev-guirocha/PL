@@ -8,6 +8,11 @@ const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 const BET_DEBUG = process.env.BET_DEBUG === 'true';
+const COMMIT_SHA =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GIT_COMMIT ||
+  'unknown';
 const TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_GRACE_MINUTES = 10;
 const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
@@ -84,7 +89,17 @@ const normalizeCodigoHorario = (codigoHorario) => {
   if (!raw) return '';
   const upper = raw.toUpperCase().replace(/\s+/g, ' ').trim();
 
-  if (/[A-Z]/.test(upper)) {
+  const hasLetters = /[A-Z]/.test(upper);
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][codigoHorario]', {
+      raw,
+      upper,
+      hasLetters,
+      commit: COMMIT_SHA,
+    });
+  }
+
+  if (hasLetters) {
     return upper;
   }
 
