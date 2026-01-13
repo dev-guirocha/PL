@@ -225,6 +225,12 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: 'Idempotency-Key é obrigatório.' });
   }
 
+  const rawCodigoHorarioRequest = {
+    body: req.body?.codigoHorario ?? null,
+    bodyHorario: req.body?.horario ?? null,
+    bodyTime: req.body?.time ?? null,
+  };
+
   // Normaliza payload antes do Zod (fallback de root + apostas como array)
   let rawApostas = req.body?.apostas;
   if (typeof rawApostas === 'string') {
@@ -242,6 +248,15 @@ exports.create = async (req, res) => {
 
   const inferredRootDate = req.body.dataJogo ?? req.body.date ?? itemDate ?? null;
 
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][raw]', {
+      rawCodigoHorarioRequest,
+      itemHour: itemHour ?? null,
+      inferredRootDate: inferredRootDate ?? null,
+      commit: COMMIT_SHA,
+    });
+  }
+
   req.body.apostas = rawApostas.map((a) => ({
     ...a,
     data: a.data ?? a.dataJogo ?? a.date ?? inferredRootDate,
@@ -250,6 +265,13 @@ exports.create = async (req, res) => {
   req.body.dataJogo = inferredRootDate;
   req.body.codigoHorario = req.body.codigoHorario ?? req.body.horario ?? req.body.time ?? itemHour ?? null;
   req.body.codigoHorario = normalizeCodigoHorario(req.body.codigoHorario);
+
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][post-normalize]', {
+      normalizedCodigoHorario: req.body.codigoHorario ?? null,
+      commit: COMMIT_SHA,
+    });
+  }
 
   const parsed = betPayloadSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -274,6 +296,15 @@ exports.create = async (req, res) => {
       itemData: apostas?.[0]?.data ?? null,
       finalDataJogo: dataJogo ?? null,
       rootCodigoHorario: codigoHorarioNorm ?? null,
+    });
+  }
+
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][pre-save]', {
+      codigoHorarioNorm: codigoHorarioNorm ?? null,
+      dataJogo: dataJogo ?? null,
+      loteria,
+      commit: COMMIT_SHA,
     });
   }
 
@@ -386,6 +417,14 @@ exports.create = async (req, res) => {
           status: 'open',
         },
       });
+
+      if (BET_DEBUG) {
+        console.log('[BET_DEBUG][bets.create][post-save]', {
+          betId: bet.id,
+          codigoHorario: bet.codigoHorario ?? null,
+          commit: COMMIT_SHA,
+        });
+      }
 
       const user = await tx.user.findUnique({
         where: { id: req.userId },
