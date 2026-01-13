@@ -19,6 +19,16 @@ const LoteriasModalidadesPage = () => {
   const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
   const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
   const baseIsCentena = baseKind === 'CENTENA' || baseModalidade.startsWith('CENTENA');
+  const valendoBaseLabel = (() => {
+    if (baseKind === 'MILHAR') return 'MILHAR';
+    if (baseKind === 'CENTENA') return 'CENTENA';
+    if (baseModalidade.includes('MILHAR')) return 'MILHAR';
+    if (baseModalidade.startsWith('CENTENA')) return 'CENTENA';
+    return '—';
+  })();
+  const valendoHint = baseIsCentena
+    ? 'Base CENTENA: opções de MILHAR não aparecem no Valendo.'
+    : 'Base MILHAR: Valendo pode derivar para Centena/Dezena/Unidade/Grupo.';
   const valendoAllowList = [
     'MILHAR',
     'MILHAR INV',
@@ -87,6 +97,20 @@ const LoteriasModalidadesPage = () => {
     },
   };
 
+  const valendoBannerStyles = {
+    width: '100%',
+    maxWidth: styles?.card?.maxWidth || '520px',
+    background: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: '14px',
+    padding: '12px 14px',
+    color: '#065f46',
+    fontWeight: 'bold',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  };
+
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -108,6 +132,15 @@ const LoteriasModalidadesPage = () => {
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
+      {isValendoFlow && (
+        <div style={valendoBannerStyles}>
+          <div style={{ fontSize: '14px', letterSpacing: '0.3px' }}>
+            VALENDO a partir de <span style={{ textTransform: 'uppercase' }}>{valendoBaseLabel}</span>
+          </div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>{valendoHint}</div>
+        </div>
+      )}
+
       <div style={styles.card}>
         <div style={styles.title}>Modalidades</div>
         {draft?.jogo && draft?.data && (
@@ -115,7 +148,11 @@ const LoteriasModalidadesPage = () => {
             Jogo: {draft.jogo} • Data: {formatDateBR(draft.data)}
           </div>
         )}
-        <div style={styles.subtitle}>Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).</div>
+        <div style={styles.subtitle}>
+          {isValendoFlow
+            ? 'Escolha a modalidade do VALENDO. Você vai selecionar colocação e valor em seguida.'
+            : 'Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).'}
+        </div>
         <div style={styles.list}>
           {modalidadesToShow.map((m) => (
             <button
