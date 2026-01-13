@@ -15,6 +15,33 @@ const LoteriasModalidadesPage = () => {
   const [draft, setDraft] = useState({});
   const [showBalance, setShowBalance] = useState(true);
 
+  const isValendoFlow = Boolean(draft?.isValendoFlow);
+  const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
+  const valendoAllowList = [
+    'MILHAR',
+    'MILHAR INV',
+    'MILHAR E CT',
+    'CENTENA',
+    'CENTENA INV',
+    'CENTENA ESQUERDA',
+    'CENTENA INV ESQ',
+    'DEZENA',
+    'DEZENA ESQ',
+    'DEZENA MEIO',
+    'UNIDADE',
+    'GRUPO',
+  ];
+
+  const modalidadesToShow = isValendoFlow
+    ? MODALIDADES.filter((m) => {
+        const up = String(m || '').toUpperCase();
+        if (!valendoAllowList.includes(up)) return false;
+        // Regra 7.2: se base=centena, o menu do Valendo exclui milhar
+        if (baseModalidade.startsWith('CENTENA') && up.startsWith('MILHAR')) return false;
+        return true;
+      })
+    : MODALIDADES;
+
   useEffect(() => {
     setDraft(getDraft());
     refreshUser();
@@ -88,12 +115,16 @@ const LoteriasModalidadesPage = () => {
         )}
         <div style={styles.subtitle}>Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).</div>
         <div style={styles.list}>
-          {MODALIDADES.map((m) => (
+          {modalidadesToShow.map((m) => (
             <button
               key={m}
               style={styles.item}
               onClick={() => {
                 updateDraft({ modalidade: m });
+                if (isValendoFlow) {
+                  navigate(`/loterias/${jogo}/colocacao`);
+                  return;
+                }
                 if (CAN_CHOOSE_COLOCACAO.includes(m.toUpperCase())) {
                   navigate(`/loterias/${jogo}/colocacao`);
                 } else if (DIRECT_TO_PALPITES.includes(m.toUpperCase())) {

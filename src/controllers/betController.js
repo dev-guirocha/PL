@@ -50,7 +50,8 @@ const toMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 function calculateTotal(apostas) {
   return apostas.reduce((acc, ap) => {
     const valor = toMoney(ap.valorAposta);
-    const qtd = Array.isArray(ap.palpites) ? ap.palpites.length : 0;
+    const qtdRaw = Array.isArray(ap.palpites) ? ap.palpites.length : 0;
+    const qtd = ap.modoValor === 'cada' ? Math.max(qtdRaw, 1) : qtdRaw;
     const subtotal = ap.modoValor === 'cada' ? valor.mul(qtd) : valor;
     return acc.add(subtotal);
   }, ZERO);

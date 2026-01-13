@@ -317,6 +317,32 @@ const LoteriasResumoPage = () => {
             >
               Fazer mais apostas
             </button>
+
+            <button
+              style={{ ...styles.actionBtn, ...styles.secondary }}
+              onClick={() => {
+                const d = getDraft();
+                const base = Array.isArray(d?.apostas) && d.apostas.length ? d.apostas[d.apostas.length - 1] : null;
+                if (!base?.palpites?.length) return;
+                // Inicia fluxo VALENDO: reaproveita os números da última aposta e cria uma nova linha derivada.
+                updateDraft({
+                  isValendoFlow: true,
+                  valendoBasePalpites: base.palpites,
+                  valendoBaseModalidade: base.modalidade,
+                  // limpa apenas os campos da nova linha
+                  modalidade: null,
+                  colocacao: null,
+                  palpites: [],
+                  valorAposta: null,
+                  modoValor: null,
+                  // evita duplicar a aposta base no efeito de auto-save
+                  currentSaved: true,
+                });
+                navigate(`/loterias/${jogo}/modalidades`);
+              }}
+            >
+              VALENDO
+            </button>
           </div>
           <button
             style={{ ...styles.actionBtn, ...styles.primary, width: '100%' }}

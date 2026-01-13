@@ -6,6 +6,7 @@ import { formatDateBR } from '../utils/date';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
+import { deriveValendoPalpites } from '../utils/valendoDerive';
 
 const quickAdds = [5, 20, 50, 100];
 
@@ -43,7 +44,21 @@ const LoteriasValorPage = () => {
   };
 
   const handleContinue = () => {
-    updateDraft({ valorAposta: parsedValor, modoValor, currentSaved: false });
+    const d = getDraft();
+    if (d?.isValendoFlow) {
+      const base = Array.isArray(d?.valendoBasePalpites) ? d.valendoBasePalpites : [];
+      const palpitesDerivados = deriveValendoPalpites(base, d?.modalidade);
+      updateDraft({ palpites: palpitesDerivados });
+    }
+
+    updateDraft({
+      valorAposta: parsedValor,
+      modoValor,
+      currentSaved: false,
+      isValendoFlow: false,
+      valendoBasePalpites: null,
+      valendoBaseModalidade: null,
+    });
     navigate(`/loterias/${jogo}/resumo`);
   };
 
