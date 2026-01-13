@@ -80,9 +80,16 @@ const getHourFromCode = (codigoHorario) => {
 };
 
 const normalizeCodigoHorario = (codigoHorario) => {
-  const s = String(codigoHorario || '').trim().toUpperCase();
-  const m = s.match(/(\d{1,2})(?::(\d{2}))?/);
-  if (!m) return s;
+  const raw = String(codigoHorario || '').trim();
+  if (!raw) return '';
+  const upper = raw.toUpperCase().replace(/\s+/g, ' ').trim();
+
+  if (/[A-Z]/.test(upper)) {
+    return upper;
+  }
+
+  const m = upper.match(/(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return upper;
   const hh = String(m[1]).padStart(2, '0');
   const mm = String(m[2] ?? '00').padStart(2, '0');
   return `${hh}:${mm}`;
