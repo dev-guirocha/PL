@@ -19,6 +19,9 @@ const LoteriasModalidadesPage = () => {
   const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
   const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
   const baseIsCentena = baseKind === 'CENTENA' || baseModalidade.startsWith('CENTENA');
+  const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+  const basePalpites = Array.isArray(draft?.valendoBasePalpites) ? draft.valendoBasePalpites : [];
+  const normalizedBasePalpites = basePalpites.map((p) => onlyDigits(p)).filter(Boolean);
   const valendoBaseLabel = (() => {
     if (baseKind === 'MILHAR') return 'MILHAR';
     if (baseKind === 'CENTENA') return 'CENTENA';
@@ -29,6 +32,15 @@ const LoteriasModalidadesPage = () => {
   const valendoHint = baseIsCentena
     ? 'Base CENTENA: opções de MILHAR não aparecem no Valendo.'
     : 'Base MILHAR: Valendo pode derivar para Centena/Dezena/Unidade/Grupo.';
+  const valendoPreview = (() => {
+    const total = normalizedBasePalpites.length;
+    if (!total) return { text: '—', extra: '' };
+    const first = normalizedBasePalpites.slice(0, 3);
+    const remaining = Math.max(total - first.length, 0);
+    const text = first.join(', ');
+    const extra = remaining > 0 ? ` +${remaining}` : '';
+    return { text, extra };
+  })();
   const valendoAllowList = [
     'MILHAR',
     'MILHAR INV',
@@ -110,6 +122,23 @@ const LoteriasModalidadesPage = () => {
     flexDirection: 'column',
     gap: '6px',
   };
+  const valendoPreviewRowStyles = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#065f46',
+  };
+  const valendoPillStyles = {
+    border: '1px solid #a7f3d0',
+    background: '#f0fdf4',
+    borderRadius: '999px',
+    padding: '4px 10px',
+    fontFamily: 'monospace',
+    letterSpacing: '0.2px',
+  };
 
   return (
     <div style={styles.container}>
@@ -138,6 +167,15 @@ const LoteriasModalidadesPage = () => {
             VALENDO a partir de <span style={{ textTransform: 'uppercase' }}>{valendoBaseLabel}</span>
           </div>
           <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>{valendoHint}</div>
+          <div style={valendoPreviewRowStyles}>
+            <span style={{ fontWeight: 800, color: '#047857' }}>Base:</span>
+            <span style={valendoPillStyles}>
+              {valendoPreview.text}
+              {valendoPreview.extra ? (
+                <span style={{ fontWeight: 900, color: '#047857' }}>{valendoPreview.extra}</span>
+              ) : null}
+            </span>
+          </div>
         </div>
       )}
 
