@@ -9,8 +9,18 @@ function createCsrfProtection(allowedOrigins = [], wildcardOrigins = []) {
     .map((c) => c.trim().toLowerCase())
     .filter(Boolean);
   const allowEmptyOrigin = process.env.CSRF_ALLOW_EMPTY_ORIGIN === 'true';
+  const bypassSecret = process.env.CSRF_BYPASS_SECRET || '';
+  const isNonProd = process.env.NODE_ENV !== 'production';
   return (req, res, next) => {
     if (safeMethods.includes(req.method)) return next();
+
+    const bypassHeader = String(req.headers['x-bypass-csrf'] || '').trim();
+    const path = req.path || '';
+    const originalUrl = req.originalUrl || '';
+    const isBetsRoute = path.startsWith('/api/bets') || originalUrl.startsWith('/api/bets');
+    if (isNonProd && bypassSecret && bypassHeader && bypassHeader === bypassSecret && isBetsRoute) {
+      return next();
+    }
 
     const origin = req.headers.origin;
     const referer = req.headers.referer;
