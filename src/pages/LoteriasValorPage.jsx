@@ -23,6 +23,14 @@ const formatMoneyBR = (value) =>
     maximumFractionDigits: 2,
   });
 
+const formatInputMoneyBR = (raw) => {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const number = Number(digits) / 100;
+  if (Number.isNaN(number)) return '';
+  return formatMoneyBR(number);
+};
+
 const LoteriasValorPage = () => {
   const navigate = useNavigate();
   const { jogo } = useParams();
@@ -136,7 +144,11 @@ const LoteriasValorPage = () => {
             min="0"
             value={valor}
             onChange={(e) => {
-              setValor(e.target.value);
+              const formatted = formatInputMoneyBR(e.target.value);
+              setValor(formatted);
+              const parsed = parseMoneyBR(formatted);
+              setValorNumber(parsed);
+              updateDraft({ valorAposta: parsed, modoValor });
             }}
             onBlur={() => {
               const parsed = parseMoneyBR(valor);
