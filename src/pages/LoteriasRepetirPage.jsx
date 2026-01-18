@@ -45,6 +45,67 @@ const LoteriasRepetirPage = () => {
 
   const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
 
+  const buildDraftFromPule = (pule) => {
+    const all = pule?.apostas || [];
+    if (!all.length) return null;
+
+    const base = all[0];
+    const valorBase = Number(base?.valorAposta ?? base?.valorPorNumero ?? base?.total ?? 0) || 0;
+    const modoValor = base?.modoValor || (base?.palpites?.length > 1 ? 'cada' : 'todos');
+
+    const apostasNorm = all.map((ap) => {
+      const vb = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? valorBase) || valorBase;
+      const mv = ap?.modoValor || modoValor;
+      const qtd = ap?.palpites?.length || 0;
+      const total = mv === 'cada' ? vb * Math.max(qtd, 1) : vb;
+      return {
+        ...ap,
+        data: ap?.data || null,
+        modalidade: ap?.modalidade || ap?.jogo || '',
+        colocacao: ap?.colocacao || null,
+        palpites: ap?.palpites || [],
+        valorAposta: vb,
+        modoValor: mv,
+        total,
+      };
+    });
+
+    const hasValendoShape = apostasNorm.length > 1;
+    const allPalpites = apostasNorm
+      .flatMap((a) => a?.palpites || [])
+      .map((p) => String(p || '').replace(/\D/g, ''));
+    const base4 = allPalpites.filter((p) => p.length === 4);
+    const base3 = allPalpites.filter((p) => p.length === 3);
+    const baseDigits = base4.length ? 4 : base3.length ? 3 : null;
+    const basePalpites = base4.length ? base4 : base3;
+
+    return {
+      jogo: base?.jogo || pule.loteria || '',
+      slug: null,
+      data: base?.data || null,
+      codigoHorario: pule.codigoHorario || null,
+      selecoes: [],
+      loteria: pule.loteria || null,
+      modalidade: base?.modalidade || base?.jogo || '',
+      colocacao: base?.colocacao || null,
+      palpites: base?.palpites || [],
+      valorAposta: valorBase,
+      modoValor,
+      currentSaved: false,
+      apostas: apostasNorm,
+      valendo: hasValendoShape
+        ? { locked: true, baseDigits, basePalpites }
+        : { locked: false, baseDigits, basePalpites },
+      repeatSource: {
+        betId: pule.id,
+        betRef: pule.betRef || `${pule.userId || ''}-${pule.id}`,
+        loteria: pule.loteria || null,
+        codigoHorario: pule.codigoHorario || null,
+        createdAt: pule.createdAt || null,
+      },
+    };
+  };
+
   const handleRepeat = (pule, ap) => {
     const valorBase = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? 0) || 0;
     const modoValor = ap?.modoValor || (ap?.palpites?.length > 1 ? 'cada' : 'todos');
@@ -83,6 +144,14 @@ const LoteriasRepetirPage = () => {
     };
     setDraft(newDraft);
     toast.success(`PULE ${newDraft.repeatSource.betRef} carregada. Informe o valor e prossiga.`);
+    navigate('/loterias/repetir/valor');
+  };
+
+  const handleRepeatFullPule = (pule) => {
+    const newDraft = buildDraftFromPule(pule);
+    if (!newDraft) return;
+    setDraft(newDraft);
+    toast.success(`PULE ${newDraft.repeatSource.betRef} carregada (PULE inteira). Informe o valor e prossiga.`);
     navigate('/loterias/repetir/valor');
   };
 
@@ -163,6 +232,18 @@ const LoteriasRepetirPage = () => {
               <span className="text-sm font-semibold">{formatDateTimeBR(pule.createdAt)}</span>
             </div>
             {pule.codigoHorario && <span className="text-xs text-slate-500">Horário: {pule.codigoHorario}</span>}
+
+            {(pule.apostas || []).length > 1 && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  className="rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-800 transition hover:bg-emerald-100"
+                  onClick={() => handleRepeatFullPule(pule)}
+                >
+                  Repetir PULE inteira (VALENDO)
+                </button>
+              </div>
+            )}
 
             {(pule.apostas || []).map((ap, i) => {
               const { total: apTotal, valorPorNumero } = (() => {

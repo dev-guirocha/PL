@@ -8,6 +8,11 @@ const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 const BET_DEBUG = process.env.BET_DEBUG === 'true';
+const COMMIT_SHA =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GIT_COMMIT ||
+  'unknown';
 const TIMEZONE = 'America/Sao_Paulo';
 const DEFAULT_GRACE_MINUTES = 10;
 const FEDERAL_DAYS = [3, 6]; // Quarta, Sábado
@@ -50,7 +55,8 @@ const toMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 function calculateTotal(apostas) {
   return apostas.reduce((acc, ap) => {
     const valor = toMoney(ap.valorAposta);
-    const qtd = Array.isArray(ap.palpites) ? ap.palpites.length : 0;
+    const qtdRaw = Array.isArray(ap.palpites) ? ap.palpites.length : 0;
+    const qtd = ap.modoValor === 'cada' ? Math.max(qtdRaw, 1) : qtdRaw;
     const subtotal = ap.modoValor === 'cada' ? valor.mul(qtd) : valor;
     return acc.add(subtotal);
   }, ZERO);
@@ -79,9 +85,26 @@ const getHourFromCode = (codigoHorario) => {
 };
 
 const normalizeCodigoHorario = (codigoHorario) => {
-  const s = String(codigoHorario || '').trim().toUpperCase();
-  const m = s.match(/(\d{1,2})(?::(\d{2}))?/);
-  if (!m) return s;
+  const raw = String(codigoHorario || '').trim();
+  if (!raw) return '';
+  const upper = raw.toUpperCase().replace(/\s+/g, ' ').trim();
+
+  const hasLetters = /[A-Z]/.test(upper);
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][codigoHorario]', {
+      raw,
+      upper,
+      hasLetters,
+      commit: COMMIT_SHA,
+    });
+  }
+
+  if (hasLetters) {
+    return upper;
+  }
+
+  const m = upper.match(/(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return upper;
   const hh = String(m[1]).padStart(2, '0');
   const mm = String(m[2] ?? '00').padStart(2, '0');
   return `${hh}:${mm}`;
@@ -202,6 +225,12 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: 'Idempotency-Key é obrigatório.' });
   }
 
+  const rawCodigoHorarioRequest = {
+    body: req.body?.codigoHorario ?? null,
+    bodyHorario: req.body?.horario ?? null,
+    bodyTime: req.body?.time ?? null,
+  };
+
   // Normaliza payload antes do Zod (fallback de root + apostas como array)
   let rawApostas = req.body?.apostas;
   if (typeof rawApostas === 'string') {
@@ -219,6 +248,15 @@ exports.create = async (req, res) => {
 
   const inferredRootDate = req.body.dataJogo ?? req.body.date ?? itemDate ?? null;
 
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][raw]', {
+      rawCodigoHorarioRequest,
+      itemHour: itemHour ?? null,
+      inferredRootDate: inferredRootDate ?? null,
+      commit: COMMIT_SHA,
+    });
+  }
+
   req.body.apostas = rawApostas.map((a) => ({
     ...a,
     data: a.data ?? a.dataJogo ?? a.date ?? inferredRootDate,
@@ -227,6 +265,13 @@ exports.create = async (req, res) => {
   req.body.dataJogo = inferredRootDate;
   req.body.codigoHorario = req.body.codigoHorario ?? req.body.horario ?? req.body.time ?? itemHour ?? null;
   req.body.codigoHorario = normalizeCodigoHorario(req.body.codigoHorario);
+
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][post-normalize]', {
+      normalizedCodigoHorario: req.body.codigoHorario ?? null,
+      commit: COMMIT_SHA,
+    });
+  }
 
   const parsed = betPayloadSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -251,6 +296,15 @@ exports.create = async (req, res) => {
       itemData: apostas?.[0]?.data ?? null,
       finalDataJogo: dataJogo ?? null,
       rootCodigoHorario: codigoHorarioNorm ?? null,
+    });
+  }
+
+  if (BET_DEBUG) {
+    console.log('[BET_DEBUG][bets.create][pre-save]', {
+      codigoHorarioNorm: codigoHorarioNorm ?? null,
+      dataJogo: dataJogo ?? null,
+      loteria,
+      commit: COMMIT_SHA,
     });
   }
 
@@ -363,6 +417,14 @@ exports.create = async (req, res) => {
           status: 'open',
         },
       });
+
+      if (BET_DEBUG) {
+        console.log('[BET_DEBUG][bets.create][post-save]', {
+          betId: bet.id,
+          codigoHorario: bet.codigoHorario ?? null,
+          commit: COMMIT_SHA,
+        });
+      }
 
       const user = await tx.user.findUnique({
         where: { id: req.userId },

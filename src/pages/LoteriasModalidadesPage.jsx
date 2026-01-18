@@ -14,6 +14,58 @@ const LoteriasModalidadesPage = () => {
   const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [draft, setDraft] = useState({});
   const [showBalance, setShowBalance] = useState(true);
+  const [showValendoBaseModal, setShowValendoBaseModal] = useState(false);
+
+  const isValendoFlow = Boolean(draft?.isValendoFlow);
+  const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
+  const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
+  const baseIsCentena = baseKind === 'CENTENA' || baseModalidade.startsWith('CENTENA');
+  const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+  const basePalpites = Array.isArray(draft?.valendoBasePalpites) ? draft.valendoBasePalpites : [];
+  const normalizedBasePalpites = basePalpites.map((p) => onlyDigits(p)).filter(Boolean);
+  const valendoBaseLabel = (() => {
+    if (baseKind === 'MILHAR') return 'MILHAR';
+    if (baseKind === 'CENTENA') return 'CENTENA';
+    if (baseModalidade.includes('MILHAR')) return 'MILHAR';
+    if (baseModalidade.startsWith('CENTENA')) return 'CENTENA';
+    return '—';
+  })();
+  const valendoHint = baseIsCentena
+    ? 'Base CENTENA: opções de MILHAR não aparecem no Valendo.'
+    : 'Base MILHAR: Valendo pode derivar para Centena/Dezena/Unidade/Grupo.';
+  const valendoPreview = (() => {
+    const total = normalizedBasePalpites.length;
+    if (!total) return { text: '—', extra: '' };
+    const first = normalizedBasePalpites.slice(0, 3);
+    const remaining = Math.max(total - first.length, 0);
+    const text = first.join(', ');
+    const extra = remaining > 0 ? ` +${remaining}` : '';
+    return { text, extra };
+  })();
+  const valendoAllowList = [
+    'MILHAR',
+    'MILHAR INV',
+    'MILHAR E CT',
+    'CENTENA',
+    'CENTENA INV',
+    'CENTENA ESQUERDA',
+    'CENTENA INV ESQ',
+    'DEZENA',
+    'DEZENA ESQ',
+    'DEZENA MEIO',
+    'UNIDADE',
+    'GRUPO',
+  ];
+
+  const modalidadesToShow = isValendoFlow
+    ? MODALIDADES.filter((m) => {
+        const up = String(m || '').toUpperCase();
+        if (!valendoAllowList.includes(up)) return false;
+        // Regra 7.2: se base=centena, o menu do Valendo exclui milhar
+        if (baseIsCentena && up.startsWith('MILHAR')) return false;
+        return true;
+      })
+    : MODALIDADES;
 
   useEffect(() => {
     setDraft(getDraft());
@@ -58,6 +110,88 @@ const LoteriasModalidadesPage = () => {
     },
   };
 
+  const valendoBannerStyles = {
+    width: '100%',
+    maxWidth: styles?.card?.maxWidth || '520px',
+    background: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: '14px',
+    padding: '12px 14px',
+    color: '#065f46',
+    fontWeight: 'bold',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  };
+  const valendoPreviewRowStyles = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#065f46',
+  };
+  const valendoLinkBtnStyles = {
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    cursor: 'pointer',
+    fontWeight: 900,
+    color: '#047857',
+    textDecoration: 'underline',
+  };
+  const modalOverlayStyles = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: '16px',
+  };
+  const modalCardStyles = {
+    width: '100%',
+    maxWidth: '640px',
+    background: '#ffffff',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+    overflow: 'hidden',
+  };
+  const modalHeaderStyles = {
+    padding: '14px 16px',
+    background: '#ecfdf5',
+    borderBottom: '1px solid #a7f3d0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+  };
+  const modalBodyStyles = {
+    padding: '14px 16px',
+    maxHeight: '60vh',
+    overflow: 'auto',
+  };
+  const modalCloseBtnStyles = {
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    cursor: 'pointer',
+    fontWeight: 900,
+    color: '#0f172a',
+  };
+  const valendoPillStyles = {
+    border: '1px solid #a7f3d0',
+    background: '#f0fdf4',
+    borderRadius: '999px',
+    padding: '4px 10px',
+    fontFamily: 'monospace',
+    letterSpacing: '0.2px',
+  };
+
   return (
     <div style={styles.container}>
       <div style={{ alignSelf: 'flex-start' }}>
@@ -79,6 +213,80 @@ const LoteriasModalidadesPage = () => {
 
       {authError && <div style={{ color: 'red' }}>{authError}</div>}
 
+      {isValendoFlow && showValendoBaseModal && (
+        <div
+          style={modalOverlayStyles}
+          onClick={() => setShowValendoBaseModal(false)}
+          role="presentation"
+        >
+          <div style={modalCardStyles} onClick={(e) => e.stopPropagation()} role="presentation">
+            <div style={modalHeaderStyles}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 1000, color: '#065f46' }}>
+                  Base do VALENDO
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
+                  {valendoBaseLabel} • {normalizedBasePalpites.length} numero(s)
+                </div>
+              </div>
+              <button style={modalCloseBtnStyles} onClick={() => setShowValendoBaseModal(false)}>
+                Fechar
+              </button>
+            </div>
+            <div style={modalBodyStyles}>
+              {normalizedBasePalpites.length ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                  {normalizedBasePalpites.map((n, idx) => (
+                    <span
+                      key={`${n}-${idx}`}
+                      style={{
+                        ...valendoPillStyles,
+                        borderColor: '#bbf7d0',
+                        background: '#f0fdf4',
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        color: '#065f46',
+                      }}
+                    >
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                  Nenhum palpite base encontrado.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isValendoFlow && (
+        <div style={valendoBannerStyles}>
+          <div style={{ fontSize: '14px', letterSpacing: '0.3px' }}>
+            VALENDO a partir de <span style={{ textTransform: 'uppercase' }}>{valendoBaseLabel}</span>
+          </div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>{valendoHint}</div>
+          <div style={valendoPreviewRowStyles}>
+            <span style={{ fontWeight: 800, color: '#047857' }}>Base:</span>
+            <span style={valendoPillStyles}>
+              {valendoPreview.text}
+              {valendoPreview.extra ? (
+                <span style={{ fontWeight: 900, color: '#047857' }}>{valendoPreview.extra}</span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              style={valendoLinkBtnStyles}
+              onClick={() => setShowValendoBaseModal(true)}
+            >
+              ver todos
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={styles.card}>
         <div style={styles.title}>Modalidades</div>
         {draft?.jogo && draft?.data && (
@@ -86,14 +294,22 @@ const LoteriasModalidadesPage = () => {
             Jogo: {draft.jogo} • Data: {formatDateBR(draft.data)}
           </div>
         )}
-        <div style={styles.subtitle}>Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).</div>
+        <div style={styles.subtitle}>
+          {isValendoFlow
+            ? 'Escolha a modalidade do VALENDO. Você vai selecionar colocação e valor em seguida.'
+            : 'Escolha uma modalidade (válida para Tradicional, Tradicional 1/10 e Uruguaia).'}
+        </div>
         <div style={styles.list}>
-          {MODALIDADES.map((m) => (
+          {modalidadesToShow.map((m) => (
             <button
               key={m}
               style={styles.item}
               onClick={() => {
                 updateDraft({ modalidade: m });
+                if (isValendoFlow) {
+                  navigate(`/loterias/${jogo}/colocacao`);
+                  return;
+                }
                 if (CAN_CHOOSE_COLOCACAO.includes(m.toUpperCase())) {
                   navigate(`/loterias/${jogo}/colocacao`);
                 } else if (DIRECT_TO_PALPITES.includes(m.toUpperCase())) {

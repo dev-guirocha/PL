@@ -15,15 +15,25 @@ const HUNDRED = new Prisma.Decimal(100);
 const COUPON_DEBUG = process.env.COUPON_DEBUG === 'true';
 
 // Schema de Validação (entrada do Admin)
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') return value;
+  if (typeof value === 'number') return value;
+  const normalized = String(value).replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : value;
+};
+
 const createCouponSchema = z.object({
   code: z.string().trim().min(3).transform(v => v.toUpperCase()),
-  type: z.enum(['fixed', 'percent']),
-  value: z.number().positive(),
-  minDeposit: z.number().min(0).default(0),
-  maxDeposit: z.number().min(0).optional(),
-  maxUses: z.number().int().positive().default(1000),
-  perUser: z.number().int().positive().default(1),
+  description: z.string().optional().nullable(),
+  type: z.enum(['fixed', 'percent', 'bonus']),
+  value: z.preprocess(toNumber, z.number().positive()),
+  minDeposit: z.preprocess(toNumber, z.number().min(0)).default(0),
+  maxDeposit: z.preprocess(toNumber, z.number().min(0)).optional(),
+  maxUses: z.preprocess(toNumber, z.number().int().positive()).default(1000),
+  perUser: z.preprocess(toNumber, z.number().int().positive()).default(1),
   firstDepositOnly: z.boolean().optional().default(false),
+  active: z.boolean().optional(),
   expiresAt: z.string().optional().nullable(), // ISO string
 });
 
@@ -238,6 +248,7 @@ exports.createCoupon = async (req, res) => {
     const coupon = await prisma.coupon.create({
       data: {
         code: data.code,
+        description: data.description || null,
         type: data.type,
         value: new Prisma.Decimal(String(data.value)), // ✅ Decimal explícito
         minDeposit: new Prisma.Decimal(String(data.minDeposit)), // ✅ Decimal explícito
@@ -246,7 +257,7 @@ exports.createCoupon = async (req, res) => {
         perUser: data.perUser,
         firstDepositOnly: data.firstDepositOnly,
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-        active: true,
+        active: data.active ?? true,
       },
     });
 
