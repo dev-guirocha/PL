@@ -224,15 +224,22 @@ const LoteriasSorteiosPage = () => {
     return { loteria: loteria || clean, codigoHorario };
   };
 
+  const formatSelectionLabel = (sel) => {
+    const label = sel?.horario || sel?.rawHorario || '';
+    if (!label) return sel?.nome || '';
+    if (!sel?.nome) return label;
+    return label.includes(sel.nome) ? label : `${sel.nome} • ${label}`;
+  };
+
   const toggleSelection = (slug, lotNome, horarioTxt) => {
     const parsed = splitHorario(horarioTxt);
 
     // Para controle de seleção na UI, guardamos o texto original do horário
     const rawHorario = String(horarioTxt || '').trim();
 
-    // O que vai para o backend (limpo):
-    const nome = parsed.loteria;          // ex.: "LT PT RIO"
-    const horario = parsed.codigoHorario; // ex.: "18HS"
+    // O que vai para o backend (nome + label completo do horário)
+    const nome = parsed.loteria; // ex.: "LT PT RIO"
+    const horario = rawHorario; // ex.: "LT PT RIO 18HS"
 
     const key = `${slug}-${rawHorario}`;
     const exists = selected.find((s) => s.key === key);
@@ -301,7 +308,7 @@ const LoteriasSorteiosPage = () => {
                   alignItems: 'center',
                 }}
               >
-                {s.nome} • {s.horario}
+                {formatSelectionLabel(s)}
                 <button
                   type="button"
                   onClick={() => toggleSelection(s.slug, s.grupo || s.nome, s.rawHorario || s.horario)}
@@ -389,7 +396,7 @@ const LoteriasSorteiosPage = () => {
             updateDraft({
               selecoes: selected,
               loteria: selected[0]?.nome || null,
-              codigoHorario: selected[0]?.horario || null,
+              codigoHorario: selected[0]?.horario || selected[0]?.rawHorario || null,
             });
             navigate('/loterias-final');
           }}

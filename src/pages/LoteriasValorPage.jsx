@@ -6,9 +6,22 @@ import { formatDateBR } from '../utils/date';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
-import { deriveValendoPalpites } from '../utils/valendoDerive';
 
 const quickAdds = [5, 20, 50, 100];
+
+const parseMoneyBR = (raw) => {
+  if (!raw) return 0;
+  const normalized = raw.replace(',', '.').replace(/[^0-9.]/g, '');
+  const value = Number(normalized);
+  if (Number.isNaN(value)) return 0;
+  return Math.round(value * 100) / 100;
+};
+
+const formatMoneyBR = (value) =>
+  Number(value || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const LoteriasValorPage = () => {
   const navigate = useNavigate();
@@ -17,48 +30,76 @@ const LoteriasValorPage = () => {
   const [draft, setDraft] = useState({});
   const [showBalance, setShowBalance] = useState(true);
   const [valor, setValor] = useState('');
+  const [valorNumber, setValorNumber] = useState(0);
   const [modoValor, setModoValor] = useState('todos'); // 'todos' ou 'cada'
 
   useEffect(() => {
     const d = getDraft();
     setDraft(d);
-    if (d?.valorAposta) setValor(String(d.valorAposta));
+    if (d?.valorAposta !== undefined && d?.valorAposta !== null) {
+      const initialValor = Number(d.valorAposta);
+      if (!Number.isNaN(initialValor)) {
+        setValorNumber(initialValor);
+        setValor(formatMoneyBR(initialValor));
+      }
+    }
     if (d?.modoValor) setModoValor(d.modoValor);
     refreshUser();
   }, [refreshUser]);
 
-  const formatInputMoney = (raw) => {
-    const digits = String(raw || '').replace(/\D/g, '');
-    if (!digits) return '';
-    const number = Number(digits) / 100;
-    return number.toFixed(2);
-  };
-
-  const parsedValor = Number(valor) || 0;
+  const parsedValor = parseMoneyBR(valor);
 
   const addQuick = (n) => {
-    const current = Number(valor) || 0;
+    const current = parseMoneyBR(valor);
     const next = current + n;
-    setValor(String(next));
+    setValorNumber(next);
+    setValor(formatMoneyBR(next));
     updateDraft({ valorAposta: next, modoValor });
   };
 
   const handleContinue = () => {
     const d = getDraft();
-    if (d?.isValendoFlow) {
-      const base = Array.isArray(d?.valendoBasePalpites) ? d.valendoBasePalpites : [];
-      const palpitesDerivados = deriveValendoPalpites(base, d?.modalidade);
-      updateDraft({ palpites: palpitesDerivados });
+    const finalValor = parseMoneyBR(valor);
+    setValorNumber(finalValor);
+    setValor(formatMoneyBR(finalValor));
+    const nextModoValor = modoValor || 'todos';
+    if (d?.isValendo) {
+      const apostas = Array.isArray(d?.apostas) ? d.apostas : [];
+      const palpites = Array.isArray(d?.palpites) ? d.palpites : [];
+      const qtd = palpites.length;
+      const isCada = nextModoValor === 'cada';
+      const totalCalc = isCada ? finalValor * Math.max(qtd, 1) : finalValor;
+      const valorNumero = isCada ? finalValor : qtd ? finalValor / qtd : finalValor;
+      const novaLinha = {
+        jogo: d?.jogo || '',
+        data: d?.data || '',
+        modalidade: d?.modalidade || '',
+        colocacao: d?.colocacao || null,
+        palpites,
+        modoValor: isCada ? 'cada' : 'todos',
+        valorAposta: finalValor,
+        valorPorNumero: valorNumero,
+        total: totalCalc,
+        isValendo: true,
+      };
+      const updated = {
+        ...d,
+        apostas: [...apostas, novaLinha],
+        valorAposta: finalValor,
+        modoValor: nextModoValor,
+        currentSaved: true,
+        isValendo: false,
+      };
+      updateDraft(updated);
+      navigate(`/loterias/${jogo}/resumo`);
+      return;
     }
 
     updateDraft({
-      valorAposta: parsedValor,
-      modoValor,
+      valorAposta: finalValor,
+      modoValor: nextModoValor,
       currentSaved: false,
-      isValendoFlow: false,
-      valendoBasePalpites: null,
-      valendoBaseModalidade: null,
-      valendoBaseKind: null,
+      isValendo: false,
     });
     navigate(`/loterias/${jogo}/resumo`);
   };
@@ -95,9 +136,13 @@ const LoteriasValorPage = () => {
             min="0"
             value={valor}
             onChange={(e) => {
-              const formatted = formatInputMoney(e.target.value);
-              setValor(formatted);
-              updateDraft({ valorAposta: Number(formatted), modoValor });
+              setValor(e.target.value);
+            }}
+            onBlur={() => {
+              const parsed = parseMoneyBR(valor);
+              setValorNumber(parsed);
+              setValor(formatMoneyBR(parsed));
+              updateDraft({ valorAposta: parsed, modoValor });
             }}
             placeholder="0,00"
             className="flex-1 min-w-[160px] px-3 py-3 border border-gray-300 rounded-lg text-lg focus:ring-emerald-500 focus:border-emerald-500 transition"

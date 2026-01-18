@@ -76,8 +76,9 @@ const LoteriasRepetirPage = () => {
       .map((p) => String(p || '').replace(/\D/g, ''));
     const base4 = allPalpites.filter((p) => p.length === 4);
     const base3 = allPalpites.filter((p) => p.length === 3);
-    const baseDigits = base4.length ? 4 : base3.length ? 3 : null;
     const basePalpites = base4.length ? base4 : base3;
+    const numerosBase = Array.isArray(base?.palpites) && base.palpites.length ? base.palpites : basePalpites;
+    const modalidadeBase = base?.modalidade || base?.jogo || '';
 
     return {
       jogo: base?.jogo || pule.loteria || '',
@@ -93,9 +94,12 @@ const LoteriasRepetirPage = () => {
       modoValor,
       currentSaved: false,
       apostas: apostasNorm,
-      valendo: hasValendoShape
-        ? { locked: true, baseDigits, basePalpites }
-        : { locked: false, baseDigits, basePalpites },
+      isValendo: false,
+      valendoLocked: hasValendoShape,
+      valendoBase: {
+        modalidadeBase,
+        numerosBase,
+      },
       repeatSource: {
         betId: pule.id,
         betRef: pule.betRef || `${pule.userId || ''}-${pule.id}`,
@@ -109,6 +113,8 @@ const LoteriasRepetirPage = () => {
   const handleRepeat = (pule, ap) => {
     const valorBase = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? 0) || 0;
     const modoValor = ap?.modoValor || (ap?.palpites?.length > 1 ? 'cada' : 'todos');
+    const modalidadeBase = ap?.modalidade || ap?.jogo || '';
+    const numerosBase = Array.isArray(ap?.palpites) ? ap.palpites : [];
     const newDraft = {
       jogo: ap?.jogo || pule.loteria || '',
       slug: null,
@@ -134,6 +140,12 @@ const LoteriasRepetirPage = () => {
           total: ap?.total ?? valorBase,
         },
       ],
+      isValendo: false,
+      valendoLocked: false,
+      valendoBase: {
+        modalidadeBase,
+        numerosBase,
+      },
       repeatSource: {
         betId: pule.id,
         betRef: pule.betRef || `${pule.userId || ''}-${pule.id}`,

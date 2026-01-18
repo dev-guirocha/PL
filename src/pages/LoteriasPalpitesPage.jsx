@@ -8,6 +8,7 @@ import Spinner from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import SmartBetInput from '../components/Betting/SmartBetInput';
 import { isSmartInputSupported } from '../utils/betParser';
+import { deriveValendoPalpites } from '../utils/valendoDerive';
 
 const LoteriasPalpitesPage = () => {
   const navigate = useNavigate();
@@ -19,8 +20,10 @@ const LoteriasPalpitesPage = () => {
   const [palpites, setPalpites] = useState([]);
   const [palpiteError, setPalpiteError] = useState('');
   const prevLength = useRef(0);
+  const valendoAutoRef = useRef(false);
 
   const modalidade = (draft?.modalidade || '').toUpperCase();
+  const isValendo = Boolean(draft?.isValendo);
   const expectedDigits = modalidade.includes('MILHAR')
     ? 4
     : modalidade.includes('CENTENA')
@@ -46,6 +49,19 @@ const LoteriasPalpitesPage = () => {
     }
     refreshUser();
   }, [refreshUser]);
+
+  useEffect(() => {
+    if (!isValendo || valendoAutoRef.current) return;
+    valendoAutoRef.current = true;
+    const baseNumbers = Array.isArray(draft?.valendoBase?.numerosBase) ? draft.valendoBase.numerosBase : [];
+    const derived = deriveValendoPalpites(baseNumbers, draft?.modalidade);
+    const signature = `${draft?.jogo || ''}|${draft?.data || ''}|${draft?.modalidade || ''}|${draft?.colocacao || ''}`;
+    updateDraft({ palpites: derived, palpitesSignature: signature });
+    setPalpites(derived);
+    setPalpite('');
+    setPalpiteError('');
+    navigate(`/loterias/${jogo}/valor`);
+  }, [draft?.valendoBase?.numerosBase, draft?.modalidade, draft?.colocacao, draft?.data, draft?.jogo, isValendo, navigate, jogo]);
 
   const styles = {
     container: {
@@ -198,12 +214,25 @@ const LoteriasPalpitesPage = () => {
         {draft?.colocacao && (
           <div style={styles.subtitle}>Colocação: {draft.colocacao}</div>
         )}
-        {showSmartInput && (
+        {isValendo ? (
+          <>
+            <div style={styles.placeholder}>Palpites gerados automaticamente ({palpites.length})</div>
+            {palpites.length ? (
+              <div style={styles.chips}>
+                {palpites.map((p, idx) => (
+                  <span key={`${p}-${idx}`} style={styles.chip}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : showSmartInput ? (
           <div style={{ marginTop: '4px' }}>
             <SmartBetInput modalidadeSelecionada={modalidade} onAddPalpites={handleSmartAdd} />
           </div>
-        )}
-        {isSupportedModalidade ? (
+        ) : null}
+        {!isValendo && isSupportedModalidade ? (
           <>
             <div style={styles.subtitle}>
               Digite sua {modalidade.toLowerCase()} ({expectedDigits} número{expectedDigits === 1 ? '' : 's'}).
@@ -254,13 +283,13 @@ const LoteriasPalpitesPage = () => {
               Avançar
             </button>
           </>
-        ) : (
+        ) : !isValendo ? (
           <div style={styles.placeholder}>
             {showSmartInput
               ? 'Use o campo "Copiar e Colar" para adicionar palpites desta modalidade.'
               : 'Modalidade ainda não configurada para palpites. Selecione uma centena.'}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

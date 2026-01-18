@@ -5,11 +5,26 @@ import { getDraft, updateDraft } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR } from '../utils/date';
 
+const parseMoneyBR = (raw) => {
+  if (!raw) return 0;
+  const normalized = raw.replace(',', '.').replace(/[^0-9.]/g, '');
+  const value = Number(normalized);
+  if (Number.isNaN(value)) return 0;
+  return Math.round(value * 100) / 100;
+};
+
+const formatMoneyBR = (value) =>
+  Number(value || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const LoteriasRepetirValorPage = () => {
   const navigate = useNavigate();
   const { authError, refreshUser } = useAuth();
   const [draft, setDraft] = useState({});
   const [valor, setValor] = useState('');
+  const [valorNumber, setValorNumber] = useState(0);
   const [modoValor, setModoValor] = useState('todos');
   const source = draft?.repeatSource;
 
@@ -22,28 +37,30 @@ const LoteriasRepetirValorPage = () => {
     }
     setDraft(d);
     const first = d.apostas[0];
-    if (first?.valorAposta) setValor(String(first.valorAposta));
+    if (first?.valorAposta !== undefined && first?.valorAposta !== null) {
+      const initialValor = Number(first.valorAposta);
+      if (!Number.isNaN(initialValor)) {
+        setValorNumber(initialValor);
+        setValor(formatMoneyBR(initialValor));
+      }
+    }
     if (first?.modoValor) setModoValor(first.modoValor);
   }, [refreshUser, navigate]);
 
-  const formatInputMoney = (raw) => {
-    const digits = String(raw || '').replace(/\D/g, '');
-    if (!digits) return '';
-    const number = Number(digits) / 100;
-    return number.toFixed(2);
-  };
-
-  const parsedValor = Number(valor) || 0;
+  const parsedValor = parseMoneyBR(valor);
 
   const applyValue = () => {
     if (!draft?.apostas?.length) return;
+    const finalValor = parseMoneyBR(valor);
+    setValorNumber(finalValor);
+    setValor(formatMoneyBR(finalValor));
     const apostasAtualizadas = draft.apostas.map((ap) => {
       const qtd = ap?.palpites?.length || 0;
       const isCada = modoValor === 'cada' || ap?.modoValor === 'cada';
-      const total = isCada ? parsedValor * Math.max(qtd, 1) : parsedValor;
+      const total = isCada ? finalValor * Math.max(qtd, 1) : finalValor;
       return {
         ...ap,
-        valorAposta: parsedValor,
+        valorAposta: finalValor,
         modoValor: isCada ? 'cada' : 'todos',
         total,
       };
@@ -52,7 +69,8 @@ const LoteriasRepetirValorPage = () => {
   };
 
   const handleContinue = () => {
-    if (!parsedValor || parsedValor <= 0) return;
+    const finalValor = parseMoneyBR(valor);
+    if (!finalValor || finalValor <= 0) return;
     applyValue();
     navigate('/loterias/repetir/data');
   };
@@ -99,8 +117,12 @@ const LoteriasRepetirValorPage = () => {
             min="0"
             value={valor}
             onChange={(e) => {
-              const formatted = formatInputMoney(e.target.value);
-              setValor(formatted);
+              setValor(e.target.value);
+            }}
+            onBlur={() => {
+              const parsed = parseMoneyBR(valor);
+              setValorNumber(parsed);
+              setValor(formatMoneyBR(parsed));
             }}
             placeholder="0,00"
             className="flex-1 min-w-[160px] px-3 py-3 border border-gray-300 rounded-lg text-lg focus:ring-emerald-500 focus:border-emerald-500 transition"

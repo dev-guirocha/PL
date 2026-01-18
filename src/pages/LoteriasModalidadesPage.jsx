@@ -16,18 +16,22 @@ const LoteriasModalidadesPage = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [showValendoBaseModal, setShowValendoBaseModal] = useState(false);
 
-  const isValendoFlow = Boolean(draft?.isValendoFlow);
-  const baseKind = String(draft?.valendoBaseKind || '').toUpperCase();
-  const baseModalidade = String(draft?.valendoBaseModalidade || '').toUpperCase();
-  const baseIsCentena = baseKind === 'CENTENA' || baseModalidade.startsWith('CENTENA');
+  const isValendoFlow = Boolean(draft?.isValendo);
+  const valendoBase = draft?.valendoBase || {};
+  const baseModalidade = String(valendoBase?.modalidadeBase || '').toUpperCase();
   const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
-  const basePalpites = Array.isArray(draft?.valendoBasePalpites) ? draft.valendoBasePalpites : [];
+  const basePalpites = Array.isArray(valendoBase?.numerosBase) ? valendoBase.numerosBase : [];
   const normalizedBasePalpites = basePalpites.map((p) => onlyDigits(p)).filter(Boolean);
+  const baseDigits = (() => {
+    const sizes = normalizedBasePalpites.map((p) => p.length).filter(Boolean);
+    if (sizes.includes(4)) return 4;
+    if (sizes.includes(3)) return 3;
+    return null;
+  })();
+  const baseIsCentena = baseDigits === 3 || baseModalidade.startsWith('CENTENA');
   const valendoBaseLabel = (() => {
-    if (baseKind === 'MILHAR') return 'MILHAR';
-    if (baseKind === 'CENTENA') return 'CENTENA';
-    if (baseModalidade.includes('MILHAR')) return 'MILHAR';
-    if (baseModalidade.startsWith('CENTENA')) return 'CENTENA';
+    if (baseDigits === 4 || baseModalidade.includes('MILHAR')) return 'MILHAR';
+    if (baseDigits === 3 || baseModalidade.startsWith('CENTENA')) return 'CENTENA';
     return '—';
   })();
   const valendoHint = baseIsCentena
@@ -61,8 +65,8 @@ const LoteriasModalidadesPage = () => {
     ? MODALIDADES.filter((m) => {
         const up = String(m || '').toUpperCase();
         if (!valendoAllowList.includes(up)) return false;
-        // Regra 7.2: se base=centena, o menu do Valendo exclui milhar
-        if (baseIsCentena && up.startsWith('MILHAR')) return false;
+        if (baseIsCentena && ['MILHAR', 'MILHAR INV', 'MILHAR E CT'].includes(up)) return false;
+        if (up === 'MILHAR E CT' && baseDigits !== 4) return false;
         return true;
       })
     : MODALIDADES;
@@ -306,10 +310,6 @@ const LoteriasModalidadesPage = () => {
               style={styles.item}
               onClick={() => {
                 updateDraft({ modalidade: m });
-                if (isValendoFlow) {
-                  navigate(`/loterias/${jogo}/colocacao`);
-                  return;
-                }
                 if (CAN_CHOOSE_COLOCACAO.includes(m.toUpperCase())) {
                   navigate(`/loterias/${jogo}/colocacao`);
                 } else if (DIRECT_TO_PALPITES.includes(m.toUpperCase())) {

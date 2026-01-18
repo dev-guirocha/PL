@@ -84,28 +84,34 @@ export const generatePulePDF = (pule) => {
   doc.setTextColor(100);
   doc.text(`Referência: ${pule.betRef || `${pule.userId || ''}-${pule.id || ''}`}`, 14, 48);
 
-  const head = ['#', 'Modalidade', 'Prêmio', 'Palpites', 'Valor nº', 'Total'];
-  const body = [];
+  const baseNumbers = (() => {
+    if (Array.isArray(pule?.valendoBase?.numerosBase) && pule.valendoBase.numerosBase.length) {
+      return pule.valendoBase.numerosBase;
+    }
+    const first = (pule.apostas || [])[0];
+    if (Array.isArray(first?.palpites) && first.palpites.length) return first.palpites;
+    return [];
+  })();
 
-  (pule.apostas || []).forEach((ap, idx) => {
-    const valorBase = Number(ap?.valorAposta ?? ap?.valorPorNumero ?? ap?.total ?? 0) || 0;
-    const qtd = ap?.palpites?.length || 0;
-    const isCada = ap?.modoValor === 'cada';
-    const total = isCada ? valorBase * Math.max(qtd, 1) : valorBase;
-    const valorPorNumero = isCada ? valorBase : qtd ? valorBase / qtd : valorBase;
-    const palpites = Array.isArray(ap.palpites) ? ap.palpites.join(', ') : '';
-    body.push([
-      `${idx + 1}`,
-      ap.modalidade || ap.jogo || '',
-      ap.colocacao || '',
-      palpites,
-      `R$ ${valorPorNumero.toFixed(2).replace('.', ',')}`,
-      `R$ ${total.toFixed(2).replace('.', ',')}`,
-    ]);
-  });
+  let startY = 55;
+  if (baseNumbers.length) {
+    doc.setFontSize(10);
+    const baseLine = `Números base: ${baseNumbers.join(', ')}`;
+    const wrapped = doc.splitTextToSize(baseLine, 180);
+    doc.text(wrapped, 14, startY);
+    startY += wrapped.length * 5 + 4;
+  }
+
+  const head = ['Modalidade', 'Colocação', 'Valor', 'Aplicação'];
+  const body = (pule.apostas || []).map((ap) => [
+    ap.modalidade || ap.jogo || '',
+    ap.colocacao || '',
+    `R$ ${(Number(ap.valorAposta) || 0).toFixed(2).replace('.', ',')}`,
+    ap.modoValor === 'cada' ? 'Cada' : 'Todos',
+  ]);
 
   autoTable(doc, {
-    startY: 55,
+    startY,
     head: [head],
     body,
     theme: 'grid',
