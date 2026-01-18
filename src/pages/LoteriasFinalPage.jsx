@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import api from '../utils/api';
 import Spinner from '../components/Spinner';
-import { getDraft, clearDraft, appendToHistory, updateDraft } from '../utils/receipt';
-import PAYOUTS from '../constants/payouts.json';
+import { getDraft, clearDraft, appendToHistory, updateDraft, buildReceiptEntry } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
-import { formatDateBR } from '../utils/date';
 
 const createIdempotencyKey = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -30,6 +28,13 @@ const LoteriasFinalPage = () => {
     refreshUser();
   }, [refreshUser]);
 
+  const formatSelectionLabel = (sel) => {
+    const label = sel?.horario || '';
+    if (!label) return sel?.nome || sel?.slug || '';
+    if (!sel?.nome) return label;
+    return label.includes(sel.nome) ? label : `${sel.nome} • ${label}`;
+  };
+
   const selecoes = useMemo(() => {
     if (Array.isArray(draft?.selecoes) && draft.selecoes.length) return draft.selecoes;
     if (draft?.loteria && draft?.codigoHorario) {
@@ -45,33 +50,21 @@ const LoteriasFinalPage = () => {
     return [];
   }, [draft]);
 
+  const baseNumbers = useMemo(() => {
+    if (Array.isArray(draft?.valendoBase?.numerosBase) && draft.valendoBase.numerosBase.length) {
+      return draft.valendoBase.numerosBase;
+    }
+    const first = (draft?.apostas || [])[0];
+    if (Array.isArray(first?.palpites) && first.palpites.length) return first.palpites;
+    if (Array.isArray(draft?.palpites) && draft.palpites.length) return draft.palpites;
+    return [];
+  }, [draft]);
+
   const total = useMemo(() => {
     const apostas = draft?.apostas || [];
     const unit = apostas.reduce((sum, ap) => sum + (ap.total || 0), 0);
     return unit * Math.max(selecoes.length || 1, 1);
   }, [draft, selecoes.length]);
-
-  const valorPorNumero = useMemo(() => {
-    const apostas = draft?.apostas || [];
-    if (!apostas.length) return 0;
-    // mostra do último item como referência
-    const last = apostas[apostas.length - 1];
-    return last?.valorPorNumero || 0;
-  }, [draft]);
-
-  const ganhos = useMemo(() => {
-    const apostas = draft?.apostas || [];
-    return apostas
-      .map((ap) => {
-        const key = (ap.modalidade || '').toUpperCase().trim();
-        const payout = PAYOUTS[key];
-        if (!payout) return null;
-        const valorAposta = Number(ap.total || 0);
-        const ganho = valorAposta * payout;
-        return { modalidade: ap.modalidade, valor: valorAposta, ganho };
-      })
-      .filter(Boolean);
-  }, [draft]);
 
   const styles = {
     container: {
@@ -152,6 +145,13 @@ const LoteriasFinalPage = () => {
       fontWeight: 'bold',
       border: '1px solid #9ed8b6',
     },
+    lineRow: {
+      borderTop: '1px dashed #9ed8b6',
+      paddingTop: '8px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+    },
     totalRow: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -196,7 +196,7 @@ const LoteriasFinalPage = () => {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {selecoes.map((s) => (
                 <span key={s.key || `${s.slug}-${s.horario}`} style={styles.chip}>
-                  {s.nome || s.slug} • {s.horario}
+                  {formatSelectionLabel(s)}
                 </span>
               ))}
             </div>
@@ -206,77 +206,59 @@ const LoteriasFinalPage = () => {
               {draft?.codigoHorario && <span>Horário: {draft.codigoHorario}</span>}
             </>
           )}
-        {draft?.apostas?.map((ap, idx) => (
-          <div key={idx} style={{ borderTop: '1px dashed #9ed8b6', paddingTop: '8px' }}>
-            <div style={styles.totalRow}>
-              <span>{ap.jogo}</span>
-              <span>{formatDateBR(ap.data)}</span>
-            </div>
-            {ap.modalidade && <span>Modalidade: {ap.modalidade}</span>}
-            {ap.colocacao && <span>Prêmio: {ap.colocacao}</span>}
-            <span>Qtd palpites: {ap.palpites?.length || 0}</span>
-            {ap?.palpites?.length ? (
+          {baseNumbers.length ? (
+            <div style={styles.lineRow}>
+              <span style={{ fontWeight: 'bold' }}>Números base</span>
               <div style={styles.chipRow}>
-                {ap.palpites.map((p, i) => (
+                {baseNumbers.map((p, i) => (
                   <span key={`${p}-${i}`} style={styles.chip}>
                     {p}
                   </span>
                 ))}
               </div>
-            ) : null}
-            <div style={styles.totalRow}>
-              <span>Valor por número:</span>
-              <span>R$ {(ap.valorPorNumero || 0).toFixed(2).replace('.', ',')}</span>
             </div>
-            <div style={styles.totalRow}>
-              <span>Valor da aposta:</span>
-              <span>R$ {(ap.total || 0).toFixed(2).replace('.', ',')}</span>
+          ) : null}
+          {draft?.apostas?.map((ap, idx) => (
+            <div key={idx} style={styles.lineRow}>
+              <div style={styles.totalRow}>
+                <span>{ap.modalidade || ap.jogo || 'Modalidade'}</span>
+                <button
+                  type="button"
+                  style={{
+                    border: '1px solid #fecdd3',
+                    background: '#fff1f2',
+                    color: '#b91c1c',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    const updated = (draft?.apostas || []).filter((_, i) => i !== idx);
+                    const next = { ...draft, apostas: updated };
+                    setDraft(next);
+                    updateDraft(next);
+                  }}
+                >
+                  Apagar
+                </button>
+              </div>
+              {ap.colocacao && <span>Colocação: {ap.colocacao}</span>}
+              <div style={styles.totalRow}>
+                <span>Valor:</span>
+                <span>R$ {(Number(ap.valorAposta) || 0).toFixed(2).replace('.', ',')}</span>
+              </div>
+              <div style={styles.totalRow}>
+                <span>Aplicação:</span>
+                <span>{ap.modoValor === 'cada' ? 'Cada' : 'Todos'}</span>
+              </div>
             </div>
-            <div style={{ marginTop: '6px', textAlign: 'right' }}>
-              <button
-                type="button"
-                style={{
-                  border: '1px solid #fecdd3',
-                  background: '#fff1f2',
-                  color: '#b91c1c',
-                  padding: '6px 10px',
-                  borderRadius: '8px',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  const updated = (draft?.apostas || []).filter((_, i) => i !== idx);
-                  const next = { ...draft, apostas: updated };
-                  setDraft(next);
-                  updateDraft(next);
-                }}
-              >
-                Apagar aposta
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
           <div style={styles.totalRow}>
             <span>Valor total a pagar:</span>
             <span>R$ {total.toFixed(2).replace('.', ',')}</span>
           </div>
-          {ganhos.length > 0 && (
-            <div style={{ marginTop: '8px', color: '#166534' }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Possíveis ganhos (1ª linha)</div>
-              {ganhos.map((g, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span>{g.modalidade}</span>
-                  <span>R$ {g.ganho.toFixed(2).replace('.', ',')}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {valorPorNumero ? (
-            <div style={{ color: '#166534', fontSize: '13px' }}>
-              Valor por número (última aposta): R$ {valorPorNumero.toFixed(2).replace('.', ',')}
-            </div>
-          ) : null}
         </div>
 
         {message && <div style={styles.message}>{message}</div>}
@@ -355,13 +337,14 @@ const LoteriasFinalPage = () => {
                 if (lastBalances.balance !== undefined) {
                   updateBalances(lastBalances);
                 }
-                appendToHistory({
-                  criadoEm: new Date().toISOString(),
-                  selecoes,
-                  apostas: draft?.apostas || [],
-                  total: totalDebited || total,
-                  bets: betsCreated,
-                });
+                appendToHistory(
+                  buildReceiptEntry({
+                    selecoes: baseNumbers,
+                    apostas: draft?.apostas || [],
+                    total: totalDebited || total,
+                    bets: betsCreated,
+                  }),
+                );
                 setSuccess('Aposta realizada com sucesso! PULE salvo no histórico.');
                 setMessage('');
                 clearDraft();

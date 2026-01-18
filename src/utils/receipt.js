@@ -41,6 +41,14 @@ export const appendToHistory = (entry) => {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
 };
 
+export const buildReceiptEntry = ({ selecoes, apostas, total, bets }) => ({
+  criadoEm: new Date().toISOString(),
+  selecoes: Array.isArray(selecoes) ? selecoes : [],
+  apostas: Array.isArray(apostas) ? apostas : [],
+  total: Number(total) || 0,
+  bets: Array.isArray(bets) ? bets : [],
+});
+
 export const getHistory = () => {
   if (typeof window === 'undefined') return [];
   const raw = localStorage.getItem(HISTORY_KEY);

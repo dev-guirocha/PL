@@ -13,7 +13,6 @@ const LoteriasColocacaoPage = () => {
   const { balance, loadingUser, refreshUser, authError } = useAuth();
   const [draft, setDraft] = useState({});
   const [showBalance, setShowBalance] = useState(true);
-  const isValendoFlow = Boolean(draft?.isValendoFlow);
 
   useEffect(() => {
     setDraft(getDraft());
@@ -96,7 +95,7 @@ const LoteriasColocacaoPage = () => {
               style={styles.item}
               onClick={() => {
                 updateDraft({ colocacao: c });
-                navigate(isValendoFlow ? `/loterias/${jogo}/valor` : `/loterias/${jogo}/palpites`);
+                navigate(`/loterias/${jogo}/palpites`);
               }}
             >
               {c}
