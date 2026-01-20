@@ -7,6 +7,14 @@
 
 const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prismaClient');
+const { recordTransaction } = require('../services/financeService');
+const {
+  normalizeLabel: normalizeHorarioLabel,
+  hasLetters: horarioHasLetters,
+  codeKind: codigoKind,
+  codesMatchStrict,
+  isMaluqFederal,
+} = require('../utils/codigoHorario');
 
 // --- CONSTANTES ---
 const MAX_AUTO_PAYOUT = 10000; // Teto para aprovação automática
@@ -14,6 +22,7 @@ const AUDIT_LOGS = process.env.AUDIT_LOGS === '1'; // Controlado por ENV
 const ADMIN_DEBUG = process.env.ADMIN_DEBUG === 'true';
 const ZERO_DECIMAL = new Prisma.Decimal(0);
 const MAX_AUTO_PAYOUT_DEC = new Prisma.Decimal(MAX_AUTO_PAYOUT);
+const MANUAL_SETTLEMENT_MISSING = 'MANUAL_SETTLEMENT_MISSING';
 
 const toDecimalSafe = (value) => {
   if (value instanceof Prisma.Decimal) return value;
@@ -28,6 +37,29 @@ const toDecimalSafe = (value) => {
 const toDecimalMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 
 // --- FUNÇÕES AUXILIARES ---
+const isManualSettlementMissing = (err) => {
+  const code = err?.code;
+  const message = String(err?.message || '');
+  const table = err?.meta?.table || err?.meta?.model || '';
+  if (code === 'P2021') {
+    return table === 'ManualSettlement' || message.includes('ManualSettlement');
+  }
+  return message.includes('ManualSettlement') && message.toLowerCase().includes('does not exist');
+};
+
+const ensureManualSettlementTable = async () => {
+  try {
+    await prisma.manualSettlement.findFirst({ select: { id: true } });
+  } catch (err) {
+    if (isManualSettlementMissing(err)) {
+      const error = new Error(MANUAL_SETTLEMENT_MISSING);
+      error.statusCode = 503;
+      throw error;
+    }
+    throw err;
+  }
+};
+
 const extractHour = (str) => {
   if (!str) return 'XX';
   const nums = String(str).replace(/\D/g, '');
@@ -46,6 +78,40 @@ const normalizeDate = (dateStr) => {
     }
   }
   return clean;
+};
+
+const compareCodigoHorario = (betCode, resultCode) => {
+  const betKind = codigoKind(betCode);
+  const resultKind = codigoKind(resultCode);
+  const betIsMaluqFederal = isMaluqFederal(betCode);
+  const resultIsMaluqFederal = isMaluqFederal(resultCode);
+
+  if (resultKind === 'FEDERAL') {
+    if (betKind !== 'FEDERAL') return false;
+    if (betIsMaluqFederal || resultIsMaluqFederal) return false;
+  } else if (resultKind === 'MALUQ') {
+    if (betKind !== 'MALUQ') return false;
+    if (betIsMaluqFederal !== resultIsMaluqFederal) return false;
+  } else if (resultKind === 'PT_RIO') {
+    if (betKind !== 'PT_RIO') return false;
+  } else {
+    if (betKind !== 'UNKNOWN') return false;
+  }
+
+  return codesMatchStrict(betCode, resultCode);
+};
+
+const getCompareMode = (betCode, resultCode) => {
+  const b = normalizeHorarioLabel(betCode);
+  const r = normalizeHorarioLabel(resultCode);
+  const bHas = horarioHasLetters(b);
+  const rHas = horarioHasLetters(r);
+  if (bHas && rHas) return b === r ? 'LABEL_STRICT' : 'LABEL_MISMATCH';
+  if (!bHas && rHas) return 'LABEL_REQUIRED';
+  const bh = b.match(/(\d{1,2})/);
+  const rh = r.match(/(\d{1,2})/);
+  if (bh && rh) return 'TIME_FALLBACK';
+  return 'NO_MATCH';
 };
 
 const getCanonicalName = (str) => {
@@ -401,6 +467,218 @@ function checkVictory({ modal, palpites, premios }) {
   return { factor: wins.length, wins };
 }
 
+const parseResultNumbers = (result) => {
+  let numeros = [];
+  let grupos = [];
+  try {
+    numeros = Array.isArray(result.numeros) ? result.numeros : JSON.parse(result.numeros || '[]');
+  } catch {
+    numeros = [];
+  }
+  try {
+    grupos = Array.isArray(result.grupos) ? result.grupos : JSON.parse(result.grupos || '[]');
+  } catch {
+    grupos = [];
+  }
+  return { numeros, grupos };
+};
+
+const buildPremios = (numeros) =>
+  (Array.isArray(numeros) ? numeros : [])
+    .map((n) => String(n).replace(/\D/g, '').slice(-4).padStart(4, '0'))
+    .filter(Boolean);
+
+const isKindMatch = (betCode, resultCode) => {
+  const betKind = codigoKind(betCode);
+  const resultKind = codigoKind(resultCode);
+  const betMaluqFederal = isMaluqFederal(betCode);
+  const resultMaluqFederal = isMaluqFederal(resultCode);
+
+  if (betKind === 'PT_RIO') return resultKind === 'PT_RIO';
+  if (betKind === 'MALUQ') return resultKind === 'MALUQ' && betMaluqFederal === resultMaluqFederal;
+  if (betKind === 'FEDERAL') return resultKind === 'FEDERAL' && !resultMaluqFederal;
+  if (betKind === 'UNKNOWN') return resultKind === 'UNKNOWN';
+  return false;
+};
+
+const simulateBetAgainstResult = ({ bet, result }) => {
+  const { numeros, grupos } = parseResultNumbers(result);
+  const premios = buildPremios(numeros);
+  if (!premios.length) {
+    return {
+      wouldWin: false,
+      prize: '0.00',
+      wins: [],
+      reason: 'RESULTADO_SEM_NUMEROS',
+      resultSnapshot: { numeros, grupos },
+    };
+  }
+
+  const apostas = parseApostasFromBet(bet);
+  if (!apostas.length) {
+    return {
+      wouldWin: false,
+      prize: '0.00',
+      wins: [],
+      reason: 'APOSTA_SEM_LINHAS',
+      resultSnapshot: { numeros, grupos },
+    };
+  }
+
+  let prize = ZERO_DECIMAL;
+  let requiresManualReview = false;
+  const wins = [];
+
+  apostas.forEach((aposta, apostaIndex) => {
+    const modalSrc = aposta.modalidade || bet.modalidade || '';
+    const modalNorm = normalizeModalidade(modalSrc);
+    const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
+    const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
+
+    const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
+    const betTotalNum = toDecimalMoney(rawTotal);
+    const valPorNum = toDecimalMoney(aposta.valorPorNumero);
+    const palpCount = palpites.length || 0;
+    const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
+      ? valPorNum
+      : palpCount > 0
+        ? betTotalNum.div(new Prisma.Decimal(palpCount))
+        : ZERO_DECIMAL;
+
+    if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) {
+      wins.push({
+        apostaIndex,
+        modalidade: modalNorm,
+        colocacao: colocacaoRaw,
+        matched: [],
+        payout: '0',
+        reason: 'VALOR_INVALIDO',
+      });
+      return;
+    }
+
+    if (modalNorm.includes('PASSE') || modalNorm.includes('PALPITAO')) {
+      requiresManualReview = true;
+    }
+
+    const { ok, payout, reason } = computeFinalPayout({ modalidadeRaw: modalNorm, colocacaoRaw });
+    if (!ok) {
+      wins.push({
+        apostaIndex,
+        modalidade: modalNorm,
+        colocacao: colocacaoRaw,
+        matched: [],
+        payout: '0',
+        reason,
+      });
+      return;
+    }
+
+    const allowedIdx = indicesFromColocacao(colocacaoRaw);
+    if (!allowedIdx.length) {
+      wins.push({
+        apostaIndex,
+        modalidade: modalNorm,
+        colocacao: colocacaoRaw,
+        matched: [],
+        payout: String(payout || 0),
+        reason: 'COLOCACAO_INVALIDA',
+      });
+      return;
+    }
+
+    const premiosAllowed = allowedIdx.map((i) => premios[i]).filter(Boolean);
+    if (!premiosAllowed.length) {
+      wins.push({
+        apostaIndex,
+        modalidade: modalNorm,
+        colocacao: colocacaoRaw,
+        matched: [],
+        payout: String(payout || 0),
+        reason: 'SEM_PREMIOS',
+      });
+      return;
+    }
+
+    const baseMods = expandModalidades(modalNorm);
+    const matched = new Set();
+    let linePrize = ZERO_DECIMAL;
+
+    if (baseMods.length > 1 && !baseMods.includes('COMPOSTA') && !baseMods.includes('UNKNOWN')) {
+      const isHybridMC = baseMods.length === 2 &&
+        baseMods.includes('MILHAR') &&
+        baseMods.includes('CENTENA');
+      const stakeFactor = isHybridMC ? new Prisma.Decimal('0.5') : new Prisma.Decimal(1);
+
+      for (const palpite of palpites) {
+        let amountForThisPalpite = ZERO_DECIMAL;
+        let palpiteMatched = false;
+
+        for (const base of baseMods) {
+          const sub = computeFinalPayout({ modalidadeRaw: base, colocacaoRaw });
+          if (!sub.ok) continue;
+          const { factor, wins: subWins } = checkVictory({ modal: base, palpites: [palpite], premios: premiosAllowed });
+          if (factor > 0) {
+            palpiteMatched = true;
+            if (Array.isArray(subWins)) subWins.forEach((w) => matched.add(w));
+            const winPart = perNumber
+              .mul(stakeFactor)
+              .mul(new Prisma.Decimal(String(sub.payout || 0)))
+              .mul(new Prisma.Decimal(factor));
+            amountForThisPalpite = amountForThisPalpite.add(winPart);
+          }
+        }
+
+        if (palpiteMatched) matched.add(palpite);
+        linePrize = linePrize.add(amountForThisPalpite);
+      }
+    } else {
+      const isComposta = /DUQUE|TERNO|QUADRA|QUINA|PASSE|PALPITAO/.test(modalNorm);
+
+      if (isComposta) {
+        const { factor, hits } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
+        if (factor > 0) {
+          const amount = perNumber
+            .mul(new Prisma.Decimal(String(payout || 0)))
+            .mul(new Prisma.Decimal(factor));
+          linePrize = linePrize.add(amount);
+          if (Array.isArray(hits)) hits.forEach((h) => matched.add(h));
+        }
+      } else {
+        const { factor, wins: lineWins } = checkVictory({ modal: modalNorm, palpites, premios: premiosAllowed });
+        if (factor > 0 && Array.isArray(lineWins)) {
+          lineWins.forEach((w) => {
+            matched.add(w);
+            const amount = perNumber.mul(new Prisma.Decimal(String(payout || 0)));
+            linePrize = linePrize.add(amount);
+          });
+        }
+      }
+    }
+
+    prize = prize.add(linePrize);
+
+    wins.push({
+      apostaIndex,
+      modalidade: modalNorm,
+      colocacao: colocacaoRaw,
+      matched: Array.from(matched),
+      payout: String(payout || 0),
+      prize: linePrize.toDecimalPlaces(2).toFixed(2),
+      reason: matched.size ? null : 'SEM_ACERTO',
+    });
+  });
+
+  const finalPrize = prize.toDecimalPlaces(2);
+  return {
+    wouldWin: finalPrize.greaterThan(ZERO_DECIMAL),
+    prize: finalPrize.toFixed(2),
+    wins,
+    requiresManualReview,
+    resultSnapshot: { numeros, grupos },
+  };
+};
+
 // ==========================================
 // CONTROLLERS
 // ==========================================
@@ -567,10 +845,9 @@ exports.settleBetsForResult = async (req, res) => {
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
 
     const resDate = normalizeDate(result.dataJogo);
-    const resHour = extractHour(result.codigoHorario);
 
-    if (!isValidISODate(resDate) || resHour === 'XX') {
-      return res.status(400).json({ error: 'Resultado com Data ou Hora inválida.' });
+    if (!isValidISODate(resDate)) {
+      return res.status(400).json({ error: 'Resultado com Data inválida.' });
     }
 
     const resFamily = normalizeLotteryFamily(result.loteria);
@@ -601,10 +878,9 @@ exports.settleBetsForResult = async (req, res) => {
     for (const bet of bets) {
       try {
         const betDate = normalizeDate(bet.dataJogo);
-        const betHour = extractHour(bet.codigoHorario);
-        if (!isValidISODate(betDate) || betHour === 'XX') continue;
+        if (!isValidISODate(betDate)) continue;
         if (betDate !== resDate) continue;
-        if (betHour !== resHour) continue;
+        if (!compareCodigoHorario(bet.codigoHorario, result.codigoHorario)) continue;
 
         const betFamily = normalizeLotteryFamily(bet.loteria);
         const betCanonical = getCanonicalName(bet.loteria);
@@ -852,8 +1128,7 @@ exports.recheckSingleBet = async (req, res) => {
     if (bet.recheckedAt) return res.status(409).json({ error: 'Recheck já processado.' });
 
     const betDateISO = normalizeDate(bet.dataJogo);
-    const betHour = extractHour(bet.codigoHorario);
-    if (!isValidISODate(betDateISO) || betHour === 'XX') return res.status(400).json({ error: 'Data inválida' });
+    if (!isValidISODate(betDateISO)) return res.status(400).json({ error: 'Data inválida' });
 
     const betFamily = normalizeLotteryFamily(bet.loteria);
     const [ano, mes, dia] = betDateISO.split('-');
@@ -867,9 +1142,8 @@ exports.recheckSingleBet = async (req, res) => {
     let matchingResult = null;
     for (const r of candidatesFull) {
       const rDate = normalizeDate(r.dataJogo);
-      const rHour = extractHour(r.codigoHorario);
       if (rDate !== betDateISO) continue;
-      if (rHour !== betHour) continue;
+      if (!compareCodigoHorario(bet.codigoHorario, r.codigoHorario)) continue;
 
       const rFamily = normalizeLotteryFamily(r.loteria);
       const familyMatch = betFamily !== 'UNKNOWN' && betFamily === rFamily;
@@ -1078,6 +1352,272 @@ exports.recheckSingleBet = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    return res.status(500).json({ error: err?.message || 'Erro interno.' });
+  }
+};
+
+exports.listManualCompareCandidates = async (req, res) => {
+  const betId = Number(req.params.betId || req.params.id);
+  if (!betId) return res.status(400).json({ error: 'ID inválido.' });
+
+  try {
+    await ensureManualSettlementTable();
+    const bet = await prisma.bet.findUnique({ where: { id: betId } });
+    if (!bet) return res.status(404).json({ error: 'Aposta não encontrada.' });
+
+    const betDateISO = normalizeDate(bet.dataJogo);
+    if (!isValidISODate(betDateISO)) {
+      return res.status(400).json({ error: 'Data inválida.' });
+    }
+
+    const [ano, mes, dia] = betDateISO.split('-');
+    const betDateBR = `${dia}/${mes}/${ano}`;
+
+    const candidatesFull = await prisma.result.findMany({
+      where: {
+        OR: [
+          { dataJogo: { contains: betDateISO } },
+          { dataJogo: { contains: betDateBR } },
+          { dataJogo: String(bet.dataJogo) },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const betLabel = normalizeHorarioLabel(bet.codigoHorario);
+    const betHasLetters = horarioHasLetters(betLabel);
+    const betHour = betHasLetters ? 'XX' : extractHour(betLabel);
+    const filtered = candidatesFull
+      .filter((r) => normalizeDate(r.dataJogo) === betDateISO)
+      .filter((r) => isKindMatch(bet.codigoHorario, r.codigoHorario));
+
+    const sorted = filtered.sort((a, b) => {
+      const aLabel = normalizeHorarioLabel(a.codigoHorario);
+      const bLabel = normalizeHorarioLabel(b.codigoHorario);
+      const aExact = aLabel === betLabel ? 1 : 0;
+      const bExact = bLabel === betLabel ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+
+      let aHourMatch = 0;
+      let bHourMatch = 0;
+      if (!betHasLetters && betHour !== 'XX') {
+        const aHasLetters = horarioHasLetters(aLabel);
+        const bHasLetters = horarioHasLetters(bLabel);
+        if (!aHasLetters) {
+          const aHour = extractHour(aLabel);
+          if (aHour !== 'XX' && aHour === betHour) aHourMatch = 1;
+        }
+        if (!bHasLetters) {
+          const bHour = extractHour(bLabel);
+          if (bHour !== 'XX' && bHour === betHour) bHourMatch = 1;
+        }
+      }
+      if (aHourMatch !== bHourMatch) return bHourMatch - aHourMatch;
+
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    const candidates = sorted.map((r) => ({
+      resultId: r.id,
+      loteria: r.loteria,
+      codigoHorario: r.codigoHorario,
+      dataJogo: r.dataJogo,
+      createdAt: r.createdAt,
+    }));
+
+    return res.json({
+      bet: {
+        id: bet.id,
+        userId: bet.userId,
+        codigoHorario: bet.codigoHorario,
+        dataJogo: bet.dataJogo,
+        loteria: bet.loteria,
+        apostas: parseApostasFromBet(bet),
+      },
+      candidates,
+    });
+  } catch (err) {
+    if (err?.message === MANUAL_SETTLEMENT_MISSING || err?.statusCode === 503 || isManualSettlementMissing(err)) {
+      return res.status(503).json({ error: 'ManualSettlement table missing – run DB patch' });
+    }
+    return res.status(500).json({ error: err?.message || 'Erro interno.' });
+  }
+};
+
+exports.manualCompareBet = async (req, res) => {
+  const betId = Number(req.params.betId || req.params.id);
+  const resultId = Number(req.body?.resultId);
+  if (!betId || !resultId) return res.status(400).json({ error: 'Parâmetros inválidos.' });
+
+  try {
+    await ensureManualSettlementTable();
+    const bet = await prisma.bet.findUnique({ where: { id: betId } });
+    if (!bet) return res.status(404).json({ error: 'Aposta não encontrada.' });
+
+    const adminUserId = req.user?.id || req.userId;
+    if (!adminUserId) return res.status(400).json({ error: 'Admin inválido.' });
+
+    const result = await prisma.result.findUnique({ where: { id: resultId } });
+    if (!result) return res.status(404).json({ error: 'Resultado não encontrado.' });
+
+    const betDateISO = normalizeDate(bet.dataJogo);
+    const resultDateISO = normalizeDate(result.dataJogo);
+    if (!isValidISODate(betDateISO) || betDateISO !== resultDateISO) {
+      return res.status(400).json({ error: 'Data não compatível.' });
+    }
+
+    const compareMode = getCompareMode(bet.codigoHorario, result.codigoHorario);
+    const codesOk = compareCodigoHorario(bet.codigoHorario, result.codigoHorario);
+    if (!codesOk) {
+      return res.status(400).json({ error: 'Código horário incompatível.' });
+    }
+
+    const simulation = simulateBetAgainstResult({ bet, result });
+    const resultSnapshot = parseResultNumbers(result);
+
+    return res.json({
+      betId: bet.id,
+      resultId: result.id,
+      wouldWin: simulation.wouldWin,
+      prize: simulation.prize,
+      wins: simulation.wins,
+      reason: simulation.reason || null,
+      debug: {
+        betCodigo: bet.codigoHorario,
+        resultCodigo: result.codigoHorario,
+        compareMode,
+      },
+      result: {
+        id: result.id,
+        loteria: result.loteria,
+        codigoHorario: result.codigoHorario,
+        dataJogo: result.dataJogo,
+        numeros: resultSnapshot.numeros,
+        grupos: resultSnapshot.grupos,
+      },
+    });
+  } catch (err) {
+    if (err?.message === MANUAL_SETTLEMENT_MISSING || err?.statusCode === 503 || isManualSettlementMissing(err)) {
+      return res.status(503).json({ error: 'ManualSettlement table missing – run DB patch' });
+    }
+    return res.status(500).json({ error: err?.message || 'Erro interno.' });
+  }
+};
+
+exports.manualSettleBet = async (req, res) => {
+  const betId = Number(req.params.betId || req.params.id);
+  const resultId = Number(req.body?.resultId);
+  const action = String(req.body?.action || '').toUpperCase();
+  const reason = String(req.body?.reason || '').trim();
+  const forcePrize = req.body?.forcePrize;
+
+  if (!betId || !resultId || !action) return res.status(400).json({ error: 'Parâmetros inválidos.' });
+  if (!reason) return res.status(400).json({ error: 'Reason obrigatório.' });
+  if (action !== 'PAY') return res.status(400).json({ error: 'Ação inválida.' });
+
+  const adminUserId = req.user?.id || req.userId;
+  if (!adminUserId) return res.status(400).json({ error: 'Admin inválido.' });
+
+  try {
+    await ensureManualSettlementTable();
+    const outcome = await prisma.$transaction(async (tx) => {
+      const bet = await tx.bet.findUnique({ where: { id: betId } });
+      if (!bet) throw new Error('BET_NOT_FOUND');
+
+      const result = await tx.result.findUnique({ where: { id: resultId } });
+      if (!result) throw new Error('RESULT_NOT_FOUND');
+
+      const betDateISO = normalizeDate(bet.dataJogo);
+      const resultDateISO = normalizeDate(result.dataJogo);
+      if (!isValidISODate(betDateISO) || betDateISO !== resultDateISO) {
+        throw new Error('DATA_INCOMPATIVEL');
+      }
+
+      if (!compareCodigoHorario(bet.codigoHorario, result.codigoHorario)) {
+        throw new Error('CODIGO_INCOMPATIVEL');
+      }
+
+      const alreadyPaid = bet.status === 'paid' || bet.prizeCreditedAt;
+      if (alreadyPaid) throw new Error('ALREADY_PAID');
+
+      const existingManualPay = await tx.manualSettlement.findFirst({
+        where: { betId: bet.id, action: 'PAY' },
+      });
+      if (existingManualPay) throw new Error('ALREADY_PAID');
+
+      const simulation = simulateBetAgainstResult({ bet, result });
+      const computedPrize = toDecimalMoney(simulation.prize);
+      const finalPrize = forcePrize !== null && forcePrize !== undefined
+        ? toDecimalMoney(forcePrize)
+        : computedPrize;
+
+      if (!finalPrize.greaterThan(ZERO_DECIMAL) || !simulation.wouldWin) {
+        throw new Error('NOT_WINNER');
+      }
+
+      const now = new Date();
+      const resultSnapshot = parseResultNumbers(result);
+      const betSnapshot = {
+        id: bet.id,
+        loteria: bet.loteria,
+        codigoHorario: bet.codigoHorario,
+        dataJogo: bet.dataJogo,
+        apostas: parseApostasFromBet(bet),
+      };
+
+      await tx.bet.updateMany({
+        where: { id: bet.id },
+        data: {
+          status: 'paid',
+          prize: finalPrize,
+          settledAt: now,
+          resultId: result.id,
+          prizeCreditedAt: now,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: bet.userId },
+        data: { balance: { increment: finalPrize } },
+      });
+
+      await recordTransaction({
+        client: tx,
+        userId: bet.userId,
+        type: 'prize',
+        amount: finalPrize,
+        description: `Prêmio manual (${bet.id})`,
+        suppressErrors: false,
+      });
+
+      await tx.manualSettlement.create({
+        data: {
+          betId: bet.id,
+          resultId: result.id,
+          adminUserId,
+          reason,
+          prize: finalPrize,
+          action,
+          snapshotBet: betSnapshot,
+          snapshotResult: resultSnapshot,
+        },
+      });
+
+      return { prize: finalPrize.toFixed(2) };
+    });
+
+    return res.json({ ok: true, betId, resultId, prize: outcome.prize });
+  } catch (err) {
+    const message = err?.message || '';
+    if (message === MANUAL_SETTLEMENT_MISSING || err?.statusCode === 503 || isManualSettlementMissing(err)) {
+      return res.status(503).json({ error: 'ManualSettlement table missing – run DB patch' });
+    }
+    if (message === 'BET_NOT_FOUND') return res.status(404).json({ error: 'Aposta não encontrada.' });
+    if (message === 'RESULT_NOT_FOUND') return res.status(404).json({ error: 'Resultado não encontrado.' });
+    if (message === 'DATA_INCOMPATIVEL') return res.status(400).json({ error: 'Data não compatível.' });
+    if (message === 'CODIGO_INCOMPATIVEL') return res.status(400).json({ error: 'Código horário incompatível.' });
+    if (message === 'ALREADY_PAID') return res.status(409).json({ error: 'Pagamento manual já processado.' });
+    if (message === 'NOT_WINNER') return res.status(400).json({ error: 'Aposta não premiada para pagamento.' });
     return res.status(500).json({ error: err?.message || 'Erro interno.' });
   }
 };

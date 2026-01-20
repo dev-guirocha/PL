@@ -7,7 +7,6 @@ dist/
 .env.*
 dev.db
 dev.db-*
-migrations/
 
 # Logs
 npm-debug.log*

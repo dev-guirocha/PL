@@ -4,6 +4,7 @@ const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
 const { formatMoney } = require('../utils/money');
 const { recordTransaction } = require('../services/financeService');
+const { normalizeCodigoHorarioLabel } = require('../utils/codigoHorario');
 const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
@@ -264,7 +265,8 @@ exports.create = async (req, res) => {
 
   req.body.dataJogo = inferredRootDate;
   req.body.codigoHorario = req.body.codigoHorario ?? req.body.horario ?? req.body.time ?? itemHour ?? null;
-  req.body.codigoHorario = normalizeCodigoHorario(req.body.codigoHorario);
+  const codigoHorarioRaw = normalizeCodigoHorario(req.body.codigoHorario);
+  req.body.codigoHorario = normalizeCodigoHorarioLabel(codigoHorarioRaw, req.body.loteria) || codigoHorarioRaw;
 
   if (BET_DEBUG) {
     console.log('[BET_DEBUG][bets.create][post-normalize]', {
@@ -281,10 +283,11 @@ exports.create = async (req, res) => {
   const { loteria, codigoHorario, apostas, dataJogo: rootDataJogo } = parsed.data;
   const dataJogo = rootDataJogo || apostas?.[0]?.data;
   const codigoHorarioNorm = normalizeCodigoHorario(codigoHorario);
+  const codigoHorarioFinal = normalizeCodigoHorarioLabel(codigoHorarioNorm, loteria) || codigoHorarioNorm;
   const idempotencyRoute = buildIdempotencyRoute(req) || 'POST /api/bets';
   const requestHash = hashPayload({
     loteria,
-    codigoHorario: codigoHorarioNorm,
+    codigoHorario: codigoHorarioFinal,
     dataJogo,
     apostas,
   });
@@ -295,13 +298,13 @@ exports.create = async (req, res) => {
       rootDataJogo: rootDataJogo ?? null,
       itemData: apostas?.[0]?.data ?? null,
       finalDataJogo: dataJogo ?? null,
-      rootCodigoHorario: codigoHorarioNorm ?? null,
+      rootCodigoHorario: codigoHorarioFinal ?? null,
     });
   }
 
   if (BET_DEBUG) {
     console.log('[BET_DEBUG][bets.create][pre-save]', {
-      codigoHorarioNorm: codigoHorarioNorm ?? null,
+      codigoHorarioNorm: codigoHorarioFinal ?? null,
       dataJogo: dataJogo ?? null,
       loteria,
       commit: COMMIT_SHA,
@@ -315,7 +318,7 @@ exports.create = async (req, res) => {
   // Regras FEDERAL (UX + backend)
   const isFederalBet = /FEDERAL/i.test(loteria);
   const day = getDayFromDateStr(dataJogo);
-  const hour = getHourFromCode(codigoHorarioNorm);
+  const hour = getHourFromCode(codigoHorarioFinal);
   const isFederalDay = day !== null && FEDERAL_DAYS.includes(day);
 
   if (isFederalBet) {
@@ -328,8 +331,8 @@ exports.create = async (req, res) => {
     return res.status(400).json({ error: 'Em dia de Federal, use o horário das 20H (Federal) em vez de 18HS.' });
   }
 
-  if (!isBettingAllowed(codigoHorarioNorm, dataJogo)) {
-    return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorarioNorm} do dia ${dataJogo}.` });
+  if (!isBettingAllowed(codigoHorarioFinal, dataJogo)) {
+    return res.status(400).json({ error: `Apostas encerradas para o horário ${codigoHorarioFinal} do dia ${dataJogo}.` });
   }
 
   const totalDebit = calculateTotal(apostas).toDecimalPlaces(2);
@@ -408,7 +411,7 @@ exports.create = async (req, res) => {
         data: {
           userId: req.userId,
           loteria,
-          codigoHorario: codigoHorarioNorm,
+          codigoHorario: codigoHorarioFinal,
           dataJogo,
           modalidade: apostas.length === 1 ? apostas[0].modalidade : 'MULTIPLAS',
           colocacao: apostas.length === 1 ? apostas[0].colocacao : 'VARIADAS',

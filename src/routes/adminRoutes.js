@@ -60,6 +60,9 @@ router.delete('/users/:id', mustBeFn('softDeleteUser'));
 // Apostas
 router.get('/bets', mustBeFn('listBets'));
 router.post('/bets/:id/recheck', mustBeFn('recheckSingleBet')); // V21
+router.get('/bets/:betId/manual-compare/candidates', mustBeFn('listManualCompareCandidates'));
+router.post('/bets/:betId/manual-compare', mustBeFn('manualCompareBet'));
+router.post('/bets/:betId/manual-settle', mustBeFn('manualSettleBet'));
 
 // Saques
 router.get('/withdrawals', mustBeFn('listWithdrawals'));

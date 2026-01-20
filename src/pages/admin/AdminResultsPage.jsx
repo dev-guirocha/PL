@@ -55,7 +55,7 @@ const AdminResultsPage = () => {
         .toUpperCase();
 
     const searchMap = {
-      'RIO/FEDERAL': ['RIO', 'PT RIO', 'PT-RIO', 'CORUJA'],
+      'RIO/FEDERAL': ['PT RIO', 'PT-RIO', 'CORUJA'],
       'LOOK/GOIAS': ['LOOK', 'GOIAS', 'ALVORADA', 'GOIAS'],
       'SAO-PAULO': ['SAO PAULO', 'BAND', 'BANDEIRANTE', 'PT SP', 'PT-SP', 'SP'],
       'LOTECE/LOTEP': ['LOTECE', 'LOTEP', 'LOTE', 'PARAIBA', 'CEARA'],
@@ -77,6 +77,8 @@ const AdminResultsPage = () => {
           const normStr = normalize(fullString);
           const match = terms.some((term) => normStr.includes(normalize(term)));
           if (match) {
+            if (selectedLottery === 'RIO/FEDERAL' && normStr.includes('MALUQ')) return;
+            if (selectedLottery === 'MALUQUINHA' && normStr.includes('PT RIO')) return;
             if (selectedLottery === 'MALUQUINHA' && normStr.includes('FEDERAL')) return;
             if (selectedLottery === 'MALUQ FEDERAL' && !normStr.includes('FEDERAL')) return;
             foundTimes.push(fullString);

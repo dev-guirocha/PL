@@ -154,8 +154,19 @@ Siga os passos abaixo para rodar o projeto localmente.
 - [ ] `npm test`
 - [ ] Variáveis de produção definidas
 - [ ] Migrations aplicadas
+- [ ] Patch ManualSettlement aplicado (Postgres): `psql "$DATABASE_URL" -f scripts/manual_settlement_pg.sql`
 - [ ] Webhook configurado e validando assinatura
 - [ ] Logs/flags sensíveis revisados (debug off)
+
+## 🧩 ManualSettlement (Hotfix SQL)
+
+Quando o Prisma Migrate ainda não estiver baselineado em produção, aplique o patch idempotente:
+
+```bash
+psql "$DATABASE_URL" -f scripts/manual_settlement_pg.sql
+```
+
+Alternativas: cole o conteúdo de `scripts/manual_settlement_pg.sql` no console do Neon/Railway.
 
 ---
 

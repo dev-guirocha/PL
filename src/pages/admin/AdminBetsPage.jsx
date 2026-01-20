@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaArchive, FaFolderOpen, FaSyncAlt } from 'react-icons/fa';
+import { FaArchive, FaFolderOpen, FaSearch, FaSyncAlt } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
@@ -50,13 +50,12 @@ const extractPrize = (bet) => {
 };
 
 const extractCode = (bet) => {
-  const lot = bet.loteria;
   const code = bet.codigoHorario;
-  if (lot && code) return `${lot} - ${code}`;
-  if (lot) return lot;
   if (code) return code;
   const first = (bet.apostas || []).find((ap) => ap.codigoHorario || ap.jogo);
-  return first?.codigoHorario || first?.jogo || '—';
+  if (first?.codigoHorario) return first.codigoHorario;
+  if (bet.loteria) return bet.loteria;
+  return first?.jogo || '—';
 };
 
 const parseScheduledDate = (bet) => {
@@ -123,6 +122,25 @@ const formatPalpite = (val) => {
   return String(val ?? '');
 };
 
+const formatCompareMode = (mode) => {
+  if (!mode) return '—';
+  if (mode === 'LABEL_STRICT') return 'STRICT';
+  return String(mode);
+};
+
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const formatModalitiesWithNumbers = (bet) => {
   const parts = [];
   (bet.apostas || []).forEach((ap) => {
@@ -145,6 +163,15 @@ const AdminBetsPage = () => {
   const [modalityFilter, setModalityFilter] = useState('ALL');
   const [viewMode, setViewMode] = useState('active'); // active | archive | archiveWon
   const [selectedFolder, setSelectedFolder] = useState('ALL');
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualError, setManualError] = useState('');
+  const [manualBet, setManualBet] = useState(null);
+  const [manualCandidates, setManualCandidates] = useState([]);
+  const [manualSelected, setManualSelected] = useState('');
+  const [manualPreview, setManualPreview] = useState(null);
+  const [manualReason, setManualReason] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   const fetchBets = async () => {
     setLoading(true);
@@ -167,6 +194,69 @@ const AdminBetsPage = () => {
       fetchBets();
     } catch (error) {
       window.alert('Erro: ' + (error.response?.data?.error || 'Falha ao reconferir'));
+    }
+  };
+
+  const openManualCompare = async (bet) => {
+    const betId = bet?.id || bet?._id || bet?.betId;
+    if (!betId) return;
+    setManualOpen(true);
+    setManualLoading(true);
+    setManualError('');
+    setManualPreview(null);
+    setManualReason('');
+    try {
+      const res = await api.get(`/admin/bets/${betId}/manual-compare/candidates`);
+      const payloadBet = res.data?.bet || bet;
+      const candidates = res.data?.candidates || [];
+      setManualBet(payloadBet);
+      setManualCandidates(candidates);
+      setManualSelected(String(candidates[0]?.resultId || ''));
+    } catch (err) {
+      setManualError(err.response?.data?.error || 'Falha ao carregar candidatos.');
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const handleManualSimulate = async () => {
+    if (!manualBet?.id || !manualSelected) return;
+    setManualLoading(true);
+    setManualError('');
+    try {
+      const res = await api.post(`/admin/bets/${manualBet.id}/manual-compare`, {
+        resultId: Number(manualSelected),
+      });
+      setManualPreview(res.data || null);
+    } catch (err) {
+      setManualError(err.response?.data?.error || 'Falha ao simular.');
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const handleManualPay = async () => {
+    if (!manualBet?.id || !manualSelected) return;
+    if (!manualPreview?.wouldWin) return;
+    if (!manualReason.trim()) {
+      setManualError('Informe o motivo do pagamento manual.');
+      return;
+    }
+    setManualSubmitting(true);
+    setManualError('');
+    try {
+      await api.post(`/admin/bets/${manualBet.id}/manual-settle`, {
+        resultId: Number(manualSelected),
+        action: 'PAY',
+        reason: manualReason.trim(),
+      });
+      window.alert('Pago manualmente.');
+      setManualOpen(false);
+      fetchBets();
+    } catch (err) {
+      setManualError(err.response?.data?.error || 'Falha ao pagar manualmente.');
+    } finally {
+      setManualSubmitting(false);
     }
   };
 
@@ -281,7 +371,12 @@ const AdminBetsPage = () => {
             <AdminTableRow key={betId}>
               <AdminTableCell className="font-semibold text-slate-800">{betId}</AdminTableCell>
               <AdminTableCell className="uppercase font-semibold">{modality}</AdminTableCell>
-              <AdminTableCell className="text-sm font-semibold text-slate-700">{code}</AdminTableCell>
+              <AdminTableCell>
+                {bet.loteria && (
+                  <div className="text-[11px] font-semibold uppercase text-slate-500">{bet.loteria}</div>
+                )}
+                <div className="text-sm font-semibold text-slate-700">{code}</div>
+              </AdminTableCell>
               <AdminTableCell>{bet.dataJogo || bet.data || '—'}</AdminTableCell>
               <AdminTableCell className="text-sm font-semibold text-slate-700">{prize}</AdminTableCell>
               <AdminTableCell>
@@ -315,13 +410,22 @@ const AdminBetsPage = () => {
               </AdminTableCell>
               {showActions && (
                 <AdminTableCell>
-                  <button
-                    onClick={() => handleRecheck(bet.id || bet._id || bet.betId)}
-                    className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
-                    title="Reconferir se houve erro no pagamento"
-                  >
-                    Reconferir
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => handleRecheck(bet.id || bet._id || bet.betId)}
+                      className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
+                      title="Reconferir se houve erro no pagamento"
+                    >
+                      Reconferir
+                    </button>
+                    <button
+                      onClick={() => openManualCompare(bet)}
+                      className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition"
+                      title="Comparar manualmente"
+                    >
+                      Comparar manualmente
+                    </button>
+                  </div>
                 </AdminTableCell>
               )}
             </AdminTableRow>
@@ -472,9 +576,174 @@ const AdminBetsPage = () => {
               <div>{renderBetsTable(visibleArchivedBets, true)}</div>
             </div>
           ) : (
-            renderBetsTable(activeBets, false)
+            renderBetsTable(activeBets, true)
           )}
         </>
+      )}
+
+      {manualOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-emerald-600">Comparação Manual</p>
+                <h3 className="text-lg font-bold text-slate-800">Plano B de segurança</h3>
+              </div>
+              <button
+                onClick={() => setManualOpen(false)}
+                className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="grid gap-4 px-5 py-4 md:grid-cols-[1.2fr_1fr]">
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-500">Aposta</div>
+                  <div className="text-sm font-bold text-slate-800">
+                    {manualBet?.id ? `Bet #${manualBet.id}` : '—'}
+                  </div>
+                  <div className="text-xs text-slate-600">Código: {manualBet?.codigoHorario || '—'}</div>
+                  <div className="text-xs text-slate-600">Data: {manualBet?.dataJogo || '—'}</div>
+                </div>
+
+                <div className="space-y-2">
+                  {formatModalitiesWithNumbers(manualBet || {}).map((group, idx) => (
+                    <div key={`manual-bet-${idx}`} className="rounded-xl border border-slate-200 p-3">
+                      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-2">{group.label}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {group.numeros.length ? (
+                          group.numeros.map((n, i) => (
+                            <span key={`bet-num-${idx}-${i}`} className="px-2 py-1 rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+                              {formatPalpite(n)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">Resultados candidatos</label>
+                  <select
+                    value={manualSelected}
+                    onChange={(e) => setManualSelected(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    <option value="">Selecione...</option>
+                    {manualCandidates.map((c) => (
+                      <option key={c.resultId} value={c.resultId}>
+                        {c.loteria} • {c.codigoHorario} • {c.dataJogo}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleManualSimulate}
+                    disabled={!manualSelected || manualLoading}
+                    className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    <FaSearch /> Simular
+                  </button>
+                  {manualError && <div className="mt-2 text-xs font-semibold text-red-600">{manualError}</div>}
+                </div>
+
+                {manualPreview && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500">Resultado</span>
+                      <span className={`text-xs font-bold ${manualPreview.wouldWin ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {manualPreview.wouldWin ? 'PREMIADO' : 'NÃO PREMIADO'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-800">
+                      Prize: R$ {manualPreview.prize}
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      Código: {manualPreview?.result?.codigoHorario || '—'} | Data: {manualPreview?.result?.dataJogo || '—'} | Compare: {formatCompareMode(manualPreview?.debug?.compareMode)}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {parseJsonArray(manualPreview?.result?.numeros).map((n, idx) => (
+                        <span key={`res-num-${idx}`} className="px-2 py-1 rounded-full bg-white text-xs font-semibold text-slate-700 border border-slate-200">
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                    {parseJsonArray(manualPreview?.result?.grupos).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {parseJsonArray(manualPreview?.result?.grupos).map((g, idx) => (
+                          <span key={`res-grp-${idx}`} className="px-2 py-1 rounded-full bg-emerald-50 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {manualPreview && !manualPreview.wouldWin && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    Atenção: simulação não premiada. Pagamento bloqueado.
+                  </div>
+                )}
+
+                {manualPreview && (
+                  <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+                    <div className="text-xs font-semibold text-slate-500">Linhas premiadas</div>
+                    <div className="space-y-2">
+                      {(manualPreview.wins || []).map((w, idx) => (
+                        <div key={`win-${idx}`} className="rounded-lg border border-slate-100 bg-white p-2 text-xs text-slate-700">
+                          <div className="font-semibold">
+                            #{w.apostaIndex + 1} • {w.modalidade} {w.colocacao ? `• ${w.colocacao}` : ''}
+                          </div>
+                          {w.matched?.length ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {w.matched.map((m, i) => (
+                                <span key={`${idx}-m-${i}`} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-slate-400">Sem acertos</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {manualPreview && (
+                  <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+                    <label className="block text-xs font-semibold text-slate-500">Motivo (obrigatório)</label>
+                    <textarea
+                      value={manualReason}
+                      onChange={(e) => setManualReason(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                      rows={3}
+                      placeholder="Ex: Falha na liquidação automática"
+                    />
+                    <button
+                      onClick={handleManualPay}
+                      disabled={!manualPreview.wouldWin || !manualReason.trim() || manualSubmitting}
+                      className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      {manualSubmitting ? 'Processando...' : 'Pagar'}
+                    </button>
+                    {!manualPreview.wouldWin && (
+                      <div className="text-[11px] text-slate-500">Pagamento bloqueado: aposta não premiada.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
