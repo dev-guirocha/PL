@@ -30,6 +30,8 @@ const normalizeCodigoHorarioLabel = (raw, loteria) => {
     label = parts[parts.length - 1] || label;
   }
 
+  label = label.replace(/\bPT MALUQ RIO\b/g, 'LT MALUQ RIO');
+
   const hasHourOnly = /^\d{1,2}HS$/.test(label);
   if (hasHourOnly && loteria) {
     label = `${normalizeLabel(loteria)} ${label}`.trim();

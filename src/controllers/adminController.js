@@ -14,6 +14,7 @@ const {
   codeKind: codigoKind,
   codesMatchStrict,
   isMaluqFederal,
+  normalizeCodigoHorarioLabel,
 } = require('../utils/codigoHorario');
 
 // --- CONSTANTES ---
@@ -788,10 +789,11 @@ exports.listSupervisors = async (req, res) => {
 exports.createResult = async (req, res) => {
   try {
     const { loteria, dataJogo, codigoHorario, numeros, grupos } = req.body;
+    const codigoHorarioNorm = normalizeCodigoHorarioLabel(codigoHorario, loteria) || codigoHorario;
 
     const result = await prisma.result.create({
       data: { 
-        loteria, dataJogo, codigoHorario, 
+        loteria, dataJogo, codigoHorario: codigoHorarioNorm, 
         numeros: Array.isArray(numeros) ? JSON.stringify(numeros) : numeros, 
         grupos: Array.isArray(grupos) ? JSON.stringify(grupos) : grupos || '[]'
       },
@@ -816,6 +818,9 @@ exports.updateResult = async (req, res) => {
     const data = { ...rest };
     if (numeros) data.numeros = Array.isArray(numeros) ? JSON.stringify(numeros) : numeros;
     if (grupos) data.grupos = Array.isArray(grupos) ? JSON.stringify(grupos) : grupos;
+    if (data.codigoHorario) {
+      data.codigoHorario = normalizeCodigoHorarioLabel(data.codigoHorario, data.loteria) || data.codigoHorario;
+    }
     const updated = await prisma.result.update({ where: { id }, data });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: 'Erro updateResult' }); }
