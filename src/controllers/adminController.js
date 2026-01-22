@@ -37,6 +37,35 @@ const toDecimalSafe = (value) => {
 
 const toDecimalMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 
+const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+const normalizeName = (value) => String(value || '').trim();
+
+const buildSupervisorMatch = (name, phone) => {
+  const criteria = [];
+  if (phone) criteria.push({ phone });
+  if (name) criteria.push({ name });
+  if (!criteria.length) return null;
+  return { OR: criteria };
+};
+
+const makeSupervisorCodeSeed = (name) => {
+  const seed = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  return seed.slice(0, 4) || 'SUP';
+};
+
+const generateSupervisorCode = async (name) => {
+  const base = makeSupervisorCodeSeed(name);
+  for (let i = 0; i < 6; i += 1) {
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `${base}${suffix}`;
+    const existing = await prisma.supervisor.findUnique({ where: { code }, select: { id: true } });
+    if (!existing) return code;
+  }
+  return `${base}${Date.now().toString(36).slice(-6).toUpperCase()}`;
+};
+
 // --- FUNÇÕES AUXILIARES ---
 const isManualSettlementMissing = (err) => {
   const code = err?.code;
@@ -706,16 +735,100 @@ exports.getDashboardStats = async (req, res) => {
 exports.listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const users = await prisma.user.findMany({
-      where: { deletedAt: null },
-      take: 50,
-      skip: (page - 1) * 50,
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
-    });
-    const total = await prisma.user.count({ where: { deletedAt: null } });
-    res.json({ users, total, page });
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: { deletedAt: null },
+        take: 50,
+        skip: (page - 1) * 50,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
+      }),
+      prisma.user.count({ where: { deletedAt: null } }),
+    ]);
+
+    if (!users.length) {
+      return res.json({ users, total, page });
+    }
+
+    const phones = users.map((u) => normalizePhone(u.phone)).filter(Boolean);
+    const names = users.map((u) => normalizeName(u.name)).filter(Boolean);
+    let supervisors = [];
+    if (phones.length || names.length) {
+      const criteria = [];
+      if (phones.length) criteria.push({ phone: { in: phones } });
+      if (names.length) criteria.push({ name: { in: names } });
+      supervisors = await prisma.supervisor.findMany({
+        where: { OR: criteria },
+        select: { phone: true, name: true },
+      });
+    }
+
+    const supervisorPhones = new Set(supervisors.map((s) => normalizePhone(s.phone)));
+    const supervisorNames = new Set(supervisors.map((s) => normalizeName(s.name)));
+
+    const usersWithFlags = users.map((user) => ({
+      ...user,
+      isSupervisor:
+        (user.phone && supervisorPhones.has(normalizePhone(user.phone))) ||
+        (user.name && supervisorNames.has(normalizeName(user.name))),
+    }));
+
+    return res.json({ users: usersWithFlags, total, page });
   } catch(e) { res.status(500).json({error: 'Erro list users'}); }
+};
+
+exports.updateUserRoles = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const { isAdmin, makeSupervisor } = req.body || {};
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, phone: true, isAdmin: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    let updatedUser = user;
+    if (typeof isAdmin === 'boolean' && isAdmin !== user.isAdmin) {
+      updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isAdmin },
+        select: { id: true, name: true, phone: true, isAdmin: true },
+      });
+    }
+
+    let supervisor = null;
+    let isSupervisor = false;
+
+    if (makeSupervisor) {
+      const phone = normalizePhone(updatedUser.phone);
+      const name = normalizeName(updatedUser.name);
+      const where = buildSupervisorMatch(name, phone);
+      if (where) {
+        supervisor = await prisma.supervisor.findFirst({ where });
+      }
+      if (!supervisor) {
+        const code = await generateSupervisorCode(name);
+        supervisor = await prisma.supervisor.create({
+          data: { name: name || updatedUser.name, phone: phone || null, code },
+        });
+      }
+      isSupervisor = true;
+    } else {
+      const phone = normalizePhone(updatedUser.phone);
+      const name = normalizeName(updatedUser.name);
+      const where = buildSupervisorMatch(name, phone);
+      if (where) {
+        supervisor = await prisma.supervisor.findFirst({ where });
+        isSupervisor = !!supervisor;
+      }
+    }
+
+    return res.json({ user: { ...updatedUser, isSupervisor }, supervisor });
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao atualizar papéis do usuário.' });
+  }
 };
 
 exports.toggleUserBlock = async (req, res) => {
@@ -784,6 +897,70 @@ exports.listSupervisors = async (req, res) => {
     const total = await prisma.supervisor.count();
     res.json({ supervisors, total, page });
   } catch (e) { res.json({ supervisors: [], total: 0 }); }
+};
+
+exports.createSupervisor = async (req, res) => {
+  try {
+    const name = normalizeName(req.body?.name);
+    const phone = normalizePhone(req.body?.phone);
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório.' });
+
+    const where = buildSupervisorMatch(name, phone);
+    if (where) {
+      const existing = await prisma.supervisor.findFirst({ where });
+      if (existing) {
+        return res.status(409).json({ error: 'Supervisor já cadastrado.' });
+      }
+    }
+
+    const code = await generateSupervisorCode(name);
+    const supervisor = await prisma.supervisor.create({
+      data: { name, phone: phone || null, code },
+    });
+    return res.status(201).json(supervisor);
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao cadastrar supervisor.' });
+  }
+};
+
+exports.updateSupervisor = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const name = normalizeName(req.body?.name);
+    const phone = normalizePhone(req.body?.phone);
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório.' });
+
+    const updated = await prisma.supervisor.update({
+      where: { id },
+      data: { name, phone: phone || null },
+    });
+    return res.json(updated);
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      return res.status(404).json({ error: 'Supervisor não encontrado.' });
+    }
+    return res.status(500).json({ error: 'Erro ao atualizar supervisor.' });
+  }
+};
+
+exports.deleteSupervisor = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    await prisma.supervisor.delete({ where: { id } });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      return res.status(404).json({ error: 'Supervisor não encontrado.' });
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+      return res.status(409).json({ error: 'Supervisor possui registros vinculados.' });
+    }
+    return res.status(500).json({ error: 'Erro ao excluir supervisor.' });
+  }
 };
 
 exports.createResult = async (req, res) => {

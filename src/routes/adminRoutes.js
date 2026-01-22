@@ -54,6 +54,7 @@ router.get('/stats', mustBeFn('getDashboardStats'));
 
 // Usuários
 router.get('/users', mustBeFn('listUsers'));
+router.patch('/users/:id/roles', mustBeFn('updateUserRoles'));
 router.post('/users/:id/block', mustBeFn('toggleUserBlock'));
 router.delete('/users/:id', mustBeFn('softDeleteUser'));
 
@@ -69,6 +70,9 @@ router.get('/withdrawals', mustBeFn('listWithdrawals'));
 
 // Supervisores
 router.get('/supervisors', mustBeFn('listSupervisors'));
+router.post('/supervisors', mustBeFn('createSupervisor'));
+router.patch('/supervisors/:id', mustBeFn('updateSupervisor'));
+router.delete('/supervisors/:id', mustBeFn('deleteSupervisor'));
 
 // Resultados
 router.post('/results', mustBeFn('createResult'));
