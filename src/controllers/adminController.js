@@ -27,6 +27,40 @@ const toDecimalSafe = (value) => {
 
 const toDecimalMoney = (value) => toDecimalSafe(value).toDecimalPlaces(2);
 
+const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+const normalizeName = (value) => String(value || '').trim();
+
+const buildSupervisorMatch = (name, phone) => {
+  const criteria = [];
+  if (phone) criteria.push({ phone });
+  if (name) criteria.push({ name });
+  if (!criteria.length) return null;
+  return { OR: criteria };
+};
+
+const makeSupervisorCodeSeed = (name) => {
+  const seed = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  return seed.slice(0, 4) || 'SUP';
+};
+
+const generateSupervisorCode = async (name) => {
+  const base = makeSupervisorCodeSeed(name);
+  for (let i = 0; i < 6; i += 1) {
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `${base}${suffix}`;
+    const existing = await prisma.supervisor.findUnique({ where: { code }, select: { id: true } });
+    if (!existing) return code;
+  }
+  return `${base}${Date.now().toString(36).slice(-6).toUpperCase()}`;
+};
+
+const isAdminRequest = (req) => Boolean(req?.user?.isAdmin || req?.isAdmin);
+const getSupervisorScope = (req) => {
+  if (req?.supervisor && !isAdminRequest(req)) return req.supervisor;
+  return null;
+};
 // --- FUNÇÕES AUXILIARES ---
 const extractHour = (str) => {
   if (!str) return 'XX';
@@ -427,16 +461,118 @@ exports.getDashboardStats = async (req, res) => {
 exports.listUsers = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const users = await prisma.user.findMany({
-      where: { deletedAt: null },
-      take: 50,
-      skip: (page - 1) * 50,
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
-    });
-    const total = await prisma.user.count({ where: { deletedAt: null } });
-    res.json({ users, total, page });
+    const supervisorScope = getSupervisorScope(req);
+    const baseWhere = { deletedAt: null };
+    const where = supervisorScope ? { ...baseWhere, supervisorId: supervisorScope.id } : baseWhere;
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        take: 50,
+        skip: (page - 1) * 50,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    if (!users.length) {
+      return res.json({ users, total, page });
+    }
+
+    const userIds = users.map((u) => u.id).filter(Boolean);
+    const phones = users.map((u) => normalizePhone(u.phone)).filter(Boolean);
+    const names = users.map((u) => normalizeName(u.name)).filter(Boolean);
+    let supervisors = [];
+    if (userIds.length || phones.length || names.length) {
+      const criteria = [];
+      if (userIds.length) criteria.push({ userId: { in: userIds } });
+      if (phones.length) criteria.push({ phone: { in: phones } });
+      if (names.length) criteria.push({ name: { in: names } });
+      supervisors = await prisma.supervisor.findMany({
+        where: { OR: criteria },
+        select: { phone: true, name: true, userId: true },
+      });
+    }
+
+    const supervisorUserIds = new Set(supervisors.map((s) => s.userId).filter(Boolean));
+    const supervisorPhones = new Set(supervisors.map((s) => normalizePhone(s.phone)));
+    const supervisorNames = new Set(supervisors.map((s) => normalizeName(s.name)));
+
+    const usersWithFlags = users.map((user) => ({
+      ...user,
+      isSupervisor:
+        (user.id && supervisorUserIds.has(user.id)) ||
+        (user.phone && supervisorPhones.has(normalizePhone(user.phone))) ||
+        (user.name && supervisorNames.has(normalizeName(user.name))),
+    }));
+
+    return res.json({ users: usersWithFlags, total, page });
   } catch(e) { res.status(500).json({error: 'Erro list users'}); }
+};
+
+exports.updateUserRoles = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const { isAdmin, makeSupervisor } = req.body || {};
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, phone: true, isAdmin: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    let updatedUser = user;
+    if (typeof isAdmin === 'boolean' && isAdmin !== user.isAdmin) {
+      updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isAdmin },
+        select: { id: true, name: true, phone: true, isAdmin: true },
+      });
+    }
+
+    let supervisor = null;
+    let isSupervisor = false;
+
+    if (makeSupervisor) {
+      const phone = normalizePhone(updatedUser.phone);
+      const name = normalizeName(updatedUser.name);
+      supervisor = await prisma.supervisor.findUnique({ where: { userId: updatedUser.id } });
+      if (!supervisor) {
+        const where = buildSupervisorMatch(name, phone);
+        if (where) {
+          supervisor = await prisma.supervisor.findFirst({ where });
+        }
+      }
+      if (!supervisor) {
+        const code = await generateSupervisorCode(name);
+        supervisor = await prisma.supervisor.create({
+          data: { name: name || updatedUser.name, phone: phone || null, code, userId: updatedUser.id },
+        });
+      } else if (!supervisor.userId || supervisor.userId !== updatedUser.id) {
+        supervisor = await prisma.supervisor.update({
+          where: { id: supervisor.id },
+          data: { userId: updatedUser.id },
+        });
+      }
+      isSupervisor = true;
+    } else {
+      const phone = normalizePhone(updatedUser.phone);
+      const name = normalizeName(updatedUser.name);
+      supervisor = await prisma.supervisor.findUnique({ where: { userId: updatedUser.id } });
+      if (!supervisor) {
+        const where = buildSupervisorMatch(name, phone);
+        if (where) {
+          supervisor = await prisma.supervisor.findFirst({ where });
+        }
+      }
+      isSupervisor = !!supervisor;
+    }
+
+    return res.json({ user: { ...updatedUser, isSupervisor }, supervisor });
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao atualizar papéis do usuário.' });
+  }
 };
 
 exports.toggleUserBlock = async (req, res) => {
@@ -482,15 +618,26 @@ exports.softDeleteUser = async (req, res) => {
 exports.listBets = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const bets = await prisma.bet.findMany({ take: 50, skip: (page - 1) * 50, orderBy: { createdAt: 'desc' }, include: { user: { select: { name: true, phone: true } } } });
-    const total = await prisma.bet.count();
+    const supervisorScope = getSupervisorScope(req);
+    const where = supervisorScope ? { user: { supervisorId: supervisorScope.id } } : {};
+    const bets = await prisma.bet.findMany({
+      where,
+      take: 50,
+      skip: (page - 1) * 50,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { name: true, phone: true } } },
+    });
+    const total = await prisma.bet.count({ where });
     res.json({ bets, total, page });
   } catch (e) { res.status(500).json({ error: 'Erro bets' }); }
 };
 
 exports.listWithdrawals = async (req, res) => {
   try {
+    const supervisorScope = getSupervisorScope(req);
+    const where = supervisorScope ? { user: { supervisorId: supervisorScope.id } } : {};
     const withdrawals = await prisma.withdrawalRequest.findMany({ 
+        where,
         orderBy: { createdAt: 'desc' }, 
         include: { user: { select: { name: true, phone: true } } } 
     });
@@ -501,10 +648,147 @@ exports.listWithdrawals = async (req, res) => {
 exports.listSupervisors = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const supervisors = await prisma.supervisor.findMany({ orderBy: { createdAt: 'desc' }, skip: (page - 1) * 50, take: 50, include: { users: { select: { id: true, name: true, phone: true } } } });
-    const total = await prisma.supervisor.count();
+    const supervisorScope = getSupervisorScope(req);
+    const where = supervisorScope ? { id: supervisorScope.id } : {};
+    const supervisors = await prisma.supervisor.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * 50,
+      take: 50,
+      include: { users: { select: { id: true, name: true, phone: true } } },
+    });
+    const total = await prisma.supervisor.count({ where });
     res.json({ supervisors, total, page });
   } catch (e) { res.json({ supervisors: [], total: 0 }); }
+};
+
+exports.createSupervisor = async (req, res) => {
+  try {
+    const name = normalizeName(req.body?.name);
+    const phone = normalizePhone(req.body?.phone);
+    const userIdRaw = req.body?.userId;
+    const userId = userIdRaw !== undefined && userIdRaw !== null && userIdRaw !== ''
+      ? Number(userIdRaw)
+      : null;
+    const commissionRate = req.body?.commissionRate;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório.' });
+    if (userId !== null && (!Number.isFinite(userId) || userId <= 0)) {
+      return res.status(400).json({ error: 'userId inválido.' });
+    }
+
+    let commissionRateDecimal = null;
+    if (commissionRate !== undefined && commissionRate !== null && commissionRate !== '') {
+      try {
+        commissionRateDecimal = new Prisma.Decimal(String(commissionRate));
+      } catch {
+        return res.status(400).json({ error: 'commissionRate inválido.' });
+      }
+      if (commissionRateDecimal.lessThan(ZERO_DECIMAL) || commissionRateDecimal.greaterThan(new Prisma.Decimal(100))) {
+        return res.status(400).json({ error: 'commissionRate deve estar entre 0 e 100.' });
+      }
+    }
+
+    const where = buildSupervisorMatch(name, phone);
+    if (where) {
+      const existing = await prisma.supervisor.findFirst({ where });
+      if (existing) {
+        return res.status(409).json({ error: 'Supervisor já cadastrado.' });
+      }
+    }
+
+    if (userId) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+      const existingAccount = await prisma.supervisor.findUnique({ where: { userId } });
+      if (existingAccount) return res.status(409).json({ error: 'Usuário já vinculado a outro supervisor.' });
+    }
+
+    const code = await generateSupervisorCode(name);
+    const supervisor = await prisma.supervisor.create({
+      data: {
+        name,
+        phone: phone || null,
+        code,
+        userId: userId || null,
+        commissionRate: commissionRateDecimal,
+      },
+    });
+    return res.status(201).json(supervisor);
+  } catch (e) {
+    return res.status(500).json({ error: 'Erro ao cadastrar supervisor.' });
+  }
+};
+
+exports.updateSupervisor = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const name = normalizeName(req.body?.name);
+    const phone = normalizePhone(req.body?.phone);
+    const userIdRaw = req.body?.userId;
+    const userId = userIdRaw !== undefined && userIdRaw !== null && userIdRaw !== ''
+      ? Number(userIdRaw)
+      : null;
+    const commissionRate = req.body?.commissionRate;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório.' });
+    if (userId !== null && (!Number.isFinite(userId) || userId <= 0)) {
+      return res.status(400).json({ error: 'userId inválido.' });
+    }
+
+    let commissionRateDecimal = null;
+    if (commissionRate !== undefined && commissionRate !== null && commissionRate !== '') {
+      try {
+        commissionRateDecimal = new Prisma.Decimal(String(commissionRate));
+      } catch {
+        return res.status(400).json({ error: 'commissionRate inválido.' });
+      }
+      if (commissionRateDecimal.lessThan(ZERO_DECIMAL) || commissionRateDecimal.greaterThan(new Prisma.Decimal(100))) {
+        return res.status(400).json({ error: 'commissionRate deve estar entre 0 e 100.' });
+      }
+    }
+
+    if (userId) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+      const existingAccount = await prisma.supervisor.findFirst({ where: { userId, NOT: { id } } });
+      if (existingAccount) return res.status(409).json({ error: 'Usuário já vinculado a outro supervisor.' });
+    }
+
+    const updated = await prisma.supervisor.update({
+      where: { id },
+      data: {
+        name,
+        phone: phone || null,
+        userId: userId || null,
+        commissionRate: commissionRateDecimal,
+      },
+    });
+    return res.json(updated);
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      return res.status(404).json({ error: 'Supervisor não encontrado.' });
+    }
+    return res.status(500).json({ error: 'Erro ao atualizar supervisor.' });
+  }
+};
+
+exports.deleteSupervisor = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    await prisma.supervisor.delete({ where: { id } });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      return res.status(404).json({ error: 'Supervisor não encontrado.' });
+    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+      return res.status(409).json({ error: 'Supervisor possui registros vinculados.' });
+    }
+    return res.status(500).json({ error: 'Erro ao excluir supervisor.' });
+  }
 };
 
 exports.createResult = async (req, res) => {

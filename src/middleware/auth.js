@@ -73,12 +73,12 @@ module.exports = async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.userId = payload.userId;
+    req.userId = payload.userId || payload.id;
     req.isAdmin = Boolean(payload.isAdmin);
 
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { isBlocked: true, deletedAt: true },
+      select: { id: true, name: true, phone: true, isAdmin: true, isBlocked: true, deletedAt: true },
     });
 
     if (!user || user.deletedAt) {
@@ -88,6 +88,17 @@ module.exports = async (req, res, next) => {
     if (user.isBlocked) {
       if (AUTH_DEBUG) console.warn('[AUTH_DEBUG] user_blocked', { userId: req.userId });
       return res.status(403).json({ error: 'Usuário bloqueado.' });
+    }
+
+    req.user = user;
+    req.isAdmin = Boolean(user.isAdmin);
+
+    const supervisor = await prisma.supervisor.findUnique({
+      where: { userId: req.userId },
+      select: { id: true, code: true, commissionRate: true, userId: true },
+    });
+    if (supervisor) {
+      req.supervisor = supervisor;
     }
 
     return next();

@@ -1,4 +1,8 @@
+const { DateTime } = require('luxon');
 const prisma = require('../prisma');
+const { formatMoney } = require('../utils/money');
+
+const TIMEZONE = 'America/Sao_Paulo';
 
 const parseJsonArray = (value) => {
   if (!value) return [];
@@ -81,16 +85,8 @@ exports.listResultPules = async (req, res) => {
 // Estatísticas para o painel do supervisor
 exports.getSupervisorStats = async (req, res) => {
   try {
-    const phoneClean = (req.user.phone || '').replace(/\D/g, '');
-    const supervisor = await prisma.supervisor.findFirst({
-      where: {
-        OR: [{ phone: phoneClean }, { name: req.user.name }],
-      },
-    });
-
-    if (!supervisor) {
-      return res.status(404).json({ error: 'Você não é supervisor.' });
-    }
+    const supervisor = req.supervisor;
+    if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
 
     const usersCount = await prisma.user.count({ where: { supervisorId: supervisor.id } });
     const deposits = await prisma.pixCharge.aggregate({
@@ -105,11 +101,78 @@ exports.getSupervisorStats = async (req, res) => {
     return res.json({
       supCode: supervisor.code,
       users: usersCount,
-      volume: Number(deposits._sum.amount || 0),
-      commission: Number(commissions._sum.amount || 0),
+      volume: formatMoney(deposits._sum.amount || 0),
+      commission: formatMoney(commissions._sum.amount || 0),
     });
   } catch (error) {
     console.error('Erro stats supervisor:', error);
     return res.status(500).json({ error: 'Erro ao buscar estatísticas.' });
+  }
+};
+
+exports.getSupervisorUsers = async (req, res) => {
+  try {
+    const supervisor = req.supervisor;
+    if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
+
+    const page = Number(req.query.page) || 1;
+    const pageSizeRaw = Number(req.query.pageSize) || 20;
+    const pageSize = Math.min(Math.max(pageSizeRaw, 1), 100);
+    const skip = (page - 1) * pageSize;
+
+    const [users, total] = await prisma.$transaction([
+      prisma.user.findMany({
+        where: { supervisorId: supervisor.id, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      prisma.user.count({ where: { supervisorId: supervisor.id, deletedAt: null } }),
+    ]);
+
+    if (!users.length) {
+      return res.json({ users: [], total, page, pageSize });
+    }
+
+    const userIds = users.map((u) => u.id);
+    const now = DateTime.now().setZone(TIMEZONE);
+    const dayStart = now.startOf('day').toJSDate();
+    const monthStart = now.startOf('month').toJSDate();
+
+    const [todayAgg, monthAgg, commissionAgg] = await prisma.$transaction([
+      prisma.bet.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, createdAt: { gte: dayStart } },
+        _sum: { total: true },
+      }),
+      prisma.bet.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, createdAt: { gte: monthStart } },
+        _sum: { total: true },
+      }),
+      prisma.supervisorCommission.groupBy({
+        by: ['userId'],
+        where: { supervisorId: supervisor.id, userId: { in: userIds } },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const todayMap = new Map(todayAgg.map((row) => [row.userId, row._sum.total || 0]));
+    const monthMap = new Map(monthAgg.map((row) => [row.userId, row._sum.total || 0]));
+    const commissionMap = new Map(commissionAgg.map((row) => [row.userId, row._sum.amount || 0]));
+
+    const payload = users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      totalBetToday: formatMoney(todayMap.get(user.id) || 0),
+      totalBetMonth: formatMoney(monthMap.get(user.id) || 0),
+      profit: formatMoney(commissionMap.get(user.id) || 0),
+    }));
+
+    return res.json({ users: payload, total, page, pageSize });
+  } catch (error) {
+    console.error('Erro ao buscar usuarios do supervisor:', error);
+    return res.status(500).json({ error: 'Erro ao buscar usuarios do supervisor.' });
   }
 };

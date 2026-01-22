@@ -34,7 +34,7 @@ const verifyToken = async (req, res, next) => {
 
     req.user = await prisma.user.findUnique({
       where: { id: decoded.id || decoded.userId },
-      select: { id: true, name: true, isAdmin: true, isBlocked: true, deletedAt: true }
+      select: { id: true, name: true, phone: true, isAdmin: true, isBlocked: true, deletedAt: true }
     });
 
     if (!req.user) {
@@ -45,6 +45,17 @@ const verifyToken = async (req, res, next) => {
     }
     if (req.user.isBlocked) {
       return res.status(403).json({ error: 'Usuário bloqueado.' });
+    }
+
+    req.userId = req.user.id;
+    req.isAdmin = Boolean(req.user.isAdmin);
+
+    const supervisor = await prisma.supervisor.findUnique({
+      where: { userId: req.user.id },
+      select: { id: true, code: true, commissionRate: true, userId: true },
+    });
+    if (supervisor) {
+      req.supervisor = supervisor;
     }
 
     return next();

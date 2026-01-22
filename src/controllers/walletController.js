@@ -262,3 +262,117 @@ exports.listMyWithdrawals = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao listar saques.' });
   }
 };
+
+const sumAmounts = (rows) =>
+  rows.reduce((acc, row) => acc.add(row.amount || ZERO), ZERO);
+
+exports.requestSupervisorWithdrawal = async (req, res) => {
+  const supervisor = req.supervisor;
+  if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
+
+  const parsedAmount = amountSchema.safeParse(req.body.amount);
+  const parsedCpf = cpfSchema.safeParse(req.body.cpf);
+
+  if (!parsedAmount.success) {
+    const message = parsedAmount.error.errors?.[0]?.message || 'Valor inválido.';
+    return res.status(400).json({ error: message });
+  }
+  if (!parsedCpf.success) {
+    const message = parsedCpf.error.errors?.[0]?.message || 'CPF inválido.';
+    return res.status(400).json({ error: message });
+  }
+
+  const value = parsedAmount.data;
+  const cpf = parsedCpf.data;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const commissions = await tx.supervisorCommission.findMany({
+        where: { supervisorId: supervisor.id, status: 'pending', payoutRequestId: null },
+        select: { id: true, amount: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const totalAvailable = sumAmounts(commissions);
+      if (!totalAvailable.greaterThan(ZERO)) {
+        const err = new Error('Saldo de comissao insuficiente.');
+        err.code = 'ERR_NO_BALANCE';
+        throw err;
+      }
+      if (value.greaterThan(totalAvailable)) {
+        const err = new Error('Saldo de comissao insuficiente.');
+        err.code = 'ERR_NO_BALANCE';
+        throw err;
+      }
+
+      const reserved = [];
+      let reservedTotal = ZERO;
+      for (const commission of commissions) {
+        if (reservedTotal.greaterThanOrEqualTo(value)) break;
+        reserved.push(commission.id);
+        reservedTotal = reservedTotal.add(commission.amount || ZERO);
+      }
+
+      const request = await tx.supervisorWithdrawalRequest.create({
+        data: {
+          supervisorId: supervisor.id,
+          amount: value,
+          status: 'pending',
+          pixKey: cpf,
+          pixType: 'cpf',
+        },
+        select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
+      });
+
+      if (reserved.length) {
+        await tx.supervisorCommission.updateMany({
+          where: { id: { in: reserved } },
+          data: { status: 'reserved', payoutRequestId: request.id },
+        });
+      }
+
+      return { request, reservedTotal };
+    });
+
+    return res.status(201).json({
+      request: {
+        ...result.request,
+        amount: formatMoney(result.request.amount),
+      },
+      reservedAmount: formatMoney(result.reservedTotal || 0),
+    });
+  } catch (err) {
+    if (err?.code === 'ERR_NO_BALANCE') return res.status(400).json({ error: err.message });
+    return res.status(500).json({ error: 'Erro ao solicitar saque do supervisor.' });
+  }
+};
+
+exports.listSupervisorWithdrawals = async (req, res) => {
+  const supervisor = req.supervisor;
+  if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
+
+  try {
+    const [requests, pendingCommissions] = await prisma.$transaction([
+      prisma.supervisorWithdrawalRequest.findMany({
+        where: { supervisorId: supervisor.id },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
+      }),
+      prisma.supervisorCommission.aggregate({
+        where: { supervisorId: supervisor.id, status: 'pending' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return res.json({
+      available: formatMoney(pendingCommissions._sum.amount || 0),
+      withdrawals: requests.map((req) => ({
+        ...req,
+        amount: formatMoney(req.amount),
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao buscar saques do supervisor.' });
+  }
+};
