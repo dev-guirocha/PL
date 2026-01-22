@@ -1,13 +1,12 @@
 -- Remove duplicate supervisor commissions per (supervisorId, betId).
 -- Keeps the most "authoritative" row: paid > reserved > pending > canceled,
--- then prefers rows tied to a payout request, then oldest.
+-- then oldest (compatible with schemas without payoutRequestId).
 
 WITH ranked AS (
   SELECT
     id,
     "supervisorId",
     "betId",
-    "payoutRequestId",
     "status",
     "createdAt",
     ROW_NUMBER() OVER (
@@ -19,7 +18,6 @@ WITH ranked AS (
           WHEN 'pending' THEN 2
           ELSE 3
         END,
-        CASE WHEN "payoutRequestId" IS NULL THEN 1 ELSE 0 END,
         "createdAt" ASC,
         id ASC
     ) AS rn

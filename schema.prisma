@@ -159,6 +159,7 @@ model Supervisor {
   createdAt DateTime @default(now())
   users     User[]   @relation("UserSupervisor")
   commissions SupervisorCommission[]
+  withdrawalRequests SupervisorWithdrawalRequest[]
 }
 
 model Result {
