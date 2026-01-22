@@ -664,6 +664,7 @@ exports.listSupervisors = async (req, res) => {
 
 exports.createSupervisor = async (req, res) => {
   try {
+    if (!isAdminRequest(req)) return res.status(403).json({ error: 'Acesso restrito.' });
     const name = normalizeName(req.body?.name);
     const phone = normalizePhone(req.body?.phone);
     const userIdRaw = req.body?.userId;
@@ -721,6 +722,7 @@ exports.createSupervisor = async (req, res) => {
 
 exports.updateSupervisor = async (req, res) => {
   try {
+    if (!isAdminRequest(req)) return res.status(403).json({ error: 'Acesso restrito.' });
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'ID inválido.' });
 

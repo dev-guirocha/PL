@@ -8,6 +8,7 @@ const {
   toMoney,
   formatMoney,
   calculateCommission,
+  toDecimalSafe,
 } = require('../utils/money');
 const SUPERVISOR_DEPOSIT_PCT = normalizeDecimalString(process.env.SUPERVISOR_DEPOSIT_PCT || '5');
 const SUPERVISOR_DEPOSIT_BASIS = 'deposit';
@@ -134,17 +135,25 @@ exports.deposit = async (req, res) => {
       }
 
       if (supervisorId) {
-        const commissionAmount = calculateCommission(value, SUPERVISOR_DEPOSIT_PCT);
-        if (commissionAmount.greaterThan(ZERO)) {
-          await tx.supervisorCommission.create({
-            data: {
-              supervisorId,
-              userId: updated.id,
-              amount: commissionAmount,
-              basis: SUPERVISOR_DEPOSIT_BASIS,
-              status: 'pending',
-            },
-          });
+        const supervisor = await tx.supervisor.findUnique({
+          where: { id: supervisorId },
+          select: { id: true, user: { select: { isBlocked: true, deletedAt: true } } },
+        });
+        const supervisorBlocked = Boolean(supervisor?.user?.isBlocked || supervisor?.user?.deletedAt);
+        if (!supervisorBlocked) {
+          const commissionAmount = calculateCommission(value, SUPERVISOR_DEPOSIT_PCT);
+          if (commissionAmount.greaterThan(ZERO)) {
+            await tx.supervisorCommission.create({
+              data: {
+                supervisorId,
+                userId: updated.id,
+                amount: commissionAmount,
+                commissionRate: toDecimalSafe(SUPERVISOR_DEPOSIT_PCT).toDecimalPlaces(2),
+                basis: SUPERVISOR_DEPOSIT_BASIS,
+                status: 'pending',
+              },
+            });
+          }
         }
       }
 
@@ -287,6 +296,16 @@ exports.requestSupervisorWithdrawal = async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const pendingRequests = await tx.supervisorWithdrawalRequest.findMany({
+        where: { supervisorId: supervisor.id, status: 'pending' },
+        select: { id: true, amount: true },
+      });
+      if (pendingRequests.length) {
+        const err = new Error('Existe um saque pendente. Aguarde a aprovacao.');
+        err.code = 'ERR_PENDING_WITHDRAWAL';
+        throw err;
+      }
+
       const commissions = await tx.supervisorCommission.findMany({
         where: { supervisorId: supervisor.id, status: 'pending', payoutRequestId: null },
         select: { id: true, amount: true },
@@ -342,6 +361,7 @@ exports.requestSupervisorWithdrawal = async (req, res) => {
       reservedAmount: formatMoney(result.reservedTotal || 0),
     });
   } catch (err) {
+    if (err?.code === 'ERR_PENDING_WITHDRAWAL') return res.status(409).json({ error: err.message });
     if (err?.code === 'ERR_NO_BALANCE') return res.status(400).json({ error: err.message });
     return res.status(500).json({ error: 'Erro ao solicitar saque do supervisor.' });
   }

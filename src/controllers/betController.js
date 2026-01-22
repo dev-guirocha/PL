@@ -370,7 +370,7 @@ exports.create = async (req, res) => {
           balance: true,
           bonus: true,
           supervisorId: true,
-          supervisor: { select: { commissionRate: true } },
+          supervisor: { select: { commissionRate: true, user: { select: { isBlocked: true, deletedAt: true } } } },
         },
       });
 
@@ -454,7 +454,8 @@ exports.create = async (req, res) => {
         if (userWallet.supervisor && userWallet.supervisor.commissionRate !== null && userWallet.supervisor.commissionRate !== undefined) {
           commissionRate = toDecimalSafe(userWallet.supervisor.commissionRate);
         }
-        if (commissionRate.greaterThan(ZERO)) {
+        const supervisorBlocked = Boolean(userWallet.supervisor?.user?.isBlocked || userWallet.supervisor?.user?.deletedAt);
+        if (!supervisorBlocked && commissionRate.greaterThan(ZERO)) {
           const commissionAmount = totalDebit.mul(commissionRate).div(HUNDRED).toDecimalPlaces(2);
           if (commissionAmount.greaterThan(ZERO)) {
             await tx.supervisorCommission.create({
@@ -463,6 +464,7 @@ exports.create = async (req, res) => {
                 userId: req.userId,
                 betId: bet.id,
                 amount: commissionAmount,
+                commissionRate: commissionRate.toDecimalPlaces(2),
                 basis: SUPERVISOR_COMMISSION_BASIS,
                 status: 'pending',
               },

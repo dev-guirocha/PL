@@ -5,6 +5,15 @@ module.exports = async (req, res, next) => {
     if (req.supervisor) return next();
     if (!req.userId) return res.status(401).json({ error: 'Nao autenticado.' });
 
+    const authUser = req.user || await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { isBlocked: true, deletedAt: true },
+    });
+
+    if (!authUser || authUser.isBlocked || authUser.deletedAt) {
+      return res.status(403).json({ error: 'Usuario bloqueado.' });
+    }
+
     const supervisor = await prisma.supervisor.findUnique({
       where: { userId: req.userId },
       select: { id: true, code: true, commissionRate: true, userId: true },

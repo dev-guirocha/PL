@@ -123,7 +123,7 @@ exports.getSupervisorUsers = async (req, res) => {
     const [users, total] = await prisma.$transaction([
       prisma.user.findMany({
         where: { supervisorId: supervisor.id, deletedAt: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, isBlocked: true },
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
@@ -140,7 +140,12 @@ exports.getSupervisorUsers = async (req, res) => {
     const dayStart = now.startOf('day').toJSDate();
     const monthStart = now.startOf('month').toJSDate();
 
-    const [todayAgg, monthAgg, commissionAgg] = await prisma.$transaction([
+    const [totalAgg, todayAgg, monthAgg, commissionAgg] = await prisma.$transaction([
+      prisma.bet.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds } },
+        _sum: { total: true },
+      }),
       prisma.bet.groupBy({
         by: ['userId'],
         where: { userId: { in: userIds }, createdAt: { gte: dayStart } },
@@ -158,6 +163,7 @@ exports.getSupervisorUsers = async (req, res) => {
       }),
     ]);
 
+    const totalMap = new Map(totalAgg.map((row) => [row.userId, row._sum.total || 0]));
     const todayMap = new Map(todayAgg.map((row) => [row.userId, row._sum.total || 0]));
     const monthMap = new Map(monthAgg.map((row) => [row.userId, row._sum.total || 0]));
     const commissionMap = new Map(commissionAgg.map((row) => [row.userId, row._sum.amount || 0]));
@@ -165,6 +171,9 @@ exports.getSupervisorUsers = async (req, res) => {
     const payload = users.map((user) => ({
       id: user.id,
       name: user.name,
+      isBlocked: Boolean(user.isBlocked),
+      totalBet: formatMoney(totalMap.get(user.id) || 0),
+      commissionTotal: formatMoney(commissionMap.get(user.id) || 0),
       totalBetToday: formatMoney(todayMap.get(user.id) || 0),
       totalBetMonth: formatMoney(monthMap.get(user.id) || 0),
       profit: formatMoney(commissionMap.get(user.id) || 0),
