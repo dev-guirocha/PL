@@ -12,6 +12,7 @@ const {
 } = require('../utils/money');
 const SUPERVISOR_DEPOSIT_PCT = normalizeDecimalString(process.env.SUPERVISOR_DEPOSIT_PCT || '5');
 const SUPERVISOR_DEPOSIT_BASIS = 'deposit';
+const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
 
 const amountSchema = z.preprocess(
   (val) => normalizeDecimalString(val),
@@ -296,6 +297,10 @@ exports.requestSupervisorWithdrawal = async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      if (!isSqlite) {
+        await tx.$queryRaw`SELECT id FROM "Supervisor" WHERE id = ${supervisor.id} FOR UPDATE`;
+      }
+
       const pendingRequests = await tx.supervisorWithdrawalRequest.findMany({
         where: { supervisorId: supervisor.id, status: 'pending' },
         select: { id: true, amount: true },
@@ -344,10 +349,15 @@ exports.requestSupervisorWithdrawal = async (req, res) => {
       });
 
       if (reserved.length) {
-        await tx.supervisorCommission.updateMany({
-          where: { id: { in: reserved } },
+        const updated = await tx.supervisorCommission.updateMany({
+          where: { id: { in: reserved }, status: 'pending', payoutRequestId: null },
           data: { status: 'reserved', payoutRequestId: request.id },
         });
+        if (updated.count !== reserved.length) {
+          const err = new Error('Comissoes ja reservadas.');
+          err.code = 'ERR_RACE';
+          throw err;
+        }
       }
 
       return { request, reservedTotal };
@@ -361,6 +371,7 @@ exports.requestSupervisorWithdrawal = async (req, res) => {
       reservedAmount: formatMoney(result.reservedTotal || 0),
     });
   } catch (err) {
+    if (err?.code === 'ERR_RACE') return res.status(409).json({ error: err.message });
     if (err?.code === 'ERR_PENDING_WITHDRAWAL') return res.status(409).json({ error: err.message });
     if (err?.code === 'ERR_NO_BALANCE') return res.status(400).json({ error: err.message });
     return res.status(500).json({ error: 'Erro ao solicitar saque do supervisor.' });

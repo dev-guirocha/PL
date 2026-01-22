@@ -251,6 +251,11 @@ model SupervisorCommission {
   basis        String?    // stake, loss etc.
   status       String     @default("pending") // pending, reserved, paid, canceled
   createdAt    DateTime   @default(now())
+
+  @@unique([supervisorId, betId])
+  @@index([supervisorId, status])
+  @@index([supervisorId, createdAt])
+  @@index([payoutRequestId])
 }
 
 model SupervisorWithdrawalRequest {
@@ -263,6 +268,8 @@ model SupervisorWithdrawalRequest {
   pixType      String?    @default("cpf")
   createdAt    DateTime   @default(now())
   commissions  SupervisorCommission[]
+
+  @@index([supervisorId, status])
 }
 
 model playing_with_neon {
