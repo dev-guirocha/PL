@@ -8,9 +8,11 @@ const {
   toMoney,
   formatMoney,
   calculateCommission,
+  toDecimalSafe,
 } = require('../utils/money');
 const SUPERVISOR_DEPOSIT_PCT = normalizeDecimalString(process.env.SUPERVISOR_DEPOSIT_PCT || '5');
 const SUPERVISOR_DEPOSIT_BASIS = 'deposit';
+const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
 
 const amountSchema = z.preprocess(
   (val) => normalizeDecimalString(val),
@@ -134,17 +136,25 @@ exports.deposit = async (req, res) => {
       }
 
       if (supervisorId) {
-        const commissionAmount = calculateCommission(value, SUPERVISOR_DEPOSIT_PCT);
-        if (commissionAmount.greaterThan(ZERO)) {
-          await tx.supervisorCommission.create({
-            data: {
-              supervisorId,
-              userId: updated.id,
-              amount: commissionAmount,
-              basis: SUPERVISOR_DEPOSIT_BASIS,
-              status: 'pending',
-            },
-          });
+        const supervisor = await tx.supervisor.findUnique({
+          where: { id: supervisorId },
+          select: { id: true, user: { select: { isBlocked: true, deletedAt: true } } },
+        });
+        const supervisorBlocked = Boolean(supervisor?.user?.isBlocked || supervisor?.user?.deletedAt);
+        if (!supervisorBlocked) {
+          const commissionAmount = calculateCommission(value, SUPERVISOR_DEPOSIT_PCT);
+          if (commissionAmount.greaterThan(ZERO)) {
+            await tx.supervisorCommission.create({
+              data: {
+                supervisorId,
+                userId: updated.id,
+                amount: commissionAmount,
+                commissionRate: toDecimalSafe(SUPERVISOR_DEPOSIT_PCT).toDecimalPlaces(2),
+                basis: SUPERVISOR_DEPOSIT_BASIS,
+                status: 'pending',
+              },
+            });
+          }
         }
       }
 
@@ -260,5 +270,140 @@ exports.listMyWithdrawals = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao listar saques.' });
+  }
+};
+
+const sumAmounts = (rows) =>
+  rows.reduce((acc, row) => acc.add(row.amount || ZERO), ZERO);
+
+exports.requestSupervisorWithdrawal = async (req, res) => {
+  const supervisor = req.supervisor;
+  if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
+
+  const parsedAmount = amountSchema.safeParse(req.body.amount);
+  const parsedCpf = cpfSchema.safeParse(req.body.cpf);
+
+  if (!parsedAmount.success) {
+    const message = parsedAmount.error.errors?.[0]?.message || 'Valor inválido.';
+    return res.status(400).json({ error: message });
+  }
+  if (!parsedCpf.success) {
+    const message = parsedCpf.error.errors?.[0]?.message || 'CPF inválido.';
+    return res.status(400).json({ error: message });
+  }
+
+  const value = parsedAmount.data;
+  const cpf = parsedCpf.data;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      if (!isSqlite) {
+        await tx.$queryRaw`SELECT id FROM "Supervisor" WHERE id = ${supervisor.id} FOR UPDATE`;
+      }
+
+      const pendingRequests = await tx.supervisorWithdrawalRequest.findMany({
+        where: { supervisorId: supervisor.id, status: 'pending' },
+        select: { id: true, amount: true },
+      });
+      if (pendingRequests.length) {
+        const err = new Error('Existe um saque pendente. Aguarde a aprovacao.');
+        err.code = 'ERR_PENDING_WITHDRAWAL';
+        throw err;
+      }
+
+      const commissions = await tx.supervisorCommission.findMany({
+        where: { supervisorId: supervisor.id, status: 'pending', payoutRequestId: null },
+        select: { id: true, amount: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const totalAvailable = sumAmounts(commissions);
+      if (!totalAvailable.greaterThan(ZERO)) {
+        const err = new Error('Saldo de comissao insuficiente.');
+        err.code = 'ERR_NO_BALANCE';
+        throw err;
+      }
+      if (value.greaterThan(totalAvailable)) {
+        const err = new Error('Saldo de comissao insuficiente.');
+        err.code = 'ERR_NO_BALANCE';
+        throw err;
+      }
+
+      const reserved = [];
+      let reservedTotal = ZERO;
+      for (const commission of commissions) {
+        if (reservedTotal.greaterThanOrEqualTo(value)) break;
+        reserved.push(commission.id);
+        reservedTotal = reservedTotal.add(commission.amount || ZERO);
+      }
+
+      const request = await tx.supervisorWithdrawalRequest.create({
+        data: {
+          supervisorId: supervisor.id,
+          amount: value,
+          status: 'pending',
+          pixKey: cpf,
+          pixType: 'cpf',
+        },
+        select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
+      });
+
+      if (reserved.length) {
+        const updated = await tx.supervisorCommission.updateMany({
+          where: { id: { in: reserved }, status: 'pending', payoutRequestId: null },
+          data: { status: 'reserved', payoutRequestId: request.id },
+        });
+        if (updated.count !== reserved.length) {
+          const err = new Error('Comissoes ja reservadas.');
+          err.code = 'ERR_RACE';
+          throw err;
+        }
+      }
+
+      return { request, reservedTotal };
+    });
+
+    return res.status(201).json({
+      request: {
+        ...result.request,
+        amount: formatMoney(result.request.amount),
+      },
+      reservedAmount: formatMoney(result.reservedTotal || 0),
+    });
+  } catch (err) {
+    if (err?.code === 'ERR_RACE') return res.status(409).json({ error: err.message });
+    if (err?.code === 'ERR_PENDING_WITHDRAWAL') return res.status(409).json({ error: err.message });
+    if (err?.code === 'ERR_NO_BALANCE') return res.status(400).json({ error: err.message });
+    return res.status(500).json({ error: 'Erro ao solicitar saque do supervisor.' });
+  }
+};
+
+exports.listSupervisorWithdrawals = async (req, res) => {
+  const supervisor = req.supervisor;
+  if (!supervisor) return res.status(403).json({ error: 'Acesso restrito a supervisores.' });
+
+  try {
+    const [requests, pendingCommissions] = await prisma.$transaction([
+      prisma.supervisorWithdrawalRequest.findMany({
+        where: { supervisorId: supervisor.id },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: { id: true, amount: true, status: true, createdAt: true, pixKey: true, pixType: true },
+      }),
+      prisma.supervisorCommission.aggregate({
+        where: { supervisorId: supervisor.id, status: 'pending' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return res.json({
+      available: formatMoney(pendingCommissions._sum.amount || 0),
+      withdrawals: requests.map((req) => ({
+        ...req,
+        amount: formatMoney(req.amount),
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao buscar saques do supervisor.' });
   }
 };

@@ -2,11 +2,13 @@ const { z } = require('zod');
 const { DateTime } = require('luxon');
 const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
-const { formatMoney } = require('../utils/money');
+const { formatMoney, normalizeDecimalString } = require('../utils/money');
 const { recordTransaction } = require('../services/financeService');
 const { normalizeCodigoHorarioLabel } = require('../utils/codigoHorario');
 const prisma = require('../prisma');
-const SUPERVISOR_COMMISSION_PCT = Number(process.env.SUPERVISOR_COMMISSION_PCT || 0);
+const SUPERVISOR_COMMISSION_PCT = new Prisma.Decimal(
+  normalizeDecimalString(process.env.SUPERVISOR_COMMISSION_PCT || '0') || '0',
+);
 const SUPERVISOR_COMMISSION_BASIS = process.env.SUPERVISOR_COMMISSION_BASIS || 'stake';
 const BET_DEBUG = process.env.BET_DEBUG === 'true';
 const COMMIT_SHA =
@@ -367,7 +369,12 @@ exports.create = async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const userWallet = await tx.user.findUnique({
         where: { id: req.userId },
-        select: { balance: true, bonus: true, supervisorId: true },
+        select: {
+          balance: true,
+          bonus: true,
+          supervisorId: true,
+          supervisor: { select: { commissionRate: true, user: { select: { isBlocked: true, deletedAt: true } } } },
+        },
       });
 
       if (!userWallet) {
@@ -445,25 +452,26 @@ exports.create = async (req, res) => {
         suppressErrors: false,
       });
 
-      if (user?.supervisorId && SUPERVISOR_COMMISSION_PCT > 0) {
-        const commissionAmount = totalDebit
-          .mul(new Prisma.Decimal(SUPERVISOR_COMMISSION_PCT))
-          .div(HUNDRED)
-          .toDecimalPlaces(2);
-        if (commissionAmount.greaterThan(ZERO)) {
-          try {
+      if (userWallet?.supervisorId) {
+        let commissionRate = SUPERVISOR_COMMISSION_PCT;
+        if (userWallet.supervisor && userWallet.supervisor.commissionRate !== null && userWallet.supervisor.commissionRate !== undefined) {
+          commissionRate = toDecimalSafe(userWallet.supervisor.commissionRate);
+        }
+        const supervisorBlocked = Boolean(userWallet.supervisor?.user?.isBlocked || userWallet.supervisor?.user?.deletedAt);
+        if (!supervisorBlocked && commissionRate.greaterThan(ZERO)) {
+          const commissionAmount = totalDebit.mul(commissionRate).div(HUNDRED).toDecimalPlaces(2);
+          if (commissionAmount.greaterThan(ZERO)) {
             await tx.supervisorCommission.create({
               data: {
-                supervisorId: user.supervisorId,
+                supervisorId: userWallet.supervisorId,
                 userId: req.userId,
                 betId: bet.id,
                 amount: commissionAmount,
+                commissionRate: commissionRate.toDecimalPlaces(2),
                 basis: SUPERVISOR_COMMISSION_BASIS,
                 status: 'pending',
               },
             });
-          } catch (e) {
-            console.warn('Erro ao registrar comissão do supervisor:', e.message);
           }
         }
       }
