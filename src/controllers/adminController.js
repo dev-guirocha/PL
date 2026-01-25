@@ -161,14 +161,14 @@ const getCanonicalName = (str) => {
 
 const normalizeLotteryFamily = (name) => {
   const c = getCanonicalName(name);
+  if (c.includes('MALUQ') && c.includes('FEDERAL')) return 'MALUQ FEDERAL';
+  if (c.includes('MALUQ')) return 'MALUQUINHA';
   if (c.includes('RIO') && c.includes('FEDERAL')) return 'RIO/FEDERAL';
   if (c.includes('PTRIO') || c.includes('CORUJA') || c.includes('RIO')) return 'RIO/FEDERAL';
   if (c.includes('SAO') && c.includes('PAULO')) return 'SAO-PAULO';
   if (c.includes('BAND')) return 'SAO-PAULO';
   if (c.includes('PTSP')) return 'SAO-PAULO';
   if (c.includes('SP') && (c.includes('PT') || c.includes('LT'))) return 'SAO-PAULO';
-  if (c.includes('MALUQ') && c.includes('FEDERAL')) return 'MALUQ FEDERAL';
-  if (c.includes('MALUQ')) return 'MALUQUINHA';
   if (c.includes('LOOK') || c.includes('GOIAS') || c.includes('ALVORADA')) return 'LOOK/GOIAS';
   if (c.includes('LOTECE') || c.includes('LOTEP') || c.includes('PARAIBA') || c.includes('CEARA')) return 'LOTECE/LOTEP';
   if (c.includes('BAHIA')) return 'BAHIA';
