@@ -67,6 +67,7 @@ router.post('/bets/:betId/manual-settle', mustBeFn('manualSettleBet'));
 
 // Saques
 router.get('/withdrawals', mustBeFn('listWithdrawals'));
+router.patch('/withdrawals/:id/status', mustBeFn('updateWithdrawalStatus'));
 
 // Supervisores
 router.get('/supervisors', mustBeFn('listSupervisors'));

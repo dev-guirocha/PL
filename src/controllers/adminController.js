@@ -924,6 +924,96 @@ exports.listWithdrawals = async (req, res) => {
   } catch (e) { res.json({ withdrawals: [] }); }
 };
 
+exports.updateWithdrawalStatus = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const statusRaw = String(req.body?.status || '').trim().toLowerCase();
+    const allowedStatuses = ['pending', 'approved', 'rejected', 'paid'];
+    if (!allowedStatuses.includes(statusRaw)) {
+      return res.status(400).json({ error: 'Status inválido.' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.withdrawalRequest.findUnique({
+        where: { id },
+        select: { id: true, userId: true, amount: true, status: true },
+      });
+
+      if (!request) {
+        const err = new Error('Saque não encontrado.');
+        err.code = 'ERR_NOT_FOUND';
+        throw err;
+      }
+
+      const currentStatus = String(request.status || '').toLowerCase();
+      if (currentStatus === statusRaw) return request;
+
+      if (statusRaw === 'approved') {
+        if (currentStatus !== 'pending') {
+          const err = new Error('Apenas saques pendentes podem ser aprovados.');
+          err.code = 'ERR_INVALID_STATE';
+          throw err;
+        }
+        return tx.withdrawalRequest.update({
+          where: { id },
+          data: { status: 'approved' },
+        });
+      }
+
+      if (statusRaw === 'paid') {
+        if (currentStatus !== 'approved') {
+          const err = new Error('Apenas saques aprovados podem ser marcados como pagos.');
+          err.code = 'ERR_INVALID_STATE';
+          throw err;
+        }
+        return tx.withdrawalRequest.update({
+          where: { id },
+          data: { status: 'paid' },
+        });
+      }
+
+      if (statusRaw === 'rejected') {
+        if (currentStatus === 'paid') {
+          const err = new Error('Não é possível rejeitar um saque já pago.');
+          err.code = 'ERR_INVALID_STATE';
+          throw err;
+        }
+
+        await tx.withdrawalRequest.update({
+          where: { id },
+          data: { status: 'rejected' },
+        });
+
+        await tx.user.update({
+          where: { id: request.userId },
+          data: { balance: { increment: request.amount } },
+        });
+
+        await recordTransaction({
+          userId: request.userId,
+          type: 'withdraw_reject',
+          amount: request.amount,
+          description: `Saque ${request.id} rejeitado`,
+          client: tx,
+          suppressErrors: false,
+        });
+
+        return { ...request, status: 'rejected' };
+      }
+
+      return request;
+    });
+
+    return res.json({ ok: true, withdrawal: result });
+  } catch (e) {
+    if (e?.code === 'ERR_NOT_FOUND') return res.status(404).json({ error: e.message });
+    if (e?.code === 'ERR_INVALID_STATE') return res.status(400).json({ error: e.message });
+    return res.status(500).json({ error: 'Erro ao atualizar saque.' });
+  }
+};
+
 exports.listSupervisors = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
