@@ -22,10 +22,38 @@ const normalizePalpites = (value) => {
 
 const formatPalpite = (val) => {
   if (val && typeof val === 'object') {
-    const joined = Object.values(val || {}).join(' ').trim();
-    return joined || JSON.stringify(val);
+    const entries = Object.entries(val || {}).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    if (!entries.length) return '';
+    const preferred = ['milhar', 'centena', 'dezena', 'unidade', 'grupo', 'numero', 'num', 'palpite'];
+    for (const key of preferred) {
+      const found = entries.find(([k]) => k.toLowerCase() === key);
+      if (found) return String(found[1]);
+    }
+    const formatted = entries.map(([k, v]) => {
+      const label = k.replace(/([A-Z])/g, ' $1').replace(/[_-]+/g, ' ').trim().toUpperCase();
+      return `${label}: ${String(v)}`;
+    });
+    return formatted.join(' | ');
   }
   return String(val ?? '');
+};
+
+const formatDateBRSafe = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const raw = value.split('T')[0].split(' ')[0];
+    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      return `${d}/${m}/${y}`;
+    }
+    const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brMatch) {
+      const [, d, m, y] = brMatch;
+      return `${d}/${m}/${y}`;
+    }
+  }
+  return formatDateBR(value);
 };
 
 const getBaseNumbers = (pule) => {
@@ -160,7 +188,7 @@ const AdminPuleAction = ({ betId, ticketId }) => {
                       </div>
                       <div>
                         <span className="block text-xs font-semibold uppercase text-slate-500">Data do jogo</span>
-                        <span className="font-semibold">{formatDateBR(pule.dataJogo) || '—'}</span>
+                        <span className="font-semibold">{formatDateBRSafe(pule.dataJogo) || '—'}</span>
                       </div>
                     </div>
                     {baseNumbers.length ? (
