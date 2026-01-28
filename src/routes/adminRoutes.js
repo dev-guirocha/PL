@@ -59,6 +59,7 @@ router.delete('/users/:id', mustBeFn('softDeleteUser'));
 
 // Apostas
 router.get('/bets', mustBeFn('listBets'));
+router.get('/bets/ticket/:ticketId', mustBeFn('getBetPuleData'));
 router.post('/bets/:id/recheck', mustBeFn('recheckSingleBet')); // V21
 
 // Saques
