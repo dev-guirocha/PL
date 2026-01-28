@@ -24,8 +24,9 @@ model User {
   resetExpires DateTime?
   isAdmin   Boolean  @default(false)
   isBlocked Boolean  @default(false)
-  supervisor   Supervisor? @relation(fields: [supervisorId], references: [id])
+  supervisor   Supervisor? @relation("UserSupervisor", fields: [supervisorId], references: [id])
   supervisorId Int?
+  supervisorProfile Supervisor? @relation("SupervisorAccount")
   pendingSupCode String?
   balance   Decimal   @default(0)
   bonus     Decimal   @default(0)
@@ -153,8 +154,11 @@ model Supervisor {
   name      String
   phone     String?
   code      String   @unique
+  userId    Int?     @unique
+  user      User?    @relation("SupervisorAccount", fields: [userId], references: [id])
+  commissionRate Decimal?
   createdAt DateTime @default(now())
-  users     User[]
+  users     User[]   @relation("UserSupervisor")
   commissions SupervisorCommission[]
 }
 
