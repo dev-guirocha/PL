@@ -71,6 +71,20 @@ const getSupervisorScope = (req) => {
   if (req?.supervisor && !isAdminRequest(req)) return req.supervisor;
   return null;
 };
+
+const betHasTicketId = (() => {
+  let cached;
+  return () => {
+    if (cached !== undefined) return cached;
+    try {
+      const model = prisma?._dmmf?.datamodel?.models?.find((m) => m.name === 'Bet');
+      cached = Boolean(model?.fields?.some((f) => f.name === 'ticketId'));
+    } catch {
+      cached = false;
+    }
+    return cached;
+  };
+})();
 // --- FUNÇÕES AUXILIARES ---
 const isManualSettlementMissing = (err) => {
   const code = err?.code;
@@ -909,6 +923,64 @@ exports.listBets = async (req, res) => {
     const total = await prisma.bet.count({ where });
     res.json({ bets, total, page });
   } catch (e) { res.status(500).json({ error: 'Erro bets' }); }
+};
+
+exports.getBetPuleData = async (req, res) => {
+  try {
+    const rawId = String(req.params.ticketId || req.params.id || '').trim();
+    if (!rawId) return res.status(400).json({ error: 'Parâmetro inválido.' });
+
+    const hasTicketId = betHasTicketId();
+    const numericId = Number(rawId);
+    const canUseNumeric = Number.isFinite(numericId) && numericId > 0;
+
+    let baseBet = null;
+    if (canUseNumeric) {
+      baseBet = await prisma.bet.findUnique({
+        where: { id: numericId },
+        include: { user: { select: { id: true, name: true, phone: true } } },
+      });
+    }
+
+    if (!baseBet && hasTicketId) {
+      baseBet = await prisma.bet.findFirst({
+        where: { ticketId: rawId },
+        orderBy: { createdAt: 'asc' },
+        include: { user: { select: { id: true, name: true, phone: true } } },
+      });
+    }
+
+    if (!baseBet) return res.status(404).json({ error: 'Aposta não encontrada.' });
+
+    let bets = [baseBet];
+    if (hasTicketId && baseBet.ticketId) {
+      bets = await prisma.bet.findMany({
+        where: { ticketId: baseBet.ticketId },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    const headerBet = bets[0] || baseBet;
+    const apostas = bets.flatMap((bet) => parseApostasFromBet(bet));
+    const total = bets.reduce((acc, bet) => acc.add(toDecimalSafe(bet.total)), ZERO_DECIMAL).toDecimalPlaces(2);
+    const ticketRef = baseBet.ticketId ? `TICKET-${String(baseBet.ticketId).slice(0, 8)}` : null;
+
+    return res.json({
+      id: baseBet.ticketId || baseBet.id,
+      ticketId: baseBet.ticketId || null,
+      betRef: ticketRef || `${baseBet.userId || ''}-${baseBet.id || ''}`,
+      loteria: headerBet.loteria,
+      codigoHorario: headerBet.codigoHorario,
+      dataJogo: headerBet.dataJogo,
+      createdAt: headerBet.createdAt,
+      userId: baseBet.userId,
+      total: total.toFixed(2),
+      apostas,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Erro ao buscar dados da PULE.' });
+  }
 };
 
 exports.listWithdrawals = async (req, res) => {

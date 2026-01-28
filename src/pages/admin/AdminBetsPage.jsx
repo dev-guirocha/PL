@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FaArchive, FaFolderOpen, FaSearch, FaSyncAlt } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../components/admin/AdminTable';
+import AdminPuleAction from '../../components/admin/AdminPuleAction';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
 
@@ -411,6 +412,7 @@ const AdminBetsPage = () => {
               {showActions && (
                 <AdminTableCell>
                   <div className="flex flex-col gap-2">
+                    <AdminPuleAction betId={bet.id || bet._id || bet.betId} ticketId={bet.ticketId} />
                     <button
                       onClick={() => handleRecheck(bet.id || bet._id || bet.betId)}
                       className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition"
