@@ -996,6 +996,21 @@ exports.listWithdrawals = async (req, res) => {
   } catch (e) { res.json({ withdrawals: [] }); }
 };
 
+exports.getPendingNotificationsCount = async (req, res) => {
+  try {
+    const supervisorScope = getSupervisorScope(req);
+    const where = supervisorScope
+      ? { status: 'pending', user: { supervisorId: supervisorScope.id } }
+      : { status: 'pending' };
+
+    const count = await prisma.withdrawalRequest.count({ where });
+    return res.json({ withdrawals: count, total: count });
+  } catch (error) {
+    console.error('Erro ao contar notificacoes:', error);
+    return res.status(500).json({ error: 'Erro interno ao buscar contagem.' });
+  }
+};
+
 exports.updateWithdrawalStatus = async (req, res) => {
   try {
     const id = Number(req.params.id);

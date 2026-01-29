@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
+import { useNotifications } from '../../hooks/useNotifications';
 
 const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
 const formatDateTime = (value) => {
@@ -18,6 +19,7 @@ const AdminWithdrawalsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+  const { refresh: refreshNotifications } = useNotifications();
 
   const fetchWithdrawals = async () => {
     setLoading(true);
@@ -39,6 +41,7 @@ const AdminWithdrawalsPage = () => {
     try {
       await api.patch(`/admin/withdrawals/${id}/status`, { status });
       await fetchWithdrawals();
+      refreshNotifications();
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao atualizar status.');
     } finally {

@@ -51,6 +51,7 @@ router.use(verifyToken, isAdmin);
 
 // Dashboard
 router.get('/stats', mustBeFn('getDashboardStats'));
+router.get('/notifications/count', mustBeFn('getPendingNotificationsCount'));
 
 // Usuários
 router.get('/users', mustBeFn('listUsers'));

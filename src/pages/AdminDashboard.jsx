@@ -14,7 +14,9 @@ import {
 import api from '../utils/api';
 import AdminLayout from '../components/admin/AdminLayout';
 import StatCard from '../components/admin/StatCard';
+import NotificationBadge from '../components/admin/NotificationBadge';
 import Spinner from '../components/Spinner';
+import { useNotifications } from '../hooks/useNotifications';
 
 const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
 
@@ -23,6 +25,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
+  const { counts } = useNotifications();
 
   const fetchStats = async () => {
     setLoading(true);
@@ -105,13 +108,14 @@ const AdminDashboard = () => {
               <div
                 key={item.title}
                 onClick={() => navigate(item.path)}
-                className="group cursor-pointer bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-200 flex items-start gap-4"
+                className="group relative cursor-pointer bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-200 flex items-start gap-4"
               >
                 <div className={`p-3 rounded-xl ${item.color} text-xl group-hover:scale-110 transition-transform`}>{item.icon}</div>
                 <div>
                   <h4 className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{item.title}</h4>
                   <p className="text-sm text-slate-500 mt-1 leading-snug">{item.desc}</p>
                 </div>
+                {item.title === 'Saques' && <NotificationBadge count={counts.withdrawals} />}
               </div>
             ))}
           </div>
