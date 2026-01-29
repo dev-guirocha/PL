@@ -115,7 +115,7 @@ const AdminDashboard = () => {
                   <h4 className="font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{item.title}</h4>
                   <p className="text-sm text-slate-500 mt-1 leading-snug">{item.desc}</p>
                 </div>
-                {item.title === 'Saques' && <NotificationBadge count={counts.withdrawals} />}
+                {item.title === 'Saques' && <NotificationBadge count={counts.withdrawals} pulse />}
                 {item.title === 'Apostas' && <NotificationBadge count={counts.betsNew} pulse />}
               </div>
             ))}
