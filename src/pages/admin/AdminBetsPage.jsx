@@ -5,6 +5,7 @@ import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../co
 import AdminPuleAction from '../../components/admin/AdminPuleAction';
 import Spinner from '../../components/Spinner';
 import api from '../../utils/api';
+import { useNotifications } from '../../hooks/useNotifications';
 
 const formatCurrency = (value) => `R$ ${(Number(value) || 0).toFixed(2).replace('.', ',')}`;
 const formatDateTime = (value) => {
@@ -173,6 +174,7 @@ const AdminBetsPage = () => {
   const [manualPreview, setManualPreview] = useState(null);
   const [manualReason, setManualReason] = useState('');
   const [manualSubmitting, setManualSubmitting] = useState(false);
+  const { markBetsSeen } = useNotifications();
 
   const fetchBets = async () => {
     setLoading(true);
@@ -263,6 +265,7 @@ const AdminBetsPage = () => {
 
   useEffect(() => {
     fetchBets();
+    markBetsSeen();
   }, []);
 
   const matchesFilter = (mods, filterValue) => {

@@ -1003,8 +1003,30 @@ exports.getPendingNotificationsCount = async (req, res) => {
       ? { status: 'pending', user: { supervisorId: supervisorScope.id } }
       : { status: 'pending' };
 
-    const count = await prisma.withdrawalRequest.count({ where });
-    return res.json({ withdrawals: count, total: count });
+    const betSinceRaw = String(req.query?.betSince || req.query?.betsSince || '').trim();
+    let betSince = null;
+    if (betSinceRaw) {
+      const parsed = new Date(betSinceRaw);
+      if (!Number.isNaN(parsed.getTime())) {
+        betSince = parsed;
+      }
+    }
+
+    const betsWhere = {
+      ...(supervisorScope ? { user: { supervisorId: supervisorScope.id } } : {}),
+      ...(betSince ? { createdAt: { gt: betSince } } : {}),
+    };
+
+    const [withdrawalsCount, betsNew] = await Promise.all([
+      prisma.withdrawalRequest.count({ where }),
+      betSince ? prisma.bet.count({ where: betsWhere }) : Promise.resolve(0),
+    ]);
+
+    return res.json({
+      withdrawals: withdrawalsCount,
+      betsNew,
+      total: withdrawalsCount + betsNew,
+    });
   } catch (error) {
     console.error('Erro ao contar notificacoes:', error);
     return res.status(500).json({ error: 'Erro interno ao buscar contagem.' });

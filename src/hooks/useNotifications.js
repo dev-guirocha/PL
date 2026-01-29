@@ -1,21 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../utils/api';
 
-const DEFAULT_COUNTS = { withdrawals: 0, total: 0 };
+const DEFAULT_COUNTS = { withdrawals: 0, betsNew: 0, total: 0 };
+const BETS_SEEN_KEY = 'adminBetsLastSeenAt';
+
+const readBetsLastSeen = () => {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(BETS_SEEN_KEY);
+  if (raw) return raw;
+  const now = new Date().toISOString();
+  window.localStorage.setItem(BETS_SEEN_KEY, now);
+  return now;
+};
+
+const writeBetsLastSeen = (value) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(BETS_SEEN_KEY, value);
+};
 
 export const useNotifications = ({ intervalMs = 30000 } = {}) => {
   const [counts, setCounts] = useState(DEFAULT_COUNTS);
+  const [betSince, setBetSince] = useState(() => readBetsLastSeen());
   const timerRef = useRef(null);
 
   const fetchCounts = useCallback(async () => {
     try {
-      const response = await api.get('/admin/notifications/count');
-      setCounts(response.data || DEFAULT_COUNTS);
+      const response = await api.get('/admin/notifications/count', {
+        params: betSince ? { betSince } : {},
+      });
+      setCounts({ ...DEFAULT_COUNTS, ...(response.data || {}) });
     } catch (error) {
       // Silencia erro para nao poluir UI do admin com polling.
       console.error('Erro ao buscar notificacoes:', error);
     }
-  }, []);
+  }, [betSince]);
 
   useEffect(() => {
     fetchCounts();
@@ -25,5 +43,16 @@ export const useNotifications = ({ intervalMs = 30000 } = {}) => {
     };
   }, [fetchCounts, intervalMs]);
 
-  return { counts, refresh: fetchCounts };
+  const markBetsSeen = useCallback(() => {
+    const now = new Date().toISOString();
+    writeBetsLastSeen(now);
+    setBetSince(now);
+    setCounts((prev) => ({
+      ...prev,
+      betsNew: 0,
+      total: Math.max(0, (prev.total || 0) - (prev.betsNew || 0)),
+    }));
+  }, []);
+
+  return { counts, refresh: fetchCounts, markBetsSeen };
 };

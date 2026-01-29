@@ -116,6 +116,7 @@ const AdminDashboard = () => {
                   <p className="text-sm text-slate-500 mt-1 leading-snug">{item.desc}</p>
                 </div>
                 {item.title === 'Saques' && <NotificationBadge count={counts.withdrawals} />}
+                {item.title === 'Apostas' && <NotificationBadge count={counts.betsNew} />}
               </div>
             ))}
           </div>
