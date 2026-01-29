@@ -8,9 +8,11 @@ const readBetsLastSeen = () => {
   if (typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(BETS_SEEN_KEY);
   if (raw) return raw;
-  const now = new Date().toISOString();
-  window.localStorage.setItem(BETS_SEEN_KEY, now);
-  return now;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const iso = startOfDay.toISOString();
+  window.localStorage.setItem(BETS_SEEN_KEY, iso);
+  return iso;
 };
 
 const writeBetsLastSeen = (value) => {
