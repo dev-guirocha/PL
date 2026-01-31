@@ -14,14 +14,21 @@ const crypto = require('crypto');
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
 const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
-const FALLBACK_RATE_TODAY = new Prisma.Decimal('0.20'); // 20% (promo do dia)
-const PROMO_DATE = '2026-01-31';
+const FALLBACK_RATE_PROMO = new Prisma.Decimal('0.20'); // 20% (promo do fim de semana)
+const PROMO_START_DATE = '2026-01-31';
+const PROMO_END_DATE = '2026-02-01';
 const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
 
-const getFallbackRate = () => {
-  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-  return today === PROMO_DATE ? FALLBACK_RATE_TODAY : FALLBACK_RATE;
+const getTodayStr = () =>
+  new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+const isPromoActive = () => {
+  const today = getTodayStr();
+  return today >= PROMO_START_DATE && today <= PROMO_END_DATE;
 };
+
+const getFallbackRate = () => (isPromoActive() ? FALLBACK_RATE_PROMO : FALLBACK_RATE);
+const getDepositMax = () => (isPromoActive() ? 1500 : 3000);
 
 exports.createPixCharge = async (req, res) => {
   try {
@@ -44,8 +51,10 @@ exports.createPixCharge = async (req, res) => {
     if (!Number.isFinite(valueNumber) || valueNumber < 10) {
       return res.status(400).json({ error: 'Depósito mínimo é R$ 10,00.' });
     }
-    if (valueNumber > 3000) {
-      return res.status(400).json({ error: 'Depósito máximo é R$ 3.000,00.' });
+    const depositMax = getDepositMax();
+    if (valueNumber > depositMax) {
+      const formatted = depositMax.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return res.status(400).json({ error: `Depósito máximo é R$ ${formatted}.` });
     }
 
     // Decimal seguro (2 casas)

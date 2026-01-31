@@ -6,6 +6,11 @@ import { getStoredLoggedIn } from '../utils/authSession.mjs';
 import { useAuth } from '../context/AuthContext';
 
 const PixRechargePage = () => {
+  const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const promoActive = todayStr >= '2026-01-31' && todayStr <= '2026-02-01';
+  const bonusRateLabel = promoActive ? '20%' : '15%';
+  const maxDeposit = promoActive ? 1500 : 3000;
+  const maxDepositCents = maxDeposit * 100;
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const [cpf, setCpf] = useState('');
@@ -88,8 +93,9 @@ const PixRechargePage = () => {
       toast.error('Depósito mínimo é R$ 10,00.');
       return;
     }
-    if (amountCents > 300000) {
-      toast.error('Valor máximo por depósito é R$ 3.000,00.');
+    if (amountCents > maxDepositCents) {
+      const formatted = maxDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      toast.error(`Valor máximo por depósito é R$ ${formatted}.`);
       return;
     }
 
@@ -247,7 +253,7 @@ const PixRechargePage = () => {
 
         <div className="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3">
           <p className="text-xs font-semibold text-emerald-800">Bônus padrão</p>
-          <p className="text-xs text-emerald-700">20% aplicado automaticamente se não usar cupom.</p>
+          <p className="text-xs text-emerald-700">{bonusRateLabel} aplicado automaticamente se não usar cupom.</p>
         </div>
 
         <div className="space-y-2">
