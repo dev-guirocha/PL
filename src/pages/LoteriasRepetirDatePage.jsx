@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { updateDraft, getDraft } from '../utils/receipt';
+import { getBrazilTodayStr, getBrazilDatePlusDays, formatBrazilDateLabel } from '../utils/brazilTime';
 
 const LoteriasRepetirDatePage = () => {
   const navigate = useNavigate();
@@ -9,17 +10,14 @@ const LoteriasRepetirDatePage = () => {
   const [selectedDate, setSelectedDate] = useState(null);
 
   const days = useMemo(() => {
-    const arr = [];
-    const today = new Date();
-    for (let i = 0; i <= 2; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      arr.push({
-        label: d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }),
-        value: d.toISOString().slice(0, 10),
-      });
-    }
-    return arr;
+    const todayIso = getBrazilTodayStr();
+    return [0, 1, 2].map((offset) => {
+      const value = getBrazilDatePlusDays(todayIso, offset);
+      return {
+        label: formatBrazilDateLabel(value),
+        value,
+      };
+    });
   }, []);
 
   useEffect(() => {

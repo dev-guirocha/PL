@@ -311,6 +311,10 @@ const LoteriasFinalPage = () => {
                 let lastBalances = {};
                 let totalDebited = 0;
                 const betsCreated = [];
+                const apostasComData = (draft?.apostas || []).map((ap) => ({
+                  ...ap,
+                  data: ap?.data || draft?.data || ap?.dataJogo,
+                }));
                 for (const sel of selecoes) {
                   const idempotencyKey = createIdempotencyKey();
                   const res = await api.post(
@@ -318,7 +322,8 @@ const LoteriasFinalPage = () => {
                     {
                       loteria: sel.nome || draft?.loteria,
                       codigoHorario: sel.horario,
-                      apostas: draft?.apostas || [],
+                      dataJogo: draft?.data,
+                      apostas: apostasComData,
                     },
                     { headers: { 'Idempotency-Key': idempotencyKey } },
                   );

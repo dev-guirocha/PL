@@ -3,16 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import Spinner from '../components/Spinner';
 import { getDraft, updateDraft } from '../utils/receipt';
+import { getBrazilDatePlusDays, formatBrazilDateLabel, getBrazilTodayStr } from '../utils/brazilTime';
 import { GAME_NAMES } from '../constants/games';
 import { useAuth } from '../context/AuthContext';
-
-// Gera string YYYY-MM-DD no fuso local (evita shift para UTC)
-const getLocalDateStr = (dateObj) => {
-  const y = dateObj.getFullYear();
-  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const d = String(dateObj.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
 
 const LoteriasDatePage = () => {
   const navigate = useNavigate();
@@ -25,17 +18,14 @@ const LoteriasDatePage = () => {
   const [draft, setDraft] = useState({});
 
   const days = useMemo(() => {
-    const arr = [];
-    const today = new Date();
-    for (let i = 0; i <= 2; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      arr.push({
-        label: d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }),
-        value: getLocalDateStr(d),
-      });
-    }
-    return arr;
+    const todayIso = getBrazilTodayStr();
+    return [0, 1, 2].map((offset) => {
+      const value = getBrazilDatePlusDays(todayIso, offset);
+      return {
+        label: formatBrazilDateLabel(value),
+        value,
+      };
+    });
   }, []);
 
   useEffect(() => {

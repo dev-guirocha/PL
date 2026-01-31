@@ -3,17 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { FaClock, FaCheck } from 'react-icons/fa';
 import { LOTERIAS_SORTEIOS } from '../data/sorteios';
 import { getDraft, updateDraft } from '../utils/receipt';
+import { getBrazilTodayStr, getBrazilWeekday, getBrazilTimeParts } from '../utils/brazilTime';
 import { useAuth } from '../context/AuthContext';
 
 const LOTERIAS_1_10_ALLOWED = ['lotece-lotep', 'bahia'];
-
-// Gera string YYYY-MM-DD no fuso local (evita shift para UTC)
-const getLocalDateStr = (dateObj) => {
-  const y = dateObj.getFullYear();
-  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const d = String(dateObj.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
 
 const LoteriasSorteiosPage = () => {
   const navigate = useNavigate();
@@ -144,29 +137,18 @@ const LoteriasSorteiosPage = () => {
   };
 
   const selectedDate = draft?.data;
-  const todayIso = getLocalDateStr(new Date());
+  const todayIso = getBrazilTodayStr();
   const isToday = selectedDate === todayIso;
-  const currentHour = new Date().getHours();
-  const currentMinutes = new Date().getMinutes();
-
-  const getSelectedDay = (isoStr) => {
-    if (!isoStr) return null;
-    const parts = isoStr.split('-').map(Number);
-    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
-    const [y, m, d] = parts;
-    const base = new Date(y, m - 1, d); // parse como data local para evitar shift de fuso
-    const day = base.getDay();
-    return Number.isNaN(day) ? null : day;
-  };
+  const { hour: currentHour, minute: currentMinutes } = getBrazilTimeParts();
 
   const isDateFederal = (isoStr) => {
-    const day = getSelectedDay(isoStr);
+    const day = getBrazilWeekday(isoStr);
     return day === 3 || day === 6;
   };
 
   const selectedDay = useMemo(() => {
-    const day = getSelectedDay(selectedDate);
-    return Number.isNaN(day) ? null : day; // 0-dom, 3-qua, 6-sab
+    const day = getBrazilWeekday(selectedDate);
+    return day === null ? null : day; // 0-dom, 3-qua, 6-sab
   }, [selectedDate]);
   const isFederalDay = selectedDay === 3 || selectedDay === 6;
 
