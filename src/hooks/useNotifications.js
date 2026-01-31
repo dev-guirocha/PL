@@ -20,7 +20,7 @@ const writeBetsLastSeen = (value) => {
   window.localStorage.setItem(BETS_SEEN_KEY, value);
 };
 
-export const useNotifications = ({ intervalMs = 30000 } = {}) => {
+export const useNotifications = ({ intervalMs = 60000 } = {}) => {
   const [counts, setCounts] = useState(DEFAULT_COUNTS);
   const [betSince, setBetSince] = useState(() => readBetsLastSeen());
   const timerRef = useRef(null);

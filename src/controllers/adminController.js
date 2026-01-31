@@ -6,6 +6,7 @@
 // - CORE: Engine V3.3 (Hybrid Logic, Synced Recheck, Reconstitutable Audit).
 
 const { Prisma } = require('@prisma/client');
+const crypto = require('crypto');
 const prisma = require('../utils/prismaClient');
 const { recordTransaction } = require('../services/financeService');
 const {
@@ -24,6 +25,29 @@ const ADMIN_DEBUG = process.env.ADMIN_DEBUG === 'true';
 const ZERO_DECIMAL = new Prisma.Decimal(0);
 const MAX_AUTO_PAYOUT_DEC = new Prisma.Decimal(MAX_AUTO_PAYOUT);
 const MANUAL_SETTLEMENT_MISSING = 'MANUAL_SETTLEMENT_MISSING';
+const DASHBOARD_CACHE_TTL_MS = Number(process.env.DASHBOARD_CACHE_TTL_MS || 30000);
+const DB_LOG_THRESHOLD_MS = Number(process.env.DB_LOG_THRESHOLD_MS || 600);
+
+const DASHBOARD_CACHE = {
+  data: null,
+  etag: null,
+  expiresAt: 0,
+};
+
+const setCacheHeaders = (res, etag) => {
+  if (DASHBOARD_CACHE_TTL_MS > 0) {
+    res.set('Cache-Control', `private, max-age=${Math.max(1, Math.floor(DASHBOARD_CACHE_TTL_MS / 1000))}`);
+  }
+  if (etag) res.set('ETag', etag);
+};
+
+const logDbTiming = (label, startedAt) => {
+  const ms = Date.now() - startedAt;
+  if (ms >= DB_LOG_THRESHOLD_MS) {
+    console.log(`[DB] ${label} ${ms.toFixed(1)}ms`);
+  }
+  return ms;
+};
 
 const toDecimalSafe = (value) => {
   if (value instanceof Prisma.Decimal) return value;
@@ -749,6 +773,16 @@ const simulateBetAgainstResult = ({ bet, result }) => {
 
 exports.getDashboardStats = async (req, res) => {
   try {
+    const now = Date.now();
+    if (DASHBOARD_CACHE.data && now < DASHBOARD_CACHE.expiresAt) {
+      setCacheHeaders(res, DASHBOARD_CACHE.etag);
+      if (req.headers['if-none-match'] && req.headers['if-none-match'] === DASHBOARD_CACHE.etag) {
+        return res.status(304).end();
+      }
+      return res.json(DASHBOARD_CACHE.data);
+    }
+
+    const startedAt = Date.now();
     const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers] = await Promise.all([
       prisma.user.aggregate({ where: { deletedAt: null }, _sum: { balance: true, bonus: true } }),
       prisma.bet.aggregate({ _sum: { total: true } }),
@@ -756,13 +790,23 @@ exports.getDashboardStats = async (req, res) => {
       prisma.bet.count(),
       prisma.user.count({ where: { deletedAt: null } }),
     ]);
-    res.json({
+    logDbTiming('admin_stats', startedAt);
+    const payload = {
       totalUsers, betsCount,
       platformFunds: Number(betsAgg._sum.total || 0),
       moneyOut: { bets: Number(betsAgg._sum.total || 0) },
       wallets: { saldo: Number(usersAgg._sum.balance || 0), bonus: Number(usersAgg._sum.bonus || 0), total: Number(usersAgg._sum.balance || 0) + Number(usersAgg._sum.bonus || 0) },
       pendingWithdrawals: { amount: Number(withdrawalsAgg._sum.amount || 0), count: withdrawalsAgg._count?._all || 0 },
-    });
+    };
+    const etag = `W/\"${crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex')}\"`;
+    DASHBOARD_CACHE.data = payload;
+    DASHBOARD_CACHE.etag = etag;
+    DASHBOARD_CACHE.expiresAt = Date.now() + DASHBOARD_CACHE_TTL_MS;
+    setCacheHeaders(res, etag);
+    if (req.headers['if-none-match'] && req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+    res.json(payload);
   } catch (error) { res.json({}); }
 };
 
@@ -1089,10 +1133,12 @@ exports.getPendingNotificationsCount = async (req, res) => {
       ...(betSince ? { createdAt: { gt: betSince } } : {}),
     };
 
+    const startedAt = Date.now();
     const [withdrawalsCount, betsNew] = await Promise.all([
       prisma.withdrawalRequest.count({ where }),
       betSince ? prisma.bet.count({ where: betsWhere }) : Promise.resolve(0),
     ]);
+    logDbTiming('admin_notifications', startedAt);
 
     return res.json({
       withdrawals: withdrawalsCount,
