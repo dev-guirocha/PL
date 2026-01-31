@@ -149,7 +149,7 @@ const AdminPuleAction = ({ betId, ticketId }) => {
               </button>
             </div>
 
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center py-10">
                   <Spinner size={32} />

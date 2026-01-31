@@ -281,7 +281,7 @@ const AdminUsersPage = () => {
               </button>
             </div>
 
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">
               {historyLoading ? (
                 <div className="flex justify-center items-center h-40">
                   <Spinner size={32} />
