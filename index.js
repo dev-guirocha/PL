@@ -5,6 +5,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
+const prisma = require('./src/utils/prismaClient');
 const authRoutes = require('./src/routes/authRoutes');
 const walletRoutes = require('./src/routes/walletRoutes');
 const pixRoutes = require('./src/routes/pixRoutes');
@@ -20,6 +21,31 @@ const app = express();
 // Necessário atrás de proxies (Railway/Vercel) para rate-limit e cookies funcionarem corretamente
 // Use número de hops ou rede loopback para não acionar alerta do express-rate-limit
 app.set('trust proxy', 1);
+
+const SLOW_REQUEST_MS = Number(process.env.SLOW_REQUEST_MS || 1000);
+const LOG_ALL_REQUESTS = process.env.LOG_ALL_REQUESTS === 'true';
+
+const withTimeout = (promise, ms) =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED_REJECTION]', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT_EXCEPTION]', err);
+});
 
 // Configura CORS permitindo apenas domínios autorizados
 const defaultOrigins = [
@@ -46,6 +72,21 @@ const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
 app.use(helmet());
 app.use(compression());
+
+// Loga requisições lentas (ou todas, se habilitado via env)
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    if (req.path === '/api/health') return;
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    if (LOG_ALL_REQUESTS || durationMs >= SLOW_REQUEST_MS) {
+      console.log(
+        `[REQ] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`,
+      );
+    }
+  });
+  next();
+});
 
 app.use(
   cors({
@@ -100,9 +141,40 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/bets', betRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Healthcheck simples para validar deploy/back-end
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true });
+// Healthcheck com ping no banco
+app.get('/api/health', async (req, res) => {
+  const payload = {
+    ok: false,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    db: { ok: false, latencyMs: null, error: null },
+  };
+
+  const timeoutMs = Number(process.env.HEALTH_DB_TIMEOUT_MS || 2000);
+  const start = Date.now();
+  try {
+    await withTimeout(prisma.$queryRaw`SELECT 1`, timeoutMs);
+    payload.db.ok = true;
+    payload.db.latencyMs = Date.now() - start;
+    payload.ok = true;
+    return res.status(200).json(payload);
+  } catch (err) {
+    payload.db.ok = false;
+    payload.db.latencyMs = Date.now() - start;
+    payload.db.error = err?.message || 'db_error';
+    return res.status(503).json(payload);
+  }
+});
+
+// Handler final de erro para logar falhas não tratadas
+app.use((err, req, res, next) => {
+  console.error('[UNHANDLED_ERROR]', {
+    method: req.method,
+    path: req.originalUrl,
+    message: err?.message,
+  });
+  res.status(500).json({ error: 'Erro interno.' });
 });
 
 const PORT = process.env.PORT || 3000;
