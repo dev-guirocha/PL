@@ -319,18 +319,23 @@ exports.create = async (req, res) => {
 
   // Regras FEDERAL (UX + backend)
   const isFederalBet = /FEDERAL/i.test(loteria);
+  const isMaluqFederal = /MALUQ/i.test(loteria) && /FEDERAL/i.test(loteria);
   const day = getDayFromDateStr(dataJogo);
   const hour = getHourFromCode(codigoHorarioFinal);
   const isFederalDay = day !== null && FEDERAL_DAYS.includes(day);
 
   if (isFederalBet) {
-    if (!isFederalDay || hour !== 20) {
-      return res.status(400).json({ error: 'Aposta FEDERAL permitida apenas quarta/sábado às 20H.' });
+    if (!isFederalDay || (isMaluqFederal ? hour !== 19 : hour !== 20)) {
+      return res.status(400).json({
+        error: isMaluqFederal
+          ? 'Aposta MALUQ FEDERAL permitida apenas quarta/sábado às 19H.'
+          : 'Aposta FEDERAL permitida apenas quarta/sábado às 20H.',
+      });
     }
   }
 
   if (isFederalDay && hour === 18 && /PT[\s-]*RIO|MALUQ/i.test(loteria)) {
-    return res.status(400).json({ error: 'Em dia de Federal, use o horário das 20H (Federal) em vez de 18HS.' });
+    return res.status(400).json({ error: 'Em dia de Federal, use o horário das 20H (Federal) ou 19H (Maluq Federal) em vez de 18HS.' });
   }
 
   if (!isBettingAllowed(codigoHorarioFinal, dataJogo)) {

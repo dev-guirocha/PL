@@ -11,7 +11,7 @@ function getHorariosMaluquinha() {
 }
 
 function getHorariosFederal() {
-  return ['FEDERAL 20H', 'LT MALUQ FEDERAL 20HS'];
+  return ['FEDERAL 20H', 'LT MALUQ FEDERAL 19HS'];
 }
 
 // --- A LISTA PRINCIPAL (Exportada com const e function para garantir compatibilidade) ---

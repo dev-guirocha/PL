@@ -72,6 +72,7 @@ const validateFederalRules = (req, res, next) => {
       const loteriaNorm = normalize(loteria);
 
       const hasFederalKeyword = code.includes('FEDERAL') || loteriaNorm.includes('FEDERAL');
+      const isMaluqFederal = (code.includes('MALUQ') && code.includes('FEDERAL')) || (loteriaNorm.includes('MALUQ') && loteriaNorm.includes('FEDERAL'));
       const time = extractHourMinute(cod);
       const hour = time?.hour;
 
@@ -85,24 +86,32 @@ const validateFederalRules = (req, res, next) => {
       const isBlocked18Slot = (isPtRio || isMaluqRio) && is18 && !hasFederalKeyword;
 
       const is20 = hour === 20;
+      const is19 = hour === 19;
 
       if (federalDay) {
         if (isBlocked18Slot) {
           return res.status(400).json({
             error:
-              'Neste dia há FEDERAL às 20h. As opções LT PT RIO 18HS e LT MALUQ RIO 18HS ficam indisponíveis.',
+              'Neste dia há FEDERAL às 20h e MALUQ FEDERAL às 19h. As opções LT PT RIO 18HS e LT MALUQ RIO 18HS ficam indisponíveis.',
           });
         }
         if (hasFederalKeyword) {
           if (hour == null) {
-            return res.status(400).json({ error: 'Horário inválido para FEDERAL. Selecione FEDERAL 20h.' });
+            return res.status(400).json({ error: 'Horário inválido para FEDERAL. Selecione FEDERAL 20h ou MALUQ FEDERAL 19h.' });
           }
-          if (!is20) {
+          if (isMaluqFederal && !is19) {
+            return res.status(400).json({ error: 'MALUQ FEDERAL só é permitido às 19h (quarta e sábado).' });
+          }
+          if (!isMaluqFederal && !is20) {
             return res.status(400).json({ error: 'FEDERAL só é permitido às 20h (quarta e sábado).' });
           }
         }
       } else if (hasFederalKeyword) {
-        return res.status(400).json({ error: 'FEDERAL só está disponível nas quartas e sábados às 20h.' });
+        return res.status(400).json({
+          error: isMaluqFederal
+            ? 'MALUQ FEDERAL só está disponível nas quartas e sábados às 19h.'
+            : 'FEDERAL só está disponível nas quartas e sábados às 20h.',
+        });
       }
     }
 
