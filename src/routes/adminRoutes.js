@@ -55,6 +55,7 @@ router.get('/notifications/count', mustBeFn('getPendingNotificationsCount'));
 
 // Usuários
 router.get('/users', mustBeFn('listUsers'));
+router.get('/users/:id/transactions', mustBeFn('getUserTransactions'));
 router.patch('/users/:id/roles', mustBeFn('updateUserRoles'));
 router.post('/users/:id/block', mustBeFn('toggleUserBlock'));
 router.delete('/users/:id', mustBeFn('softDeleteUser'));

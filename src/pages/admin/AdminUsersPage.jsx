@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FaSyncAlt, FaTrashAlt, FaUserShield, FaUserTag } from 'react-icons/fa';
+import { FaSyncAlt, FaTrashAlt, FaUserShield, FaUserTag, FaHistory } from 'react-icons/fa';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell, StatusBadge } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
@@ -14,6 +14,11 @@ const AdminUsersPage = () => {
   const [deletingId, setDeletingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyUser, setHistoryUser] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -112,6 +117,23 @@ const AdminUsersPage = () => {
 
   const totalBalance = users.reduce((acc, u) => acc + (Number(u.balance) || 0), 0);
 
+  const openHistory = async (user) => {
+    const userId = user?.id || user?._id;
+    if (!userId) return;
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const res = await api.get(`/admin/users/${userId}/transactions`);
+      setHistoryUser(res.data?.user || user);
+      setHistoryItems(res.data?.history || []);
+    } catch (err) {
+      setHistoryError(err.response?.data?.error || 'Erro ao carregar histórico.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   return (
     <AdminLayout
       title="Usuários"
@@ -143,10 +165,10 @@ const AdminUsersPage = () => {
             <span className="font-semibold text-emerald-700">{formatCurrency(totalBalance)}</span>
           </div>
 
-          <AdminTable headers={['ID', 'Nome', 'Telefone', 'CPF', 'Saldo', 'Papéis', 'Status', 'Ações']}>
+          <AdminTable headers={['ID', 'Nome', 'Telefone', 'CPF', 'Saldo', 'Bônus', 'Papéis', 'Status', 'Ações', 'Histórico']}>
             {users.length === 0 ? (
               <AdminTableRow>
-                <AdminTableCell className="text-center text-slate-500" colSpan={8}>
+                <AdminTableCell className="text-center text-slate-500" colSpan={10}>
                   Nenhum usuário encontrado.
                 </AdminTableCell>
               </AdminTableRow>
@@ -158,6 +180,7 @@ const AdminUsersPage = () => {
                   <AdminTableCell>{user.phone || user.telefone || '—'}</AdminTableCell>
                   <AdminTableCell>{user.cpf || '—'}</AdminTableCell>
                   <AdminTableCell className="font-semibold text-emerald-700">{formatCurrency(user.balance || user.saldo)}</AdminTableCell>
+                  <AdminTableCell className="font-semibold text-amber-700">{formatCurrency(user.bonus || 0)}</AdminTableCell>
                   <AdminTableCell>
                     <div className="flex flex-col gap-1 text-xs font-semibold">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${user.isAdmin ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -220,11 +243,86 @@ const AdminUsersPage = () => {
                       </div>
                     )}
                   </AdminTableCell>
+                  <AdminTableCell>
+                    <button
+                      type="button"
+                      onClick={() => openHistory(user)}
+                      className="px-3 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition flex items-center gap-2"
+                    >
+                      <FaHistory /> Histórico
+                    </button>
+                  </AdminTableCell>
                 </AdminTableRow>
               ))
             )}
           </AdminTable>
         </>
+      )}
+
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-emerald-600">Histórico Financeiro</p>
+                <h3 className="text-lg font-bold text-slate-800">
+                  {historyUser?.name || 'Usuário'} • #{historyUser?.id || ''}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Saldo: {formatCurrency(historyUser?.balance)} | Bônus: {formatCurrency(historyUser?.bonus)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="px-5 py-4">
+              {historyLoading ? (
+                <div className="flex justify-center items-center h-40">
+                  <Spinner size={32} />
+                </div>
+              ) : historyError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  {historyError}
+                </div>
+              ) : historyItems.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Nenhuma movimentação encontrada.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left text-slate-600">
+                    <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                      <tr>
+                        <th className="px-4 py-3">Data</th>
+                        <th className="px-4 py-3">Tipo</th>
+                        <th className="px-4 py-3">Valor</th>
+                        <th className="px-4 py-3">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {historyItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3">{new Date(item.createdAt).toLocaleString('pt-BR')}</td>
+                          <td className="px-4 py-3 uppercase text-xs font-semibold">{item.type}</td>
+                          <td className={`px-4 py-3 font-semibold ${Number(item.amount) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                            {formatCurrency(item.amount)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">{item.description || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );

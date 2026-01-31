@@ -778,7 +778,7 @@ exports.listUsers = async (req, res) => {
         take: 50,
         skip: (page - 1) * 50,
         orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true, phone: true, balance: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
+        select: { id: true, name: true, phone: true, balance: true, bonus: true, cpf: true, isAdmin: true, email: true, isBlocked: true },
       }),
       prisma.user.count({ where }),
     ]);
@@ -816,6 +816,63 @@ exports.listUsers = async (req, res) => {
 
     return res.json({ users: usersWithFlags, total, page });
   } catch(e) { res.status(500).json({error: 'Erro list users'}); }
+};
+
+exports.getUserTransactions = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
+    const supervisorScope = getSupervisorScope(req);
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, phone: true, balance: true, bonus: true, supervisorId: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (supervisorScope && user.supervisorId !== supervisorScope.id) {
+      return res.status(403).json({ error: 'Acesso negado.' });
+    }
+
+    const [transactions, withdrawals] = await Promise.all([
+      prisma.transaction.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { id: true, type: true, amount: true, description: true, createdAt: true },
+      }),
+      prisma.withdrawalRequest.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { id: true, amount: true, status: true, createdAt: true, pixKey: true },
+      }),
+    ]);
+
+    const history = [
+      ...transactions.map((t) => ({
+        id: `tx-${t.id}`,
+        type: t.type,
+        amount: t.amount,
+        description: t.description,
+        createdAt: t.createdAt,
+        source: 'transaction',
+      })),
+      ...withdrawals.map((w) => ({
+        id: `wd-${w.id}`,
+        type: 'withdrawal',
+        amount: toDecimalMoney(w.amount).negated(),
+        description: `Saque (${w.status})${w.pixKey ? ` - ${w.pixKey}` : ''}`,
+        createdAt: w.createdAt,
+        source: 'withdrawal',
+        status: w.status,
+      })),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return res.json({ user, history });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Erro ao buscar histórico.' });
+  }
 };
 
 exports.updateUserRoles = async (req, res) => {
