@@ -14,7 +14,14 @@ const crypto = require('crypto');
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
 const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
+const FALLBACK_RATE_TODAY = new Prisma.Decimal('0.20'); // 20% (promo do dia)
+const PROMO_DATE = '2026-01-31';
 const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
+
+const getFallbackRate = () => {
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  return today === PROMO_DATE ? FALLBACK_RATE_TODAY : FALLBACK_RATE;
+};
 
 exports.createPixCharge = async (req, res) => {
   try {
@@ -144,7 +151,7 @@ exports.createPixCharge = async (req, res) => {
     }
 
     // Fallback (somente se NÃO informou cupom)
-    const bonusAmount = couponSnapshot ? null : depositValue.mul(FALLBACK_RATE);
+    const bonusAmount = couponSnapshot ? null : depositValue.mul(getFallbackRate());
 
     // --- Persistência: correlationId para lookup no webhook ---
     await prisma.pixCharge.create({

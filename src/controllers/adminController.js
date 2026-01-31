@@ -286,6 +286,29 @@ const normalizeGrupoPalpite = (p) => {
 };
 const sortDigits = (str) => String(str).split('').sort().join('');
 
+const resolvePerNumberStake = (aposta, bet) => {
+  const valPorNum = toDecimalMoney(aposta?.valorPorNumero);
+  if (valPorNum.greaterThan(ZERO_DECIMAL)) return valPorNum;
+
+  const palpites = Array.isArray(aposta?.palpites) ? aposta.palpites : [];
+  const palpCount = palpites.length || 0;
+
+  const valorAposta = toDecimalMoney(aposta?.valorAposta ?? aposta?.valor ?? aposta?.amount);
+  const modoValor = String(aposta?.modoValor || '').trim().toLowerCase();
+  if (valorAposta.greaterThan(ZERO_DECIMAL)) {
+    if (modoValor === 'cada') return valorAposta;
+    if (palpCount > 0) return valorAposta.div(new Prisma.Decimal(palpCount));
+  }
+
+  const rawTotal = aposta?.total !== undefined && aposta?.total !== null ? aposta.total : bet?.total;
+  const betTotalNum = toDecimalMoney(rawTotal);
+  if (palpCount > 0 && betTotalNum.greaterThan(ZERO_DECIMAL)) {
+    return betTotalNum.div(new Prisma.Decimal(palpCount));
+  }
+
+  return ZERO_DECIMAL;
+};
+
 function nCk(n, k) {
   if (k < 0 || k > n) return 0;
   if (k === 0 || k === n) return 1;
@@ -583,16 +606,8 @@ const simulateBetAgainstResult = ({ bet, result }) => {
     const modalNorm = normalizeModalidade(modalSrc);
     const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
     const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
-
-    const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
-    const betTotalNum = toDecimalMoney(rawTotal);
-    const valPorNum = toDecimalMoney(aposta.valorPorNumero);
     const palpCount = palpites.length || 0;
-    const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
-      ? valPorNum
-      : palpCount > 0
-        ? betTotalNum.div(new Prisma.Decimal(palpCount))
-        : ZERO_DECIMAL;
+    const perNumber = resolvePerNumberStake(aposta, bet);
 
     if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) {
       wins.push({
@@ -1402,15 +1417,8 @@ exports.settleBetsForResult = async (req, res) => {
           const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
           const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
 
-          const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
-          const betTotalNum = toDecimalMoney(rawTotal);
-          const valPorNum = toDecimalMoney(aposta.valorPorNumero);
           const palpCount = palpites.length || 0;
-          const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
-            ? valPorNum
-            : palpCount > 0
-              ? betTotalNum.div(new Prisma.Decimal(palpCount))
-              : ZERO_DECIMAL;
+          const perNumber = resolvePerNumberStake(aposta, bet);
 
           if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) continue;
 
@@ -1673,15 +1681,8 @@ exports.recheckSingleBet = async (req, res) => {
       const colocacaoRaw = String(aposta.colocacao || bet.colocacao || '').trim();
       const palpites = Array.isArray(aposta.palpites) ? aposta.palpites : [];
 
-      const rawTotal = aposta.total !== undefined && aposta.total !== null ? aposta.total : bet.total;
-      const betTotalNum = toDecimalMoney(rawTotal);
-      const valPorNum = toDecimalMoney(aposta.valorPorNumero);
       const palpCount = palpites.length || 0;
-      const perNumber = valPorNum.greaterThan(ZERO_DECIMAL)
-        ? valPorNum
-        : palpCount > 0
-          ? betTotalNum.div(new Prisma.Decimal(palpCount))
-          : ZERO_DECIMAL;
+      const perNumber = resolvePerNumberStake(aposta, bet);
 
       if (!perNumber.greaterThan(ZERO_DECIMAL) || !palpCount) continue;
 
