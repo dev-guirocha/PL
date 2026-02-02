@@ -303,7 +303,9 @@ const PixRechargePage = () => {
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             placeholder="Ex: 20,00"
           />
-          <p className="text-xs text-slate-500">Máximo R$ 3.000,00 por transação.</p>
+          <p className="text-xs text-slate-500">
+            Máximo R$ {maxDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por transação.
+          </p>
         </div>
 
         <button
