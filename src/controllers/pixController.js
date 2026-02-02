@@ -28,7 +28,7 @@ const isPromoActive = () => {
 };
 
 const getFallbackRate = () => (isPromoActive() ? FALLBACK_RATE_PROMO : FALLBACK_RATE);
-const getDepositMax = () => (isPromoActive() ? 1500 : 3000);
+const getDepositMax = () => 1500;
 
 exports.createPixCharge = async (req, res) => {
   try {

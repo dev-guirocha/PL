@@ -9,7 +9,7 @@ const PixRechargePage = () => {
   const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const promoActive = todayStr >= '2026-01-31' && todayStr <= '2026-02-01';
   const bonusRateLabel = promoActive ? '20%' : '15%';
-  const maxDeposit = promoActive ? 1500 : 3000;
+  const maxDeposit = 1500;
   const maxDepositCents = maxDeposit * 100;
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
