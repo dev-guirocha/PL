@@ -17,6 +17,9 @@ const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
 const FALLBACK_RATE_PROMO = new Prisma.Decimal('0.20'); // 20% (promo do fim de semana)
 const PROMO_START_DATE = '2026-01-31';
 const PROMO_END_DATE = '2026-02-01';
+const ONE_DAY_MAX_DEPOSIT_DATE = '2026-02-06';
+const ONE_DAY_MAX_DEPOSIT = 10000;
+const ONE_DAY_BONUS_CAP = new Prisma.Decimal('10000');
 const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
 
 const getTodayStr = () =>
@@ -27,8 +30,10 @@ const isPromoActive = () => {
   return today >= PROMO_START_DATE && today <= PROMO_END_DATE;
 };
 
+const isOneDayMaxDepositActive = () => getTodayStr() === ONE_DAY_MAX_DEPOSIT_DATE;
+
 const getFallbackRate = () => (isPromoActive() ? FALLBACK_RATE_PROMO : FALLBACK_RATE);
-const getDepositMax = () => 1500;
+const getDepositMax = () => (isOneDayMaxDepositActive() ? ONE_DAY_MAX_DEPOSIT : 1500);
 
 exports.createPixCharge = async (req, res) => {
   try {
@@ -160,7 +165,10 @@ exports.createPixCharge = async (req, res) => {
     }
 
     // Fallback (somente se NÃO informou cupom)
-    const bonusAmount = couponSnapshot ? null : depositValue.mul(getFallbackRate());
+    const bonusBase = isOneDayMaxDepositActive() && depositValue.greaterThan(ONE_DAY_BONUS_CAP)
+      ? ONE_DAY_BONUS_CAP
+      : depositValue;
+    const bonusAmount = couponSnapshot ? null : bonusBase.mul(getFallbackRate());
 
     // --- Persistência: correlationId para lookup no webhook ---
     await prisma.pixCharge.create({

@@ -8,8 +8,10 @@ import { useAuth } from '../context/AuthContext';
 const PixRechargePage = () => {
   const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const promoActive = todayStr >= '2026-01-31' && todayStr <= '2026-02-01';
+  const oneDayMaxDepositActive = todayStr === '2026-02-06';
+  const oneDayBonusCap = 10000;
   const bonusRateLabel = promoActive ? '20%' : '15%';
-  const maxDeposit = 1500;
+  const maxDeposit = oneDayMaxDepositActive ? oneDayBonusCap : 1500;
   const maxDepositCents = maxDeposit * 100;
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
@@ -253,7 +255,10 @@ const PixRechargePage = () => {
 
         <div className="space-y-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3">
           <p className="text-xs font-semibold text-emerald-800">Bônus padrão</p>
-          <p className="text-xs text-emerald-700">{bonusRateLabel} aplicado automaticamente se não usar cupom.</p>
+          <p className="text-xs text-emerald-700">
+            {bonusRateLabel} aplicado automaticamente se não usar cupom.
+            {oneDayMaxDepositActive ? ` Até R$ ${oneDayBonusCap.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} hoje.` : ''}
+          </p>
         </div>
 
         <div className="space-y-2">
