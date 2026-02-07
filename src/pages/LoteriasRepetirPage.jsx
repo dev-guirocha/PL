@@ -7,6 +7,10 @@ import { formatDateBR, formatDateTimeBR } from '../utils/date';
 import { setDraft } from '../utils/receipt';
 import api from '../utils/api';
 
+const REPEAT_LOOKBACK_DAYS = 7;
+const MY_BETS_PAGE_SIZE = 50;
+const MAX_FETCH_PAGES = 20;
+
 const LoteriasRepetirPage = () => {
   const navigate = useNavigate();
   const { refreshUser, authError } = useAuth();
@@ -19,8 +23,33 @@ const LoteriasRepetirPage = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/bets/my-bets', { params: { take: 100, skip: 0 } });
-      setBets(res.data?.bets || []);
+      const cutoffTs = Date.now() - REPEAT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+      const collected = [];
+      let hasMore = true;
+      let skip = 0;
+      let pages = 0;
+
+      while (hasMore && pages < MAX_FETCH_PAGES) {
+        const res = await api.get('/bets/my-bets', { params: { take: MY_BETS_PAGE_SIZE, skip } });
+        const pageBets = res.data?.bets || [];
+        if (!pageBets.length) break;
+
+        collected.push(...pageBets);
+        pages += 1;
+        skip += MY_BETS_PAGE_SIZE;
+
+        const oldest = pageBets[pageBets.length - 1];
+        const oldestTs = oldest?.createdAt ? new Date(oldest.createdAt).getTime() : Number.NaN;
+        const reachedLookbackWindow = Number.isFinite(oldestTs) && oldestTs < cutoffTs;
+        hasMore = Boolean(res.data?.hasMore) && !reachedLookbackWindow;
+      }
+
+      const withinWindow = collected.filter((bet) => {
+        const createdTs = bet?.createdAt ? new Date(bet.createdAt).getTime() : Number.NaN;
+        return Number.isFinite(createdTs) && createdTs >= cutoffTs;
+      });
+
+      setBets(withinWindow);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao carregar PULES.');
     } finally {
@@ -191,6 +220,7 @@ const LoteriasRepetirPage = () => {
         <div className="text-right">
           <p className="text-xs font-semibold uppercase text-emerald-700">Repetir PULE</p>
           <h1 className="text-lg font-extrabold text-emerald-900">Escolha uma aposta para repetir</h1>
+          <p className="text-xs font-semibold text-emerald-700">Exibindo PULEs dos últimos {REPEAT_LOOKBACK_DAYS} dias</p>
         </div>
       </div>
 
