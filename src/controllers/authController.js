@@ -15,14 +15,30 @@ const allowResetCodeInResponse = () =>
 const isSecureCookieEnv = ['production', 'staging'].includes(process.env.NODE_ENV);
 const isSmoke = process.env.SMOKE === '1';
 const cookieSecure = isSmoke ? false : isSecureCookieEnv;
-const cookieDomain = !isSmoke && isSecureCookieEnv ? '.pandaloterias.com' : undefined;
-const sessionCookieOptions = {
-  httpOnly: true,
-  sameSite: cookieSecure ? 'none' : 'lax',
-  secure: cookieSecure,
-  maxAge: COOKIE_MAX_AGE,
-  path: '/',
-  ...(cookieDomain ? { domain: cookieDomain } : {}),
+const configuredCookieDomainRaw = String(process.env.COOKIE_DOMAIN || '').trim();
+const configuredCookieDomain = configuredCookieDomainRaw
+  ? (configuredCookieDomainRaw.startsWith('.') ? configuredCookieDomainRaw : `.${configuredCookieDomainRaw}`)
+  : undefined;
+
+const inferCookieDomainFromHost = (hostHeader) => {
+  const host = String(hostHeader || '').split(':')[0].trim().toLowerCase();
+  if (!host) return undefined;
+  if (host === 'pandaloterias.com' || host.endsWith('.pandaloterias.com')) return '.pandaloterias.com';
+  return undefined;
+};
+
+const buildSessionCookieOptions = (req) => {
+  const domain = (!isSmoke && cookieSecure)
+    ? (configuredCookieDomain || inferCookieDomainFromHost(req?.headers?.host))
+    : undefined;
+  return {
+    httpOnly: true,
+    sameSite: cookieSecure ? 'none' : 'lax',
+    secure: cookieSecure,
+    maxAge: COOKIE_MAX_AGE,
+    path: '/',
+    ...(domain ? { domain } : {}),
+  };
 };
 const shouldReturnBearerToken = (req) => {
   if (process.env.ALLOW_BEARER_FALLBACK !== 'true') return false;
@@ -119,7 +135,7 @@ exports.register = async (req, res) => {
 
     // Gera token para login automático
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, sessionCookieOptions);
+    res.cookie('token', token, buildSessionCookieOptions(req));
 
     const payload = { user };
     if (shouldReturnBearerToken(req)) payload.token = token;
@@ -156,7 +172,7 @@ exports.login = async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id, isAdmin: user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, sessionCookieOptions);
+    res.cookie('token', token, buildSessionCookieOptions(req));
 
     const payload = { user: toSafeUser(user) };
     if (shouldReturnBearerToken(req)) payload.token = token;
@@ -265,6 +281,6 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  res.clearCookie('token', sessionCookieOptions);
+  res.clearCookie('token', buildSessionCookieOptions(req));
   return res.json({ message: 'Logout realizado.' });
 };
