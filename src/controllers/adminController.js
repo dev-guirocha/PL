@@ -803,7 +803,6 @@ exports.getDashboardStats = async (req, res) => {
       moneyOut: { bets: Number(betsAgg._sum.total || 0) },
       wallets: { saldo: Number(usersAgg._sum.balance || 0), bonus: Number(usersAgg._sum.bonus || 0), total: Number(usersAgg._sum.balance || 0) + Number(usersAgg._sum.bonus || 0) },
       pendingWithdrawals: { amount: Number(withdrawalsAgg._sum.amount || 0), count: withdrawalsAgg._count?._all || 0 },
-    };
       totalPaidPrizes: Number(wonAgg._sum.prize || 0),
       bankBalance: toNumberSafe(bankBalanceSetting?.value),
     };
