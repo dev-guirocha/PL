@@ -121,6 +121,16 @@ const isManualSettlementMissing = (err) => {
   return message.includes('ManualSettlement') && message.toLowerCase().includes('does not exist');
 };
 
+const isSystemSettingMissing = (err) => {
+  const code = err?.code;
+  const message = String(err?.message || '');
+  const table = err?.meta?.table || err?.meta?.model || '';
+  if (code === 'P2021') {
+    return table === 'SystemSetting' || message.includes('SystemSetting');
+  }
+  return message.includes('SystemSetting') && message.toLowerCase().includes('does not exist');
+};
+
 const ensureManualSettlementTable = async () => {
   try {
     await prisma.manualSettlement.findFirst({ select: { id: true } });
@@ -784,18 +794,24 @@ exports.getDashboardStats = async (req, res) => {
     }
 
     const startedAt = Date.now();
-    const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers, wonAgg, bankBalanceSetting] = await Promise.all([
+    const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers, wonAgg] = await Promise.all([
       prisma.user.aggregate({ where: { deletedAt: null }, _sum: { balance: true, bonus: true } }),
       prisma.bet.aggregate({ _sum: { total: true } }),
       prisma.withdrawalRequest.aggregate({ where: { status: { in: ['pending', 'approved'] } }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.bet.count(),
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.bet.aggregate({ where: { status: 'won' }, _sum: { prize: true } }),
-      prisma.systemSetting.findUnique({
+    ]);
+
+    let bankBalanceSetting = null;
+    try {
+      bankBalanceSetting = await prisma.systemSetting.findUnique({
         where: { key: SYSTEM_SETTING_BANK_BALANCE_KEY },
         select: { value: true },
-      }),
-    ]);
+      });
+    } catch (err) {
+      if (!isSystemSettingMissing(err)) throw err;
+    }
     logDbTiming('admin_stats', startedAt);
     const payload = {
       totalUsers, betsCount,
@@ -815,7 +831,10 @@ exports.getDashboardStats = async (req, res) => {
       return res.status(304).end();
     }
     res.json(payload);
-  } catch (error) { res.json({}); }
+  } catch (error) {
+    console.error('[ADMIN_STATS_ERROR]', error?.code || 'unknown', error?.message || 'unknown_error');
+    return res.status(500).json({ error: 'Erro ao carregar estatísticas.' });
+  }
 };
 
 exports.getBankBalance = async (req, res) => {
@@ -829,6 +848,9 @@ exports.getBankBalance = async (req, res) => {
       updatedAt: setting?.updatedAt || null,
     });
   } catch (error) {
+    if (isSystemSettingMissing(error)) {
+      return res.status(503).json({ error: 'Migração pendente da tabela SystemSetting.' });
+    }
     return res.status(500).json({ error: 'Erro ao buscar saldo bancário.' });
   }
 };
@@ -857,6 +879,9 @@ exports.setBankBalance = async (req, res) => {
       updatedAt: saved.updatedAt,
     });
   } catch (error) {
+    if (isSystemSettingMissing(error)) {
+      return res.status(503).json({ error: 'Migração pendente da tabela SystemSetting.' });
+    }
     return res.status(500).json({ error: 'Erro ao salvar saldo bancário.' });
   }
 };
