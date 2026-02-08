@@ -607,3 +607,68 @@ exports.myBets = async (req, res) => {
     return res.status(500).json({ error: 'Erro ao listar apostas.' });
   }
 };
+
+const deriveModalidadeLabel = (bet) => {
+  if (bet?.modalidade && String(bet.modalidade).trim().toUpperCase() !== 'MULTIPLAS') {
+    return String(bet.modalidade).trim();
+  }
+
+  let apostas = [];
+  try {
+    apostas = typeof bet?.palpites === 'string' ? JSON.parse(bet.palpites) : Array.isArray(bet?.palpites) ? bet.palpites : [];
+  } catch {
+    apostas = [];
+  }
+  const mods = Array.from(
+    new Set(
+      apostas
+        .map((ap) => String(ap?.modalidade || ap?.jogo || '').trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (mods.length) return mods.join(', ');
+  if (bet?.modalidade) return String(bet.modalidade).trim();
+  return '—';
+};
+
+exports.publicWonBets = async (req, res) => {
+  const parsed = paginationSchema.safeParse(req.query || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Parâmetros de paginação inválidos.' });
+  }
+
+  const { take, skip } = normalizePagination(parsed.data);
+
+  try {
+    const where = { status: 'won' };
+    const [bets, total] = await prisma.$transaction([
+      prisma.bet.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          userId: true,
+          modalidade: true,
+          palpites: true,
+          prize: true,
+          createdAt: true,
+        },
+      }),
+      prisma.bet.count({ where }),
+    ]);
+
+    const winners = bets.map((bet) => ({
+      userId: bet.userId,
+      modalidade: deriveModalidadeLabel(bet),
+      prize: formatMoney(bet.prize || 0),
+      createdAt: bet.createdAt,
+    }));
+
+    const hasMore = skip + bets.length < total;
+    return res.json({ winners, total, hasMore, take, skip });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar premiadas.' });
+  }
+};

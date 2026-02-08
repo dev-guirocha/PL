@@ -27,6 +27,7 @@ const MAX_AUTO_PAYOUT_DEC = new Prisma.Decimal(MAX_AUTO_PAYOUT);
 const MANUAL_SETTLEMENT_MISSING = 'MANUAL_SETTLEMENT_MISSING';
 const DASHBOARD_CACHE_TTL_MS = Number(process.env.DASHBOARD_CACHE_TTL_MS || 30000);
 const DB_LOG_THRESHOLD_MS = Number(process.env.DB_LOG_THRESHOLD_MS || 600);
+const SYSTEM_SETTING_BANK_BALANCE_KEY = 'bank_balance';
 
 const DASHBOARD_CACHE = {
   data: null,
@@ -783,12 +784,17 @@ exports.getDashboardStats = async (req, res) => {
     }
 
     const startedAt = Date.now();
-    const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers] = await Promise.all([
+    const [usersAgg, betsAgg, withdrawalsAgg, betsCount, totalUsers, wonAgg, bankBalanceSetting] = await Promise.all([
       prisma.user.aggregate({ where: { deletedAt: null }, _sum: { balance: true, bonus: true } }),
       prisma.bet.aggregate({ _sum: { total: true } }),
       prisma.withdrawalRequest.aggregate({ where: { status: { in: ['pending', 'approved'] } }, _sum: { amount: true }, _count: { _all: true } }),
       prisma.bet.count(),
       prisma.user.count({ where: { deletedAt: null } }),
+      prisma.bet.aggregate({ where: { status: 'won' }, _sum: { prize: true } }),
+      prisma.systemSetting.findUnique({
+        where: { key: SYSTEM_SETTING_BANK_BALANCE_KEY },
+        select: { value: true },
+      }),
     ]);
     logDbTiming('admin_stats', startedAt);
     const payload = {
@@ -797,6 +803,8 @@ exports.getDashboardStats = async (req, res) => {
       moneyOut: { bets: Number(betsAgg._sum.total || 0) },
       wallets: { saldo: Number(usersAgg._sum.balance || 0), bonus: Number(usersAgg._sum.bonus || 0), total: Number(usersAgg._sum.balance || 0) + Number(usersAgg._sum.bonus || 0) },
       pendingWithdrawals: { amount: Number(withdrawalsAgg._sum.amount || 0), count: withdrawalsAgg._count?._all || 0 },
+      totalPaidPrizes: Number(wonAgg._sum.prize || 0),
+      bankBalance: toNumberSafe(bankBalanceSetting?.value),
     };
     const etag = `W/\"${crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex')}\"`;
     DASHBOARD_CACHE.data = payload;
@@ -808,6 +816,49 @@ exports.getDashboardStats = async (req, res) => {
     }
     res.json(payload);
   } catch (error) { res.json({}); }
+};
+
+exports.getBankBalance = async (req, res) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: SYSTEM_SETTING_BANK_BALANCE_KEY },
+      select: { value: true, updatedAt: true },
+    });
+    return res.json({
+      value: toNumberSafe(setting?.value),
+      updatedAt: setting?.updatedAt || null,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao buscar saldo bancário.' });
+  }
+};
+
+exports.setBankBalance = async (req, res) => {
+  const rawValue = req.body?.value;
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === '') {
+    return res.status(400).json({ error: 'Informe um valor válido.' });
+  }
+
+  const parsedValue = toNumberSafe(rawValue);
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    return res.status(400).json({ error: 'Valor inválido para saldo bancário.' });
+  }
+
+  try {
+    const saved = await prisma.systemSetting.upsert({
+      where: { key: SYSTEM_SETTING_BANK_BALANCE_KEY },
+      update: { value: parsedValue.toFixed(2) },
+      create: { key: SYSTEM_SETTING_BANK_BALANCE_KEY, value: parsedValue.toFixed(2) },
+      select: { key: true, value: true, updatedAt: true },
+    });
+    return res.json({
+      key: saved.key,
+      value: toNumberSafe(saved.value),
+      updatedAt: saved.updatedAt,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao salvar saldo bancário.' });
+  }
 };
 
 exports.listUsers = async (req, res) => {
@@ -1027,17 +1078,26 @@ exports.softDeleteUser = async (req, res) => {
 exports.listBets = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
+    const pageSizeRaw = Number(req.query.pageSize) || 50;
+    const pageSize = Math.min(Math.max(pageSizeRaw, 1), 200);
+    const rawStatuses = String(req.query.statuses || req.query.status || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
     const supervisorScope = getSupervisorScope(req);
     const where = supervisorScope ? { user: { supervisorId: supervisorScope.id } } : {};
+    if (rawStatuses.length) {
+      where.status = { in: rawStatuses };
+    }
     const bets = await prisma.bet.findMany({
       where,
-      take: 50,
-      skip: (page - 1) * 50,
+      take: pageSize,
+      skip: (page - 1) * pageSize,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { name: true, phone: true } } },
     });
     const total = await prisma.bet.count({ where });
-    res.json({ bets, total, page });
+    res.json({ bets, total, page, pageSize });
   } catch (e) { res.status(500).json({ error: 'Erro bets' }); }
 };
 

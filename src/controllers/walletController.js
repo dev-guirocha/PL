@@ -273,6 +273,56 @@ exports.listMyWithdrawals = async (req, res) => {
   }
 };
 
+exports.listStatement = async (req, res) => {
+  try {
+    const takeRaw = Number(req.query.take) || 50;
+    const skipRaw = Number(req.query.skip) || 0;
+    const take = Math.min(Math.max(Math.floor(takeRaw), 1), 100);
+    const skip = Math.max(Math.floor(skipRaw), 0);
+    const category = String(req.query.category || 'all')
+      .trim()
+      .toLowerCase();
+
+    const categoryMap = {
+      deposit: ['deposit'],
+      bet: ['bet'],
+      prize: ['prize'],
+      withdraw: ['withdraw_request'],
+    };
+    const acceptedTypes = categoryMap[category] || null;
+
+    const where = { userId: req.userId };
+    if (acceptedTypes) {
+      where.type = { in: acceptedTypes };
+    }
+
+    const [items, total] = await prisma.$transaction([
+      prisma.transaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        select: { id: true, type: true, amount: true, description: true, createdAt: true },
+      }),
+      prisma.transaction.count({ where }),
+    ]);
+
+    const hasMore = skip + items.length < total;
+    return res.json({
+      items: items.map((item) => ({
+        ...item,
+        amount: formatMoney(item.amount),
+      })),
+      total,
+      hasMore,
+      take,
+      skip,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar extrato.' });
+  }
+};
+
 const sumAmounts = (rows) =>
   rows.reduce((acc, row) => acc.add(row.amount || ZERO), ZERO);
 

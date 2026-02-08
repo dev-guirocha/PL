@@ -52,6 +52,9 @@ router.use(verifyToken, isAdmin);
 // Dashboard
 router.get('/stats', mustBeFn('getDashboardStats'));
 router.get('/notifications/count', mustBeFn('getPendingNotificationsCount'));
+router.get('/bank-balance', mustBeFn('getBankBalance'));
+router.post('/bank-balance', mustBeFn('setBankBalance'));
+router.get('/notifications/count', mustBeFn('getPendingNotificationsCount'));
 
 // Usuários
 router.get('/users', mustBeFn('listUsers'));

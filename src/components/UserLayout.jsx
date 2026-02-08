@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet, FaMobileAlt, FaUserShield } from 'react-icons/fa';
+import { FaBars, FaEye, FaEyeSlash, FaHome, FaTicketAlt, FaReceipt, FaUser, FaSignOutAlt, FaChartBar, FaWallet, FaMobileAlt, FaUserShield, FaTrophy, FaListAlt } from 'react-icons/fa';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
@@ -15,6 +15,8 @@ const navLinks = [
 
 const extraMenuLinks = [
   { label: 'Relatórios', icon: <FaChartBar />, path: '/relatorios' },
+  { label: 'Premiadas', icon: <FaTrophy />, path: '/premiadas' },
+  { label: 'Extrato', icon: <FaListAlt />, path: '/extrato' },
   { label: 'Consulta saldo', icon: <FaWallet />, path: '/relatorios/consulta-saldo' },
   { label: 'Solicitar saque', icon: <FaWallet />, path: '/saque' },
 ];
