@@ -1,0 +1,2 @@
+-- Legacy migration placeholder kept to align historical migration names.
+-- The ResultPule table is already created by earlier baseline migrations.
