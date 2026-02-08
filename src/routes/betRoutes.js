@@ -125,6 +125,7 @@ const validateFederalRules = (req, res, next) => {
 router.post('/', authMiddleware, validateFederalRules, betController.create);
 
 router.get('/my-bets', authMiddleware, betController.myBets);
+router.get('/public-winners', authMiddleware, betController.publicWonBets);
 router.get('/result-pules', authMiddleware, reportController.listResultPules);
 router.get('/', authMiddleware, betController.list);
 

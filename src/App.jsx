@@ -21,6 +21,7 @@ const LoteriasQuininhaQuantidadePage = lazy(() => import('./pages/LoteriasQuinin
 const LoteriasSeninhaQuantidadePage = lazy(() => import('./pages/LoteriasSeninhaQuantidadePage'));
 import PulesPage from './pages/PulesPage';
 import WonBetsPage from './pages/WonBetsPage';
+import StatementPage from './pages/StatementPage';
 import ReportsPage from './pages/ReportsPage';
 import BalanceReportPage from './pages/BalanceReportPage';
 import QuotesPage from './pages/QuotesPage';
@@ -31,6 +32,7 @@ import Spinner from './components/Spinner';
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
 const AdminBetsPage = lazy(() => import('./pages/admin/AdminBetsPage'));
+const AdminWonBetsPage = lazy(() => import('./pages/admin/AdminWonBetsPage'));
 const AdminSupervisorsPage = lazy(() => import('./pages/admin/AdminSupervisorsPage'));
 const AdminResultsPage = lazy(() => import('./pages/admin/AdminResultsPage'));
 const AdminWithdrawalsPage = lazy(() => import('./pages/admin/AdminWithdrawalsPage'));
@@ -101,6 +103,7 @@ function App() {
           <Route path="loterias/super15/jogar" element={<LoteriasSuper15Page />} />
           <Route path="pules" element={<PulesPage />} />
           <Route path="premiadas" element={<WonBetsPage />} />
+          <Route path="extrato" element={<StatementPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="relatorios/consulta-saldo" element={<BalanceReportPage />} />
           <Route path="relatorios/cotacoes" element={<QuotesPage />} />
@@ -131,6 +134,14 @@ function App() {
           element={
             <RequireAdmin>
               <AdminBetsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/bets/winners"
+          element={
+            <RequireAdmin>
+              <AdminWonBetsPage />
             </RequireAdmin>
           }
         />

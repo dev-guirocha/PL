@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import Spinner from '../components/Spinner';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { formatDateBR, formatDateTimeBR } from '../utils/date';
+import { formatDateTimeBR } from '../utils/date';
 
 const WonBetsPage = () => {
   const navigate = useNavigate();
   const { refreshUser, authError } = useAuth();
-  const [bets, setBets] = useState([]);
+  const [winners, setWinners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -16,8 +16,8 @@ const WonBetsPage = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/bets/my-bets', { params: { take: 50, skip: 0, statuses: 'won,paid' } });
-      setBets(res.data?.bets || []);
+      const res = await api.get('/bets/public-winners', { params: { take: 80, skip: 0 } });
+      setWinners(res.data?.winners || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao carregar premiadas.');
     } finally {
@@ -43,7 +43,8 @@ const WonBetsPage = () => {
         </button>
         <div className="text-right">
           <p className="text-xs font-semibold uppercase text-emerald-700">Premiadas</p>
-          <h1 className="text-lg font-extrabold text-emerald-900">Minhas apostas premiadas</h1>
+          <h1 className="text-lg font-extrabold text-emerald-900">Últimas apostas ganhadoras</h1>
+          <p className="text-xs text-slate-500">Transparência sem expor nomes dos usuários.</p>
         </div>
       </div>
 
@@ -60,54 +61,31 @@ const WonBetsPage = () => {
           </div>
         )}
 
-        {!loading && bets.length === 0 && (
+        {!loading && winners.length === 0 && (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-slate-600 shadow">
             Nenhuma aposta premiada encontrada.
           </div>
         )}
 
-        {bets.map((pule) => (
+        {winners.map((winner, idx) => (
           <div
-            key={pule.id}
+            key={`${winner.userId}-${winner.createdAt || idx}`}
             className="flex flex-col gap-2 rounded-2xl border border-emerald-50 bg-white px-4 py-4 text-emerald-800 shadow-lg"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
-              <span className="text-base">{pule.loteria || 'Loteria'}</span>
-              <span className="text-xs text-gray-600">{pule.betRef || `${pule.userId || ''}-${pule.id}`}</span>
-              <span className="text-sm font-semibold">{formatDateTimeBR(pule.createdAt)}</span>
+              <span className="text-base">Usuário #{winner.userId}</span>
+              <span className="text-sm font-semibold">{formatDateTimeBR(winner.createdAt)}</span>
             </div>
-            {pule.codigoHorario && <span className="text-xs text-slate-500">Horário: {pule.codigoHorario}</span>}
             <div className="flex items-center justify-between text-sm font-bold">
-              <span>Status:</span>
+              <span>Modalidade:</span>
               <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-extrabold text-emerald-700 uppercase">
-                {pule.status}
+                {winner.modalidade || '—'}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm font-bold">
               <span>Prêmio:</span>
-              <span className="text-emerald-700">{formatCurrency(pule.prize || 0)}</span>
+              <span className="text-emerald-700">{formatCurrency(winner.prize || 0)}</span>
             </div>
-            {(pule.apostas || []).map((ap, i) => (
-              <div key={`${pule.id}-ap-${i}`} className="mt-2 border-t border-dashed border-emerald-100 pt-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">{ap.modalidade || ap.jogo || 'Aposta'}</span>
-                  <span className="text-xs text-slate-500">{formatDateBR(ap.data) || ''}</span>
-                </div>
-                {ap.colocacao && <span className="text-xs text-slate-500">Prêmio: {ap.colocacao}</span>}
-                {ap.palpites?.length ? (
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {ap.palpites.map((n, j) => (
-                      <span
-                        key={`${n}-${j}`}
-                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
-                      >
-                        {n}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
           </div>
         ))}
       </div>

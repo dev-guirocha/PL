@@ -1,6 +1,6 @@
 import React from 'react';
 
-const StatCard = ({ title, value, subtext, icon, color = 'emerald' }) => {
+const StatCard = ({ title, value, subtext, icon, color = 'emerald', onClick }) => {
   const colors = {
     emerald: 'from-emerald-500 to-teal-600 text-emerald-50',
     blue: 'from-blue-500 to-indigo-600 text-blue-50',
@@ -12,7 +12,19 @@ const StatCard = ({ title, value, subtext, icon, color = 'emerald' }) => {
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${bgGradient} p-5 shadow-lg shadow-slate-200 hover:shadow-xl transition-shadow duration-300`}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!onClick) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${bgGradient} p-5 shadow-lg shadow-slate-200 transition-shadow duration-300 ${
+        onClick ? 'cursor-pointer hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/70' : 'hover:shadow-xl'
+      }`}
     >
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
