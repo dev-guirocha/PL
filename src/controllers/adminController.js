@@ -372,7 +372,7 @@ function getColocacaoFraction(colocacaoRaw) {
   if (m) {
     const a = Number(m[1]);
     const b = Number(m[2]);
-    if (Number.isFinite(a) && Number.isFinite(b) && b > 0) return { a, b };
+    if (Number.isFinite(a) && Number.isFinite(b) && a >= 1 && b >= a) return { a, b };
   }
   if (/^(1|1\s*PREMIO|1\s*PRÊMIO)\b/.test(c)) return { a: 1, b: 1 };
   return null;
@@ -441,8 +441,9 @@ function computeFinalPayout({ modalidadeRaw, colocacaoRaw }) {
 
   if (!frac) return { ok: true, payout: p.value };
 
-  if (frac.a === 1 && frac.b >= 1) {
-    return { ok: true, payout: p.value / frac.b };
+  const coveredPlacings = (frac.b - frac.a) + 1;
+  if (coveredPlacings >= 1) {
+    return { ok: true, payout: p.value / coveredPlacings };
   }
 
   return { ok: false, payout: 0, reason: 'UNSUPPORTED_FRACTION' };
@@ -451,10 +452,11 @@ function computeFinalPayout({ modalidadeRaw, colocacaoRaw }) {
 function indicesFromColocacao(colocacao) {
   const frac = getColocacaoFraction(colocacao);
 
-  if (frac && frac.a !== 1) return [];
-
-  if (frac && frac.a === 1) {
-    return Array.from({ length: Math.min(frac.b, 7) }, (_, i) => i);
+  if (frac) {
+    const start = Math.max(1, frac.a);
+    const end = Math.min(7, frac.b);
+    if (end < start) return [];
+    return Array.from({ length: (end - start) + 1 }, (_, i) => (start - 1) + i);
   }
 
   const c = normalizeColocacao(colocacao);
