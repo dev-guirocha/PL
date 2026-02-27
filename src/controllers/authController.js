@@ -20,16 +20,36 @@ const configuredCookieDomain = configuredCookieDomainRaw
   ? (configuredCookieDomainRaw.startsWith('.') ? configuredCookieDomainRaw : `.${configuredCookieDomainRaw}`)
   : undefined;
 
+const normalizeHost = (value) => {
+  const raw = String(value || '').split(',')[0].trim().toLowerCase();
+  if (!raw) return '';
+  return raw.split(':')[0].trim();
+};
+
+const getHostFromUrlHeader = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
 const inferCookieDomainFromHost = (hostHeader) => {
-  const host = String(hostHeader || '').split(':')[0].trim().toLowerCase();
+  const host = normalizeHost(hostHeader);
   if (!host) return undefined;
   if (host === 'pandaloterias.com' || host.endsWith('.pandaloterias.com')) return '.pandaloterias.com';
   return undefined;
 };
 
 const buildSessionCookieOptions = (req) => {
+  const inferredDomain = inferCookieDomainFromHost(req?.headers?.['x-forwarded-host']) ||
+    inferCookieDomainFromHost(req?.headers?.host) ||
+    inferCookieDomainFromHost(getHostFromUrlHeader(req?.headers?.origin)) ||
+    inferCookieDomainFromHost(getHostFromUrlHeader(req?.headers?.referer));
   const domain = (!isSmoke && cookieSecure)
-    ? (configuredCookieDomain || inferCookieDomainFromHost(req?.headers?.host))
+    ? (configuredCookieDomain || inferredDomain)
     : undefined;
   return {
     httpOnly: true,

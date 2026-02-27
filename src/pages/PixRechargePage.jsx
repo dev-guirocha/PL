@@ -7,11 +7,11 @@ import { useAuth } from '../context/AuthContext';
 
 const PixRechargePage = () => {
   const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-  const promoActive = todayStr >= '2026-01-31' && todayStr <= '2026-02-01';
-  const oneDayMaxDepositActive = todayStr === '2026-02-06';
-  const oneDayBonusCap = 10000;
+  const promoActive = todayStr >= '2026-02-27' && todayStr <= '2026-02-28';
   const bonusRateLabel = promoActive ? '20%' : '15%';
-  const maxDeposit = oneDayMaxDepositActive ? oneDayBonusCap : 1500;
+  const minDeposit = promoActive ? 0 : 10;
+  const maxDeposit = promoActive ? 2000 : 1500;
+  const minDepositCents = minDeposit * 100;
   const maxDepositCents = maxDeposit * 100;
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
@@ -91,8 +91,9 @@ const PixRechargePage = () => {
       toast.error('Informe um valor válido.');
       return;
     }
-    if (val < 10) {
-      toast.error('Depósito mínimo é R$ 10,00.');
+    if (minDepositCents > 0 && amountCents < minDepositCents) {
+      const formattedMin = minDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      toast.error(`Depósito mínimo é R$ ${formattedMin}.`);
       return;
     }
     if (amountCents > maxDepositCents) {
@@ -257,7 +258,9 @@ const PixRechargePage = () => {
           <p className="text-xs font-semibold text-emerald-800">Bônus padrão</p>
           <p className="text-xs text-emerald-700">
             {bonusRateLabel} aplicado automaticamente se não usar cupom.
-            {oneDayMaxDepositActive ? ` Até R$ ${oneDayBonusCap.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} hoje.` : ''}
+            {promoActive
+              ? ` Promo válida em 27/02/2026 e 28/02/2026, sem depósito mínimo e limite de R$ ${maxDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+              : ''}
           </p>
         </div>
 
