@@ -1523,9 +1523,32 @@ exports.deleteResult = async (req, res) => {
 exports.generatePule = async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido.' });
+
     const result = await prisma.result.findUnique({ where: { id } });
     if (!result) return res.status(404).json({ error: 'Resultado não encontrado' });
-    res.json({ message: 'Pule gerado.', alreadyExists: false });
+
+    const existing = await prisma.resultPule.findFirst({
+      where: { resultId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existing) {
+      return res.json({ message: 'Pule já existia.', alreadyExists: true, puleId: existing.id });
+    }
+
+    const created = await prisma.resultPule.create({
+      data: {
+        resultId: id,
+        loteria: result.loteria,
+        codigoHorario: result.codigoHorario || null,
+        dataJogo: result.dataJogo || null,
+        numeros: Array.isArray(result.numeros) ? JSON.stringify(result.numeros) : String(result.numeros || '[]'),
+        grupos: Array.isArray(result.grupos) ? JSON.stringify(result.grupos) : String(result.grupos || '[]'),
+      },
+    });
+
+    return res.json({ message: 'Pule gerado.', alreadyExists: false, puleId: created.id });
   } catch (e) { res.status(500).json({ error: 'Erro pule' }); }
 };
 

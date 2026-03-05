@@ -6,8 +6,14 @@ import { getStoredLoggedIn } from '../utils/authSession.mjs';
 import { useAuth } from '../context/AuthContext';
 
 const PixRechargePage = () => {
-  const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-  const promoActive = todayStr >= '2026-02-27' && todayStr <= '2026-02-28';
+  const promoParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    month: 'numeric',
+    weekday: 'short',
+  }).formatToParts(new Date());
+  const promoMonth = Number(promoParts.find((p) => p.type === 'month')?.value || 0);
+  const promoWeekday = promoParts.find((p) => p.type === 'weekday')?.value || '';
+  const promoActive = promoMonth === 3 && (promoWeekday === 'Wed' || promoWeekday === 'Sat');
   const bonusRateLabel = promoActive ? '20%' : '15%';
   const minDeposit = promoActive ? 0 : 10;
   const maxDeposit = promoActive ? 2000 : 1500;
@@ -259,7 +265,7 @@ const PixRechargePage = () => {
           <p className="text-xs text-emerald-700">
             {bonusRateLabel} aplicado automaticamente se não usar cupom.
             {promoActive
-              ? ` Promo válida em 27/02/2026 e 28/02/2026, sem depósito mínimo e limite de R$ ${maxDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+              ? ` Promo ativa nas quartas e sábados de março, sem depósito mínimo e limite de R$ ${maxDeposit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
               : ''}
           </p>
         </div>

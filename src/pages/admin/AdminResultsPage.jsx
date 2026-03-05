@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { FaSyncAlt, FaReceipt, FaCheck, FaEdit, FaTrash, FaArrowLeft } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
 import Spinner from '../../components/Spinner';
@@ -42,6 +43,18 @@ const AdminResultsPage = () => {
   const [customLotteryName, setCustomLotteryName] = useState('');
   const [rawInput, setRawInput] = useState('');
   const [prizes, setPrizes] = useState(Array.from({ length: 7 }, () => ({ numero: '', grupo: '' })));
+
+  const notifySuccess = (message) => {
+    setError('');
+    setSuccess(message);
+    toast.success(message);
+  };
+
+  const notifyError = (message) => {
+    setSuccess('');
+    setError(message);
+    toast.error(message);
+  };
 
   const availableTimes = useMemo(() => {
     if (!selectedLottery || selectedLottery === 'OUTRA') return [];
@@ -96,7 +109,7 @@ const AdminResultsPage = () => {
       const res = await api.get('/admin/results', { params: { page: 1, pageSize: 50 } });
       setResults(res.data?.results || res.data || []);
     } catch (err) {
-      setError('Erro ao carregar resultados.');
+      notifyError('Erro ao carregar resultados.');
     } finally {
       setLoading(false);
     }
@@ -108,14 +121,26 @@ const AdminResultsPage = () => {
     if (!id) return;
     setActionLoading(id);
     try {
-      const res = await api.post(`/admin/results/${id}/settle`);
-      const summary = res.data?.summary;
-      if (summary) {
-        setSuccess(`Liquidação: ${summary.processed} processadas, ${summary.wins} premiadas.`);
+      const settleRes = await api.post(`/admin/results/${id}/settle`);
+      const summary = settleRes.data?.summary;
+      let successMessage = summary
+        ? `Liquidação: ${summary.processed} processadas, ${summary.wins} premiadas.`
+        : 'Liquidação concluída.';
+
+      try {
+        const puleRes = await api.post(`/admin/results/${id}/pule`);
+        successMessage += puleRes.data?.alreadyExists
+          ? ' PULE já existia.'
+          : ' PULE gerado com sucesso.';
+      } catch (puleErr) {
+        const puleErrMsg = puleErr.response?.data?.error || 'Falha ao gerar PULE automaticamente.';
+        successMessage += ` ${puleErrMsg}`;
       }
-      fetchResults();
+
+      notifySuccess(successMessage);
+      await fetchResults();
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao liquidar.');
+      notifyError(err.response?.data?.error || 'Erro ao liquidar.');
     } finally {
       setActionLoading(null);
     }
@@ -126,10 +151,10 @@ const AdminResultsPage = () => {
     setActionLoading(id);
     try {
       const res = await api.post(`/admin/results/${id}/pule`);
-      setSuccess(res.data?.alreadyExists ? 'PULE já existia.' : 'PULE gerado com sucesso.');
+      notifySuccess(res.data?.alreadyExists ? 'PULE já existia.' : 'PULE gerado com sucesso.');
       fetchResults();
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao gerar PULE.');
+      notifyError(err.response?.data?.error || 'Erro ao gerar PULE.');
     } finally {
       setActionLoading(null);
     }
@@ -142,7 +167,7 @@ const AdminResultsPage = () => {
       await api.delete(`/admin/results/${id}`);
       fetchResults();
     } catch (err) {
-      setError('Erro ao deletar.');
+      notifyError('Erro ao deletar.');
     } finally {
       setActionLoading(null);
     }
@@ -224,7 +249,10 @@ const AdminResultsPage = () => {
     e.preventDefault();
     const numeros = prizes.map(p => p.numero).filter(Boolean);
     const grupos = prizes.map(p => p.grupo).filter(Boolean);
-    if (!numeros.length) return alert('Preencha pelo menos um número.');
+    if (!numeros.length) {
+      notifyError('Preencha pelo menos um número.');
+      return;
+    }
     const finalLotteryName = selectedLottery === 'OUTRA' ? customLotteryName : selectedLottery;
     const payload = { loteria: finalLotteryName.trim(), dataJogo: inputDate.split('-').reverse().join('/'), codigoHorario: inputTime, numeros, grupos };
     try {
@@ -235,9 +263,12 @@ const AdminResultsPage = () => {
         await api.post('/admin/results', payload);
         setModalMessage({ title: 'Sucesso!', text: 'Resultado cadastrado com sucesso.' });
       }
+      notifySuccess(editingId ? 'Resultado editado com sucesso.' : 'Resultado cadastrado com sucesso.');
       setShowModal(true);
       fetchResults();
-    } catch (err) { alert(err.response?.data?.error || 'Erro ao salvar.'); }
+    } catch (err) {
+      notifyError(err.response?.data?.error || 'Erro ao salvar.');
+    }
   };
 
   return (

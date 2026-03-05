@@ -15,20 +15,26 @@ const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
 const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
 const FALLBACK_RATE_PROMO = new Prisma.Decimal('0.20'); // 20% (promo)
-const PROMO_START_DATE = '2026-02-27';
-const PROMO_END_DATE = '2026-02-28';
+const PROMO_MONTH = 3; // marco
+const PROMO_WEEKDAYS = new Set(['Wed', 'Sat']); // quarta e sabado
+const SAO_PAULO_TZ = 'America/Sao_Paulo';
 const DEFAULT_MIN_DEPOSIT = 10;
 const DEFAULT_MAX_DEPOSIT = 1500;
 const PROMO_MIN_DEPOSIT = 0;
 const PROMO_MAX_DEPOSIT = 2000;
 const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
 
-const getTodayStr = () =>
-  new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-
 const isPromoActive = () => {
-  const today = getTodayStr();
-  return today >= PROMO_START_DATE && today <= PROMO_END_DATE;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SAO_PAULO_TZ,
+    month: 'numeric',
+    weekday: 'short',
+  }).formatToParts(new Date());
+
+  const month = Number(parts.find((p) => p.type === 'month')?.value || 0);
+  const weekday = parts.find((p) => p.type === 'weekday')?.value || '';
+
+  return month === PROMO_MONTH && PROMO_WEEKDAYS.has(weekday);
 };
 
 const getFallbackRate = () => (isPromoActive() ? FALLBACK_RATE_PROMO : FALLBACK_RATE);
