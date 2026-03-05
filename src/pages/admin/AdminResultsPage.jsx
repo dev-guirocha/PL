@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { FaSyncAlt, FaReceipt, FaCheck, FaEdit, FaTrash, FaArrowLeft } from 'react-icons/fa';
+import { FaSyncAlt, FaCheck, FaEdit, FaTrash, FaArrowLeft } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import AdminLayout from '../../components/admin/AdminLayout';
 import AdminTable, { AdminTableRow, AdminTableCell } from '../../components/admin/AdminTable';
@@ -124,7 +124,7 @@ const AdminResultsPage = () => {
       const settleRes = await api.post(`/admin/results/${id}/settle`);
       const summary = settleRes.data?.summary;
       let successMessage = summary
-        ? `Liquidação: ${summary.processed} processadas, ${summary.wins} premiadas.`
+        ? `Liquidação: ${summary.processed} liquidadas (${summary.matched} elegíveis), ${summary.wins} premiadas.`
         : 'Liquidação concluída.';
 
       try {
@@ -141,20 +141,6 @@ const AdminResultsPage = () => {
       await fetchResults();
     } catch (err) {
       notifyError(err.response?.data?.error || 'Erro ao liquidar.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const generatePule = async (id) => {
-    if (!id) return;
-    setActionLoading(id);
-    try {
-      const res = await api.post(`/admin/results/${id}/pule`);
-      notifySuccess(res.data?.alreadyExists ? 'PULE já existia.' : 'PULE gerado com sucesso.');
-      fetchResults();
-    } catch (err) {
-      notifyError(err.response?.data?.error || 'Erro ao gerar PULE.');
     } finally {
       setActionLoading(null);
     }
@@ -311,7 +297,6 @@ const AdminResultsPage = () => {
                       <AdminTableCell><div className="text-xs text-slate-500 truncate max-w-[150px]">{grps.join(', ')}</div></AdminTableCell>
                       <AdminTableCell><div className="flex flex-wrap gap-2">
                           <button onClick={() => settleResult(r.id || r._id)} disabled={actionLoading === (r.id || r._id)} title="Liquidar" className="p-2 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200"><FaCheck /></button>
-                          <button onClick={() => generatePule(r.id || r._id)} disabled={actionLoading === (r.id || r._id)} title="Pule" className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"><FaReceipt /></button>
                           <button onClick={() => handleEdit(r)} title="Editar" className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"><FaEdit /></button>
                           <button onClick={() => handleDelete(r.id || r._id)} title="Excluir" className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><FaTrash /></button>
                         </div></AdminTableCell>

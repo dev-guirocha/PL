@@ -1570,6 +1570,11 @@ exports.settleBetsForResult = async (req, res) => {
 
     const resFamily = normalizeLotteryFamily(result.loteria);
     const resCanonical = getCanonicalName(result.loteria);
+    const [resYear, resMonth, resDay] = resDate.split('-');
+    const resDateBR = `${resDay}/${resMonth}/${resYear}`;
+    const dateCandidates = Array.from(
+      new Set([String(result.dataJogo || '').trim(), resDate, resDateBR].filter(Boolean)),
+    );
 
     let numerosSorteados = [];
     try {
@@ -1587,7 +1592,16 @@ exports.settleBetsForResult = async (req, res) => {
     }
 
     const bets = await prisma.bet.findMany({
-      where: { status: 'open', resultId: null },
+      where: {
+        status: 'open',
+        resultId: null,
+        recheckedAt: null,
+        settledAt: null,
+        OR: dateCandidates.flatMap((dateValue) => ([
+          { dataJogo: dateValue },
+          { dataJogo: { contains: dateValue } },
+        ])),
+      },
       include: { user: true },
     });
 
@@ -1820,7 +1834,17 @@ exports.settleBetsForResult = async (req, res) => {
       }
     }
 
-    return res.json({ message: 'Processamento concluído', summary: { processed: bets.length, ...summary } });
+    return res.json({
+      message: 'Processamento concluído',
+      summary: {
+        scanned: bets.length,
+        processed: summary.settled,
+        matched: summary.matched,
+        settled: summary.settled,
+        wins: summary.wins,
+        errors: summary.errors,
+      },
+    });
   } catch (err) {
     console.error('Erro fatal:', err);
     return res.status(500).json({ error: 'Erro interno.' });

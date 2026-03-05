@@ -6,6 +6,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "db:cleanup-stale-open-bets": "node scripts/cleanup-stale-open-bets.js",
     "postinstall": "npx prisma generate",
     "smoke:staging": "node scripts/smoke-staging.js"
   },
