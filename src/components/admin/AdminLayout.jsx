@@ -9,18 +9,20 @@ const AdminLayout = ({ title, subtitle, children, actions }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 py-3 shadow-sm flex items-center justify-between">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/admin')}
-            className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition"
-            title="Voltar ao App"
+            onClick={() => navigate('/home')}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 transition text-sm font-semibold"
+            title="Voltar para user"
           >
-            <FaArrowLeft />
+            <FaArrowLeft /> Voltar para user
           </button>
           <div className="flex flex-col">
-            <h1 className="text-lg font-bold text-emerald-800 leading-tight">PLA</h1>
-            <span className="text-xs text-slate-500 font-medium">Painel Administrativo</span>
+            <h1 className="text-xl md:text-2xl font-black leading-tight tracking-tight bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 bg-clip-text text-transparent">
+              Painel Administrativo
+            </h1>
+            <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-[0.18em]">Gestao interna</span>
           </div>
         </div>
 
@@ -38,8 +40,8 @@ const AdminLayout = ({ title, subtitle, children, actions }) => {
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
-            {subtitle && <p className="text-slate-500 mt-1">{subtitle}</p>}
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight leading-tight text-slate-900">{title}</h2>
+            {subtitle && <p className="mt-1 text-sm md:text-base font-medium text-slate-500">{subtitle}</p>}
           </div>
           {actions && <div className="flex gap-2">{actions}</div>}
         </div>
