@@ -1,10 +1,10 @@
 // src/controllers/pixController.js
-// VERSÃO V35.1 - FINAL PRODUCTION (UUID + STATUS UPPERCASE + COUPON SNAPSHOT + DECIMAL SAFE)
+// VERSÃO V35.2 - BONUS RULES UPDATE
 // - ID: crypto.randomUUID() (collision free)
 // - STATUS: 'PENDING' (padronizado)
 // - DECIMAL: tudo que é dinheiro vira Prisma.Decimal (sem drift)
 // - COUPON: valida hard-fail antes de chamar Woovi/OpenPix e salva snapshot couponCode no PixCharge
-// - FALLBACK: bônus padrão (15%) só quando NÃO informou cupom
+// - FALLBACK: 15% no primeiro depósito pago, 10% para usuários com depósito anterior
 
 const prisma = require('../utils/prismaClient');
 const woovi = require('../lib/wooviClient');
@@ -13,33 +13,17 @@ const crypto = require('crypto');
 
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
-const FALLBACK_RATE = new Prisma.Decimal('0.15'); // 15%
-const FALLBACK_RATE_PROMO = new Prisma.Decimal('0.20'); // 20% (promo)
-const PROMO_MONTH = 3; // marco
-const PROMO_WEEKDAYS = new Set(['Wed', 'Sat']); // quarta e sabado
-const SAO_PAULO_TZ = 'America/Sao_Paulo';
+const NEW_USER_FALLBACK_RATE = new Prisma.Decimal('0.15');
+const EXISTING_USER_FALLBACK_RATE = new Prisma.Decimal('0.10');
 const DEFAULT_MIN_DEPOSIT = 10;
 const DEFAULT_MAX_DEPOSIT = 1500;
-const PROMO_MIN_DEPOSIT = 0;
-const PROMO_MAX_DEPOSIT = 2000;
 const PIX_DEBUG = process.env.PIX_DEBUG === 'true';
 
-const isPromoActive = () => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: SAO_PAULO_TZ,
-    month: 'numeric',
-    weekday: 'short',
-  }).formatToParts(new Date());
+const getFallbackRate = (paidDepositCount) => (
+  Number(paidDepositCount || 0) === 0 ? NEW_USER_FALLBACK_RATE : EXISTING_USER_FALLBACK_RATE
+);
 
-  const month = Number(parts.find((p) => p.type === 'month')?.value || 0);
-  const weekday = parts.find((p) => p.type === 'weekday')?.value || '';
-
-  return month === PROMO_MONTH && PROMO_WEEKDAYS.has(weekday);
-};
-
-const getFallbackRate = () => (isPromoActive() ? FALLBACK_RATE_PROMO : FALLBACK_RATE);
-const getDepositMin = () => (isPromoActive() ? PROMO_MIN_DEPOSIT : DEFAULT_MIN_DEPOSIT);
-const getDepositMax = () => (isPromoActive() ? PROMO_MAX_DEPOSIT : DEFAULT_MAX_DEPOSIT);
+const getFallbackPercent = (paidDepositCount) => (Number(paidDepositCount || 0) === 0 ? 15 : 10);
 
 exports.createPixCharge = async (req, res) => {
   try {
@@ -63,13 +47,13 @@ exports.createPixCharge = async (req, res) => {
       return res.status(400).json({ error: 'Informe um valor válido.' });
     }
 
-    const depositMin = getDepositMin();
+    const depositMin = DEFAULT_MIN_DEPOSIT;
     if (depositMin > 0 && valueNumber < depositMin) {
       const formatted = depositMin.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return res.status(400).json({ error: `Depósito mínimo é R$ ${formatted}.` });
     }
 
-    const depositMax = getDepositMax();
+    const depositMax = DEFAULT_MAX_DEPOSIT;
     if (valueNumber > depositMax) {
       const formatted = depositMax.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return res.status(400).json({ error: `Depósito máximo é R$ ${formatted}.` });
@@ -77,6 +61,12 @@ exports.createPixCharge = async (req, res) => {
 
     // Decimal seguro (2 casas)
     const depositValue = new Prisma.Decimal(valueNumber.toFixed(2));
+
+    const priorPaidDeposits = await prisma.pixCharge.count({
+      where: { userId: Number(userId), status: { in: ['PAID', 'paid'] } },
+    });
+    const fallbackRate = getFallbackRate(priorPaidDeposits);
+    const fallbackPercent = getFallbackPercent(priorPaidDeposits);
 
     // --- Cupom: valida hard fail + preview (informativo) ---
     const userProvidedCoupon = Boolean(couponCode && String(couponCode).trim());
@@ -178,7 +168,7 @@ exports.createPixCharge = async (req, res) => {
     }
 
     // Fallback (somente se NÃO informou cupom)
-    const bonusAmount = couponSnapshot ? null : depositValue.mul(getFallbackRate());
+    const bonusAmount = couponSnapshot ? null : depositValue.mul(fallbackRate);
 
     // --- Persistência: correlationId para lookup no webhook ---
     await prisma.pixCharge.create({
@@ -203,6 +193,8 @@ exports.createPixCharge = async (req, res) => {
       paymentLinkUrl,
       identifier,
       couponApplied: !!couponSnapshot,
+      autoBonusPercent: fallbackPercent,
+      isFirstDepositBonusEligible: priorPaidDeposits === 0,
 
       // UI-friendly
       bonusPreview: bonusPreview ? bonusPreview.toFixed(2) : null,

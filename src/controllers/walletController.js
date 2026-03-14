@@ -13,6 +13,8 @@ const {
 const SUPERVISOR_DEPOSIT_PCT = normalizeDecimalString(process.env.SUPERVISOR_DEPOSIT_PCT || '5');
 const SUPERVISOR_DEPOSIT_BASIS = 'deposit';
 const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
+const FIRST_DEPOSIT_BONUS_PERCENT = 15;
+const DEFAULT_DEPOSIT_BONUS_PERCENT = 10;
 
 const amountSchema = z.preprocess(
   (val) => normalizeDecimalString(val),
@@ -57,6 +59,14 @@ exports.me = async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
+    const paidDepositsCount = await prisma.pixCharge.count({
+      where: { userId: req.userId, status: { in: ['PAID', 'paid'] } },
+    });
+    const isFirstDepositBonusEligible = paidDepositsCount === 0;
+    const autoDepositBonusPercent = isFirstDepositBonusEligible
+      ? FIRST_DEPOSIT_BONUS_PERCENT
+      : DEFAULT_DEPOSIT_BONUS_PERCENT;
+
     // Corrige saldos negativos que possam ter ficado por inconsistência
     if (toMoney(user.balance).lessThan(ZERO)) {
       const fixed = await prisma.user.update({
@@ -78,6 +88,9 @@ exports.me = async (req, res) => {
         ...fixed,
         balance: formatMoney(fixed.balance),
         bonus: formatMoney(fixed.bonus),
+        paidDepositsCount,
+        isFirstDepositBonusEligible,
+        autoDepositBonusPercent,
       });
     }
 
@@ -85,6 +98,9 @@ exports.me = async (req, res) => {
       ...user,
       balance: formatMoney(user.balance),
       bonus: formatMoney(user.bonus),
+      paidDepositsCount,
+      isFirstDepositBonusEligible,
+      autoDepositBonusPercent,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Erro ao buscar saldo.' });

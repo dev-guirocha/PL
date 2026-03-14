@@ -14,6 +14,12 @@ const WEBHOOK_DEBUG = process.env.WEBHOOK_DEBUG === 'true' || process.env.PIX_DE
 const HUNDRED = new Prisma.Decimal(100);
 const ZERO = new Prisma.Decimal(0);
 const SANITY_LIMIT_MULTIPLIER = new Prisma.Decimal(2);
+const FIRST_DEPOSIT_BONUS_RATE = new Prisma.Decimal('0.15');
+const DEFAULT_DEPOSIT_BONUS_RATE = new Prisma.Decimal('0.10');
+
+const getAutomaticBonusRate = (paidDepositCount) => (
+  Number(paidDepositCount || 0) === 0 ? FIRST_DEPOSIT_BONUS_RATE : DEFAULT_DEPOSIT_BONUS_RATE
+);
 
 // Helper para detectar Hex
 const isHex = (s) => /^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0;
@@ -238,6 +244,13 @@ exports.handleOpenPixWebhook = async (req, res) => {
       
       const couponCodeRaw = (pixCharge.couponCode || '').trim();
       const userProvidedCoupon = couponCodeRaw.length > 0;
+      const priorPaidDeposits = await tx.pixCharge.count({
+        where: {
+          userId: pixCharge.userId,
+          status: { in: ['PAID', 'paid'] },
+          id: { not: pixCharge.id },
+        },
+      });
 
       // A. Tenta Cupom
       if (userProvidedCoupon) {
@@ -247,15 +260,11 @@ exports.handleOpenPixWebhook = async (req, res) => {
         if (coupon && coupon.active) {
             const now = new Date();
             const isExpired = coupon.expiresAt && coupon.expiresAt < now;
-
-            const priorPaid = await tx.pixCharge.count({
-                where: { userId: pixCharge.userId, status: { in: ['PAID', 'paid'] } },
-            });
             
             // Valida mínimo com o valor FINAL depositado
             if (
                 !isExpired &&
-                (!coupon.firstDepositOnly || priorPaid === 0) &&
+                (!coupon.firstDepositOnly || priorPaidDeposits === 0) &&
                 finalDepositValue.greaterThanOrEqualTo(coupon.minDeposit)
             ) {
                 
@@ -303,9 +312,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
 
       // B. Fallback (Só se NÃO tentou cupom)
       if (!couponUsed && !userProvidedCoupon) {
-          if (pixCharge.bonusAmount && pixCharge.bonusAmount.greaterThan(ZERO)) {
-              bonusToApply = pixCharge.bonusAmount;
-          }
+          bonusToApply = finalDepositValue.mul(getAutomaticBonusRate(priorPaidDeposits));
       }
 
       // 8. Aplica Bônus e Registra
