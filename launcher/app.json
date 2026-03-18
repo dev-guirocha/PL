@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Panda Loterias",
+    "slug": "panda-loterias-launcher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "bundleIdentifier": "com.pandaloterias.launcher",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.pandaloterias.launcher",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f61701fd-cb8d-4bb2-a7aa-5eee3866b2fa"
+      }
+    }
+  }
+}
