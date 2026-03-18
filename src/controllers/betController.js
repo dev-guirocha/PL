@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { formatMoney, normalizeDecimalString } = require('../utils/money');
 const { recordTransaction } = require('../services/financeService');
 const { normalizeCodigoHorarioLabel } = require('../utils/codigoHorario');
+const { getBettingAvailability } = require('../utils/bettingAvailability');
 const prisma = require('../prisma');
 const SUPERVISOR_COMMISSION_PCT = new Prisma.Decimal(
   normalizeDecimalString(process.env.SUPERVISOR_COMMISSION_PCT || '0') || '0',
@@ -220,6 +221,14 @@ const normalizePagination = (data) => {
   const rawSkip = data.skip ?? ((data.page ?? 1) - 1) * take;
   const skip = Math.max(rawSkip, 0);
   return { take, skip };
+};
+
+exports.status = async (req, res) => {
+  try {
+    return res.json(getBettingAvailability());
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao consultar disponibilidade de apostas.' });
+  }
 };
 
 exports.create = async (req, res) => {

@@ -22,11 +22,41 @@ const LoteriasFinalPage = () => {
   const [success, setSuccess] = useState('');
   const [betSaved, setBetSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [bettingEnabled, setBettingEnabled] = useState(true);
+  const [bettingMessage, setBettingMessage] = useState('');
+  const [loadingBettingStatus, setLoadingBettingStatus] = useState(true);
 
   useEffect(() => {
     setDraft(getDraft());
     refreshUser();
   }, [refreshUser]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadBettingStatus = async () => {
+      try {
+        const res = await api.get('/bets/status');
+        if (!active) return;
+        const enabled = Boolean(res.data?.enabled);
+        const maintenanceMessage = res.data?.message || 'em manutencao';
+        setBettingEnabled(enabled);
+        setBettingMessage(enabled ? '' : maintenanceMessage);
+      } catch {
+        if (!active) return;
+        setBettingEnabled(true);
+        setBettingMessage('');
+      } finally {
+        if (active) setLoadingBettingStatus(false);
+      }
+    };
+
+    loadBettingStatus();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const formatSelectionLabel = (sel) => {
     const label = sel?.horario || '';
@@ -261,6 +291,7 @@ const LoteriasFinalPage = () => {
           </div>
         </div>
 
+        {bettingMessage && <div style={styles.message}>{bettingMessage}</div>}
         {message && <div style={styles.message}>{message}</div>}
         {success && (
           <div style={styles.success}>
@@ -293,11 +324,16 @@ const LoteriasFinalPage = () => {
             style={{
               ...styles.actionBtn,
               ...styles.primary,
-              ...(submitting ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
+              ...((submitting || loadingBettingStatus || !bettingEnabled) ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
             }}
-            disabled={submitting}
+            disabled={submitting || loadingBettingStatus || !bettingEnabled}
             onClick={async () => {
               if (submitting) return; // trava duplo clique
+              if (loadingBettingStatus) return;
+              if (!bettingEnabled) {
+                setMessage(bettingMessage || 'em manutencao');
+                return;
+              }
               if (!isAuthenticated) {
                 setMessage('Faça login para finalizar.');
                 return;
@@ -368,7 +404,7 @@ const LoteriasFinalPage = () => {
               }
             }}
           >
-            {submitting ? 'Processando...' : 'Finalizar'}
+            {submitting ? 'Processando...' : !bettingEnabled ? 'Em manutencao' : 'Finalizar'}
           </button>
         </div>
 

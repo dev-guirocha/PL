@@ -2,8 +2,17 @@ const express = require('express');
 const betController = require('../controllers/betController');
 const reportController = require('../controllers/reportController');
 const authMiddleware = require('../middleware/auth');
+const { getBettingAvailability } = require('../utils/bettingAvailability');
 
 const router = express.Router();
+
+const ensureBettingAvailable = (req, res, next) => {
+  const availability = getBettingAvailability();
+  if (!availability.enabled) {
+    return res.status(503).json({ error: availability.message });
+  }
+  return next();
+};
 
 /**
  * FEDERAL rule (backend validation)
@@ -122,7 +131,8 @@ const validateFederalRules = (req, res, next) => {
 };
 
 // Create bet with backend validation
-router.post('/', authMiddleware, validateFederalRules, betController.create);
+router.get('/status', betController.status);
+router.post('/', authMiddleware, ensureBettingAvailable, validateFederalRules, betController.create);
 
 router.get('/my-bets', authMiddleware, betController.myBets);
 router.get('/public-winners', authMiddleware, betController.publicWonBets);
