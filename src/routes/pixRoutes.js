@@ -5,9 +5,18 @@ const webhookController = require('../controllers/webhookController');
 const couponController = require('../controllers/couponController');
 const auth = require('../middleware/auth');
 const woovi = require('../lib/wooviClient');
+const { getDepositAvailability } = require('../utils/platformMode');
+
+const ensureDepositsAvailable = (req, res, next) => {
+  const availability = getDepositAvailability();
+  if (!availability.enabled) {
+    return res.status(503).json({ error: availability.message });
+  }
+  return next();
+};
 
 // Rota para criar o Pix
-router.post('/charge', auth, pixController.createPixCharge);
+router.post('/charge', auth, ensureDepositsAvailable, pixController.createPixCharge);
 
 // Rota para validar cupom
 router.post('/validate-coupon', auth, couponController.validateCoupon);

@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { getStoredLoggedIn } from '../utils/authSession.mjs';
 import { useAuth } from '../context/AuthContext';
+import { EXPOSITIVE_DEPOSIT_MESSAGE, EXPOSITIVE_PLATFORM_ENABLED } from '../constants/expositoryMode';
 
 const PixRechargePage = () => {
   const minDeposit = 10;
@@ -52,6 +53,10 @@ const PixRechargePage = () => {
   const sanitizeCpf = (value) => (value || '').replace(/\D/g, '').slice(0, 11);
 
   const handleValidateCoupon = async () => {
+    if (EXPOSITIVE_PLATFORM_ENABLED) {
+      toast.info(EXPOSITIVE_DEPOSIT_MESSAGE);
+      return;
+    }
     const code = String(couponCode || '').trim();
     const val = amountCents / 100;
     if (!code) {
@@ -78,6 +83,10 @@ const PixRechargePage = () => {
   };
 
   const handleGenerate = async () => {
+    if (EXPOSITIVE_PLATFORM_ENABLED) {
+      toast.info(EXPOSITIVE_DEPOSIT_MESSAGE);
+      return;
+    }
     const cleanCpf = sanitizeCpf(cpf);
     const val = amountCents / 100;
 
@@ -242,6 +251,12 @@ const PixRechargePage = () => {
           </button>
         </div>
 
+        {EXPOSITIVE_PLATFORM_ENABLED ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            {EXPOSITIVE_DEPOSIT_MESSAGE}
+          </div>
+        ) : null}
+
       <div className="space-y-2">
         <label className="text-sm font-semibold text-slate-700">CPF (obrigatório)</label>
         <input
@@ -277,7 +292,7 @@ const PixRechargePage = () => {
             />
             <button
               type="button"
-              disabled={validatingCoupon}
+              disabled={validatingCoupon || EXPOSITIVE_PLATFORM_ENABLED}
               onClick={handleValidateCoupon}
               className="whitespace-nowrap rounded-xl border border-emerald-200 px-3 py-3 text-xs font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:opacity-60"
             >
@@ -319,11 +334,11 @@ const PixRechargePage = () => {
 
         <button
           type="button"
-          disabled={loading}
+          disabled={loading || EXPOSITIVE_PLATFORM_ENABLED}
           onClick={handleGenerate}
           className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 text-sm font-extrabold uppercase text-white shadow-xl transition hover:-translate-y-0.5 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-60"
       >
-        {loading ? 'Gerando...' : 'Gerar QR Code Pix'}
+        {loading ? 'Gerando...' : EXPOSITIVE_PLATFORM_ENABLED ? 'Depósito indisponível' : 'Gerar QR Code Pix'}
       </button>
 
       {Number(appliedBonus) > 0 && (

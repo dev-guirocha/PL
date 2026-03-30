@@ -1,3 +1,5 @@
+const { getBetPlacementAvailability } = require('./platformMode');
+
 const DEFAULT_MAINTENANCE_MODE = process.env.NODE_ENV !== 'test';
 const DEFAULT_MAINTENANCE_MESSAGE = 'em manutencao';
 
@@ -11,6 +13,11 @@ const parseBoolean = (value) => {
 };
 
 const getBettingAvailability = () => {
+  const expositiveAvailability = getBetPlacementAvailability();
+  if (!expositiveAvailability.enabled) {
+    return expositiveAvailability;
+  }
+
   const envMode = parseBoolean(process.env.BETTING_MAINTENANCE_MODE);
   const maintenanceMode = envMode === null ? DEFAULT_MAINTENANCE_MODE : envMode;
   const message = String(process.env.BETTING_MAINTENANCE_MESSAGE || DEFAULT_MAINTENANCE_MESSAGE).trim() || DEFAULT_MAINTENANCE_MESSAGE;

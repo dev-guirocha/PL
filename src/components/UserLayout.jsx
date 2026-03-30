@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
 import logo from '../assets/images/logo.png';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { EXPOSITIVE_PLATFORM_ENABLED, EXPOSITIVE_PLATFORM_MESSAGE } from '../constants/expositoryMode';
 
 const navLinks = [
   { label: 'Início', icon: <FaHome />, path: '/home' },
@@ -101,7 +102,14 @@ const UserLayout = ({ children }) => {
         </div>
       </header>
 
-      <main className="mx-auto min-h-screen max-w-6xl px-4 pb-24 pt-20">{content}</main>
+      <main className="mx-auto min-h-screen max-w-6xl px-4 pb-24 pt-20">
+        {EXPOSITIVE_PLATFORM_ENABLED ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 shadow-sm">
+            {EXPOSITIVE_PLATFORM_MESSAGE}
+          </div>
+        ) : null}
+        {content}
+      </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">

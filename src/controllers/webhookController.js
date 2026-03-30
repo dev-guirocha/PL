@@ -7,6 +7,7 @@
 const prisma = require('../utils/prismaClient');
 const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
+const { getDepositAvailability } = require('../utils/platformMode');
 
 const WEBHOOK_DEBUG = process.env.WEBHOOK_DEBUG === 'true' || process.env.PIX_DEBUG === 'true';
 
@@ -198,6 +199,15 @@ exports.handleOpenPixWebhook = async (req, res) => {
           });
       }
 
+      const depositAvailability = getDepositAvailability();
+      if (!depositAvailability.enabled) {
+        await tx.pixCharge.update({
+          where: { id: pixCharge.id },
+          data: { status: 'blocked' },
+        });
+        return { depositsDisabled: true };
+      }
+
       // 4. Validação de Valor e Sanity Check (Anti-Drift)
       let finalDepositValue = pixCharge.amount;
 
@@ -361,6 +371,7 @@ exports.handleOpenPixWebhook = async (req, res) => {
     });
 
     if (dedupe?.alreadyProcessed) return res.status(200).send('already processed');
+    if (dedupe?.depositsDisabled) return res.status(200).send('OK (Deposits Disabled)');
     return res.status(200).send('OK');
 
   } catch (error) {

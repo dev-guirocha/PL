@@ -5,6 +5,7 @@ import api from '../utils/api';
 import Spinner from '../components/Spinner';
 import { getDraft, clearDraft, appendToHistory, updateDraft, buildReceiptEntry } from '../utils/receipt';
 import { useAuth } from '../context/AuthContext';
+import { EXPOSITIVE_BET_MESSAGE, EXPOSITIVE_PLATFORM_ENABLED } from '../constants/expositoryMode';
 
 const createIdempotencyKey = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -38,14 +39,14 @@ const LoteriasFinalPage = () => {
       try {
         const res = await api.get('/bets/status');
         if (!active) return;
-        const enabled = Boolean(res.data?.enabled);
-        const maintenanceMessage = res.data?.message || 'em manutencao';
+        const enabled = Boolean(res.data?.enabled) && !EXPOSITIVE_PLATFORM_ENABLED;
+        const maintenanceMessage = res.data?.message || EXPOSITIVE_BET_MESSAGE;
         setBettingEnabled(enabled);
         setBettingMessage(enabled ? '' : maintenanceMessage);
       } catch {
         if (!active) return;
-        setBettingEnabled(true);
-        setBettingMessage('');
+        setBettingEnabled(!EXPOSITIVE_PLATFORM_ENABLED);
+        setBettingMessage(EXPOSITIVE_PLATFORM_ENABLED ? EXPOSITIVE_BET_MESSAGE : '');
       } finally {
         if (active) setLoadingBettingStatus(false);
       }
@@ -56,6 +57,14 @@ const LoteriasFinalPage = () => {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    if (EXPOSITIVE_PLATFORM_ENABLED) {
+      setBettingEnabled(false);
+      setBettingMessage(EXPOSITIVE_BET_MESSAGE);
+      setLoadingBettingStatus(false);
+    }
   }, []);
 
   const formatSelectionLabel = (sel) => {
@@ -221,6 +230,11 @@ const LoteriasFinalPage = () => {
 
       <div style={styles.card}>
         <div style={styles.title}>Conferência final</div>
+        {EXPOSITIVE_PLATFORM_ENABLED ? (
+          <div style={{ ...styles.summary, background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
+            {EXPOSITIVE_BET_MESSAGE}
+          </div>
+        ) : null}
         <div style={styles.summary}>
           {selecoes.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -404,7 +418,7 @@ const LoteriasFinalPage = () => {
               }
             }}
           >
-            {submitting ? 'Processando...' : !bettingEnabled ? 'Em manutencao' : 'Finalizar'}
+            {submitting ? 'Processando...' : !bettingEnabled ? 'Indisponível' : 'Finalizar'}
           </button>
         </div>
 
