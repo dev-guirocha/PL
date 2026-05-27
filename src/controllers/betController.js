@@ -80,6 +80,35 @@ const buildIdempotencyRoute = (req) => {
 const hashPayload = (payload) =>
   crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
+const hashIdempotencyKeyForLog = (key) =>
+  crypto.createHash('sha256').update(String(key || '')).digest('hex').slice(0, 12);
+
+const findExistingIdempotency = ({ userId, route, key }) =>
+  prisma.idempotencyKey.findUnique({
+    where: { userId_route_key: { userId, route, key } },
+  });
+
+const handleIdempotencyConflict = async ({ res, userId, route, key, requestHash }) => {
+  const existing = await findExistingIdempotency({ userId, route, key });
+  if (existing?.requestHash && existing.requestHash !== requestHash) {
+    return res.status(409).json({ error: 'Idempotency-Key usada com payload diferente.' });
+  }
+  if (existing?.response) {
+    return res.status(200).json(existing.response);
+  }
+  return res.status(409).json({ error: 'Requisição em processamento.' });
+};
+
+const logBetCreateError = ({ err, userId, idempotencyKey, route }) => {
+  console.error('[BET_CREATE_ERROR]', {
+    code: err?.code,
+    message: err?.message,
+    userId,
+    idempotencyKeyHash: hashIdempotencyKeyForLog(idempotencyKey),
+    route,
+  });
+};
+
 const getHourFromCode = (codigoHorario) => {
   if (!codigoHorario) return null;
   const m = String(codigoHorario).match(/(\d{1,2})/);
@@ -353,34 +382,17 @@ exports.create = async (req, res) => {
 
   const totalDebit = calculateTotal(apostas).toDecimalPlaces(2);
 
-  let idempotencyRecord = null;
-  try {
-    idempotencyRecord = await prisma.idempotencyKey.create({
-      data: {
-        key: idempotencyKey,
-        userId: req.userId,
-        route: idempotencyRoute,
-        requestHash,
-      },
-    });
-  } catch (err) {
-    if (err?.code === 'P2002') {
-      const existing = await prisma.idempotencyKey.findUnique({
-        where: { userId_route_key: { userId: req.userId, route: idempotencyRoute, key: idempotencyKey } },
-      });
-      if (existing?.requestHash && existing.requestHash !== requestHash) {
-        return res.status(409).json({ error: 'Idempotency-Key usada com payload diferente.' });
-      }
-      if (existing?.response) {
-        return res.status(200).json(existing.response);
-      }
-      return res.status(409).json({ error: 'Requisição em processamento.' });
-    }
-    return res.status(500).json({ error: 'Erro ao registrar idempotência.' });
-  }
-
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const idempotencyRecord = await tx.idempotencyKey.create({
+        data: {
+          key: idempotencyKey,
+          userId: req.userId,
+          route: idempotencyRoute,
+          requestHash,
+        },
+      });
+
       const userWallet = await tx.user.findUnique({
         where: { id: req.userId },
         select: {
@@ -423,7 +435,7 @@ exports.create = async (req, res) => {
       });
 
       if (!updated.count) {
-        const err = new Error('Saldo insuficiente.');
+        const err = new Error('Saldo insuficiente ou atualização concorrente. Tente novamente.');
         err.code = 'ERR_NO_BALANCE';
         throw err;
       }
@@ -508,19 +520,32 @@ exports.create = async (req, res) => {
 
     return res.status(201).json(result.responsePayload);
   } catch (err) {
-    if (idempotencyRecord?.id) {
-      try {
-        await prisma.idempotencyKey.delete({ where: { id: idempotencyRecord.id } });
-      } catch (cleanupErr) {
-        console.warn('Erro ao limpar idempotência:', cleanupErr.message);
-      }
+    if (err?.code === 'P2002') {
+      return handleIdempotencyConflict({
+        res,
+        userId: req.userId,
+        route: idempotencyRoute,
+        key: idempotencyKey,
+        requestHash,
+      });
     }
+
     if (err?.code === 'ERR_NO_BALANCE' || err?.message === 'ERR_NO_BALANCE' || err?.message === 'Saldo insuficiente.') {
-      return res.status(400).json({ error: 'Saldo insuficiente.' });
+      return res.status(402).json({ error: 'Saldo insuficiente ou atualização concorrente. Tente novamente.' });
     }
     if (err?.code === 'ERR_NO_USER' || err?.message === 'ERR_NO_USER' || err?.message === 'Usuário não encontrado.') {
       return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
+    if (err?.code === 'P2034' || err?.code === 'P2028') {
+      return res.status(409).json({ error: 'Conflito concorrente ao salvar aposta. Tente novamente.' });
+    }
+
+    logBetCreateError({
+      err,
+      userId: req.userId,
+      idempotencyKey,
+      route: idempotencyRoute,
+    });
     return res.status(500).json({ error: 'Erro ao salvar aposta.' });
   }
 };

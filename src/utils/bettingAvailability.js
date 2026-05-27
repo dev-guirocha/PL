@@ -20,11 +20,11 @@ const getBettingAvailability = () => {
 
   const envMode = parseBoolean(process.env.BETTING_MAINTENANCE_MODE);
   const maintenanceMode = envMode === null ? DEFAULT_MAINTENANCE_MODE : envMode;
-  const message = String(process.env.BETTING_MAINTENANCE_MESSAGE || DEFAULT_MAINTENANCE_MESSAGE).trim() || DEFAULT_MAINTENANCE_MESSAGE;
+  const maintenanceMessage = String(process.env.BETTING_MAINTENANCE_MESSAGE || DEFAULT_MAINTENANCE_MESSAGE).trim() || DEFAULT_MAINTENANCE_MESSAGE;
 
   return {
     enabled: !maintenanceMode,
-    message,
+    message: maintenanceMode ? maintenanceMessage : '',
   };
 };
 
