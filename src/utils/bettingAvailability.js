@@ -1,6 +1,6 @@
 const { getBetPlacementAvailability } = require('./platformMode');
 
-const DEFAULT_MAINTENANCE_MODE = process.env.NODE_ENV !== 'test';
+const DEFAULT_MAINTENANCE_MODE = false;
 const DEFAULT_MAINTENANCE_MESSAGE = 'em manutencao';
 
 const parseBoolean = (value) => {

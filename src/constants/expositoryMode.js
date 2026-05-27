@@ -1,4 +1,4 @@
-export const EXPOSITIVE_PLATFORM_ENABLED = true;
+export const EXPOSITIVE_PLATFORM_ENABLED = false;
 export const EXPOSITIVE_PLATFORM_MESSAGE =
   'Plataforma em modo expositivo. A finalização de apostas e depósitos está temporariamente indisponível.';
 export const EXPOSITIVE_BET_MESSAGE =

@@ -1,4 +1,4 @@
-const DEFAULT_EXPOSITIVE_MODE = process.env.NODE_ENV !== 'test';
+const DEFAULT_EXPOSITIVE_MODE = false;
 const DEFAULT_PLATFORM_MESSAGE = 'Plataforma em modo expositivo. A finalização de apostas e depósitos está temporariamente indisponível.';
 const DEFAULT_BET_MESSAGE = 'Plataforma em modo expositivo. A finalização de apostas está temporariamente indisponível.';
 const DEFAULT_DEPOSIT_MESSAGE = 'Plataforma em modo expositivo. A finalização de depósitos está temporariamente indisponível.';
