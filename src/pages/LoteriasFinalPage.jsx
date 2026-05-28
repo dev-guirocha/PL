@@ -345,7 +345,7 @@ const LoteriasFinalPage = () => {
               if (submitting) return; // trava duplo clique
               if (loadingBettingStatus) return;
               if (!bettingEnabled) {
-                setMessage(bettingMessage || 'em manutencao');
+                setMessage(bettingMessage || 'Apostas indisponíveis no momento.');
                 return;
               }
               if (!isAuthenticated) {

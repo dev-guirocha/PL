@@ -1,7 +1,7 @@
 const { getBetPlacementAvailability } = require('./platformMode');
 
 const DEFAULT_MAINTENANCE_MODE = false;
-const DEFAULT_MAINTENANCE_MESSAGE = 'em manutencao';
+const DEFAULT_MAINTENANCE_MESSAGE = '';
 
 const parseBoolean = (value) => {
   if (typeof value === 'boolean') return value;
