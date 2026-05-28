@@ -110,6 +110,8 @@ const AdminDashboard = () => {
     <AdminLayout
       title="Visão Geral"
       subtitle="Métricas em tempo real da plataforma."
+      backPath="/home"
+      backTitle="Voltar para o início"
       actions={
         <button
           onClick={fetchStats}
