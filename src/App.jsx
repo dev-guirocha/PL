@@ -46,7 +46,7 @@ const LoteriasSuper15Page = lazy(() => import('./pages/LoteriasSuper15Page'));
 const LoteriasQuininhaQuantidadePage = lazy(() => import('./pages/LoteriasQuininhaQuantidadePage'));
 const LoteriasSeninhaQuantidadePage = lazy(() => import('./pages/LoteriasSeninhaQuantidadePage'));
 
-const maintenanceMode = String(import.meta.env.VITE_MAINTENANCE_MODE || 'true').trim().toLowerCase();
+const maintenanceMode = String(import.meta.env.VITE_MAINTENANCE_MODE || '').trim().toLowerCase();
 const isMaintenanceMode = ['1', 'true', 'yes', 'on'].includes(maintenanceMode);
 
 const getStoredToken = () => {
