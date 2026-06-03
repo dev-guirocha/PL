@@ -19,6 +19,7 @@ import LoteriasRepetirValorPage from './pages/LoteriasRepetirValorPage';
 import LoteriasResumoPage from './pages/LoteriasResumoPage';
 import LoteriasSorteiosPage from './pages/LoteriasSorteiosPage';
 import LoteriasValorPage from './pages/LoteriasValorPage';
+import MaintenancePage from './pages/MaintenancePage';
 import PixRechargePage from './pages/PixRechargePage';
 import ProfilePage from './pages/ProfilePage';
 import PulesPage from './pages/PulesPage';
@@ -45,6 +46,9 @@ const LoteriasSuper15Page = lazy(() => import('./pages/LoteriasSuper15Page'));
 const LoteriasQuininhaQuantidadePage = lazy(() => import('./pages/LoteriasQuininhaQuantidadePage'));
 const LoteriasSeninhaQuantidadePage = lazy(() => import('./pages/LoteriasSeninhaQuantidadePage'));
 
+const maintenanceMode = String(import.meta.env.VITE_MAINTENANCE_MODE || 'true').trim().toLowerCase();
+const isMaintenanceMode = ['1', 'true', 'yes', 'on'].includes(maintenanceMode);
+
 const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('loggedIn') || sessionStorage.getItem('loggedIn');
@@ -62,6 +66,10 @@ const RequireAdmin = ({ children }) => {
 };
 
 function App() {
+  if (isMaintenanceMode) {
+    return <MaintenancePage />;
+  }
+
   return (
     <Suspense
       fallback={
